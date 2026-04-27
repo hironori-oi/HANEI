@@ -1,0 +1,181 @@
+{
+  "$comment": "PRJ-016 HANEI W4 - Sample problems (4 items, one per category) for owner spot-check. All 100% original AI-generated; no past-exam reuse. See research-w4-problems.md §3 for full self-judge histogram.",
+  "meta": {
+    "week": "W4",
+    "generated_at": "2026-04-26",
+    "generator": "Research dept (Claude Sonnet 4.5 author + Claude Sonnet 4.5 judge / cross-LLM verification)",
+    "source_file": "projects/PRJ-016/app/scripts/seed-problems-w4.ts",
+    "total_problems": 221,
+    "breakdown": {
+      "eiken-5_vocab": 100,
+      "eiken-4_listening": 80,
+      "eiken-3_reading": 40,
+      "replacements": 1
+    },
+    "self_judge": {
+      "axes": ["answerCorrectness", "distractorQuality", "levelAlignment", "originality", "childSafety"],
+      "scale_per_axis": "0-20 (sum 0-100, normalized to 0-1)",
+      "threshold": 0.85,
+      "pass_rate_pct": 100.0,
+      "average_quality_score": 0.907
+    },
+    "kid_safe_audit": {
+      "ng_dictionary_size": 60,
+      "violations": 0,
+      "reading_genre_whitelist": ["school", "family", "season", "animal", "hobby", "food", "sport", "travel"]
+    }
+  },
+  "samples": [
+    {
+      "sample_id": "S1_VOCAB_5",
+      "category": "eiken-5 vocab",
+      "source_id": "V5W4-001",
+      "problem": {
+        "level": "eiken-5",
+        "skill": "vocab",
+        "prompt_text": "Children (   ) high in the park.",
+        "choices": ["jump", "sleep", "drink", "wash"],
+        "correct_index": 0,
+        "explanation_jp": "「高くとぶ」は jump。子どもが公園で活動する動作です。",
+        "difficulty": 0,
+        "estimated_time_sec": 20,
+        "tags": ["verb-jump", "park"],
+        "source_license": "ORIGINAL_AI",
+        "copyright_safe": true,
+        "generated_quality_score": 0.92
+      },
+      "judge_breakdown": {
+        "answerCorrectness": 20,
+        "distractorQuality": 18,
+        "levelAlignment": 19,
+        "originality": 19,
+        "childSafety": 20,
+        "total": 96,
+        "normalized": 0.96
+      }
+    },
+    {
+      "sample_id": "S2_LISTENING_4",
+      "category": "eiken-4 listening (dialogue)",
+      "source_id": "L4-001",
+      "problem": {
+        "level": "eiken-4",
+        "skill": "listening",
+        "prompt_text": "対話を聞いて、質問に答えなさい。",
+        "audioScript": "A: Tom, what time do you usually get up? B: I get up at six thirty. A: Wow, that's early. Question: What time does Tom get up?",
+        "choices": ["At six thirty.", "At seven thirty.", "At eight.", "At six."],
+        "correct_index": 0,
+        "explanation_jp": "Tom は「I get up at six thirty.」と答えています。",
+        "difficulty": 1,
+        "estimated_time_sec": 35,
+        "tags": ["listening", "dialogue", "time", "daily"],
+        "source_license": "ORIGINAL_AI",
+        "copyright_safe": true,
+        "generated_quality_score": 0.91
+      },
+      "judge_breakdown": {
+        "answerCorrectness": 20,
+        "distractorQuality": 18,
+        "levelAlignment": 18,
+        "originality": 19,
+        "childSafety": 20,
+        "total": 95,
+        "normalized": 0.95
+      },
+      "audio_meta": {
+        "speaker_count": 2,
+        "turn_count": 3,
+        "estimated_audio_sec": 12,
+        "vocab_level": "5級+4級基本（get up / six thirty / early）"
+      }
+    },
+    {
+      "sample_id": "S3_READING_3",
+      "category": "eiken-3 reading passage",
+      "source_id": "R3-001",
+      "problem": {
+        "level": "eiken-3",
+        "skill": "reading",
+        "passage": "Aoi loves spring. In her town, the cherry blossoms bloom in early April. She walks to school under the pink trees every morning. Last weekend, her family had a hanami picnic in the city park. They ate rice balls and fruit, and her father took many photos. Aoi's little brother Kenta ran around and laughed all day. After the picnic, they took a long walk along the river. Aoi felt happy and peaceful. She thinks spring is the best season because the flowers are beautiful and her family spends time together outside. She is already looking forward to next spring.",
+        "word_count": 110,
+        "genre": "season",
+        "questions": [
+          {
+            "question": "When do the cherry blossoms bloom in Aoi's town?",
+            "choices": ["In early April.", "In March.", "In May.", "In late April."],
+            "correct_index": 0,
+            "explanation_jp": "本文に「the cherry blossoms bloom in early April」とあります。"
+          },
+          {
+            "question": "Why does Aoi like spring the best?",
+            "choices": ["The flowers are beautiful and her family spends time together outside.", "Because of the rain.", "Because the river freezes.", "Because she has a long break."],
+            "correct_index": 0,
+            "explanation_jp": "本文に「the flowers are beautiful and her family spends time together outside」とあります。"
+          }
+        ],
+        "difficulty": 2,
+        "estimated_time_sec": 180,
+        "tags": ["reading", "passage", "season", "spring"],
+        "source_license": "ORIGINAL_AI",
+        "copyright_safe": true,
+        "generated_quality_score": 0.91
+      },
+      "judge_breakdown": {
+        "answerCorrectness": 20,
+        "distractorQuality": 17,
+        "levelAlignment": 18,
+        "originality": 19,
+        "childSafety": 20,
+        "total": 94,
+        "normalized": 0.94
+      },
+      "kid_safe_check": {
+        "genre": "season",
+        "in_whitelist": true,
+        "ng_word_hits": 0
+      }
+    },
+    {
+      "sample_id": "S4_REPLACEMENT_4",
+      "category": "eiken-4 grammar (W3 holdover replacement)",
+      "source_id": "G4-080R",
+      "problem": {
+        "level": "eiken-4",
+        "skill": "grammar",
+        "prompt_text": "I have read this book before. ＝ I (   ) read this book in the past.",
+        "choices": ["have already", "am reading", "will read", "read yesterday"],
+        "correct_index": 0,
+        "explanation_jp": "「以前〜したことがある（経験）= もう〜した」を表すのは「have already + 過去分詞」（現在完了形）。「am reading」は現在進行形、「will read」は未来、「read yesterday」は単純過去形 + 副詞で、いずれも経験を表す現在完了形ではありません。",
+        "difficulty": 2,
+        "estimated_time_sec": 50,
+        "tags": ["present-perfect", "experience", "already", "replacement", "G4-080R"],
+        "source_license": "ORIGINAL_AI",
+        "copyright_safe": true,
+        "generated_quality_score": 0.91
+      },
+      "judge_breakdown": {
+        "answerCorrectness": 20,
+        "distractorQuality": 19,
+        "levelAlignment": 18,
+        "originality": 18,
+        "childSafety": 20,
+        "total": 95,
+        "normalized": 0.95
+      },
+      "diff_from_original": {
+        "old_prompt": "I have read this book before. ＝ I (   ) read this book.",
+        "old_choices": ["have already", "did", "have just", "had"],
+        "old_score": 0.84,
+        "old_problem": "have just / have already の差が4級レベルでは判定困難（両方とも文法的に許容され、ニュアンス差のみ）。distractor の意味的距離が小さすぎた。",
+        "new_prompt": "I have read this book before. ＝ I (   ) read this book in the past.",
+        "new_choices": ["have already", "am reading", "will read", "read yesterday"],
+        "new_score": 0.91,
+        "improvements": [
+          "文脈ヒント「in the past」を追加し、経験用法であることを明示",
+          "distractor を時制混乱型（現在進行 / 未来 / 過去形+副詞）に変更し意味距離を確保",
+          "「have just」を排除して二択化リスクを排除"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+[
+  {
+    "id_in_seed": "V5-001",
+    "level": "eiken-5",
+    "skill": "vocab",
+    "prompt_text": "I (   ) a student.",
+    "choices": ["am", "is", "are", "be"],
+    "correct_index": 0,
+    "explanation_jp": "「I」のあとには「am」を使います。「I am a student.」で「わたしは学生です」という意味になります。",
+    "difficulty": 0,
+    "estimated_time_sec": 20,
+    "tags": ["be-verb", "pronoun-i"],
+    "copyright_safe": true,
+    "generated_quality_score": 0.94
+  },
+  {
+    "id_in_seed": "G5-007",
+    "level": "eiken-5",
+    "skill": "grammar",
+    "prompt_text": "A: (   ) is this? B: It is a pencil.",
+    "choices": ["What", "Where", "Who", "When"],
+    "correct_index": 0,
+    "explanation_jp": "「これは何ですか？」とものを聞くときは「What」を使います。答えが「えんぴつです」なので What が答えです。",
+    "difficulty": 1,
+    "estimated_time_sec": 30,
+    "tags": ["wh-question", "what"],
+    "copyright_safe": true,
+    "generated_quality_score": 0.91
+  },
+  {
+    "id_in_seed": "V4-022",
+    "level": "eiken-4",
+    "skill": "vocab",
+    "prompt_text": "I read books in the (   ) after school.",
+    "choices": ["library", "kitchen", "park", "shoe"],
+    "correct_index": 0,
+    "explanation_jp": "「library」は「図書館」「図書室」という意味です。本を読む場所として最も自然です。",
+    "difficulty": 1,
+    "estimated_time_sec": 30,
+    "tags": ["noun-school", "library"],
+    "copyright_safe": true,
+    "generated_quality_score": 0.92
+  },
+  {
+    "id_in_seed": "L4-001",
+    "level": "eiken-4",
+    "skill": "listening-response",
+    "prompt_text": "You will hear a question. Choose the best response.",
+    "audio_transcript": "A: How are you today?",
+    "choices": ["I'm fine, thank you.", "It is a desk.", "I have a cat.", "Yes, I do."],
+    "correct_index": 0,
+    "explanation_jp": "「How are you?」は「元気ですか」という意味です。「I'm fine, thank you.」（元気です、ありがとう）が自然な答えです。",
+    "difficulty": 0,
+    "estimated_time_sec": 25,
+    "tags": ["listening", "greeting"],
+    "copyright_safe": true,
+    "generated_quality_score": 0.93
+  },
+  {
+    "id_in_seed": "V3-009",
+    "level": "eiken-3",
+    "skill": "vocab",
+    "prompt_text": "This song (   ) by many people in Hanei Town.",
+    "choices": ["is loved", "loves", "loving", "love"],
+    "correct_index": 0,
+    "explanation_jp": "「〜される」という受動態は「be 動詞 + 過去分詞」で表します。「is loved」（愛されている）が正解です。",
+    "difficulty": 2,
+    "estimated_time_sec": 40,
+    "tags": ["passive", "is-loved"],
+    "copyright_safe": true,
+    "generated_quality_score": 0.86
+  },
+  {
+    "id_in_seed": "R3-001",
+    "level": "eiken-3",
+    "skill": "reading",
+    "prompt_text": "What does Lily do after school on Mondays?",
+    "passage_text": "Lily is a fifth grade student at Sakura Elementary in Hanei Town. She has many things to do every week. On Mondays, she goes to the library and reads books for one hour. On Wednesdays, she plays the piano with her teacher. On Fridays, she practices tennis with her friends in the park. On weekends, Lily helps her mother clean the house. She also writes a short letter to her grandmother every Sunday. Lily is busy, but she enjoys her days very much.",
+    "choices": [
+      "She reads books in the library.",
+      "She plays the piano.",
+      "She practices tennis.",
+      "She writes a letter."
+    ],
+    "correct_index": 0,
+    "explanation_jp": "本文に「On Mondays, she goes to the library and reads books」と書かれています。月曜日は図書館で本を読みます。",
+    "difficulty": 1,
+    "estimated_time_sec": 90,
+    "tags": ["reading", "school-life", "detail"],
+    "copyright_safe": true,
+    "generated_quality_score": 0.90
+  }
+]

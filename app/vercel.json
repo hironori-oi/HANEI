@@ -1,0 +1,24 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/generate-problems",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 12 * * 0"
+    }
+  ],
+  "functions": {
+    "src/app/api/cron/generate-problems/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/weekly-digest/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/ai/coach/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

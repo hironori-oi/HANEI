@@ -1,0 +1,69 @@
+# =============================================================================
+# PRJ-016 HANEI - Top-level .gitignore
+#
+# Next.js app は app/ 配下に配置。app/.gitignore とは別に、
+# repo root レベルで「絶対に commit してはいけない」機密 / 一時 / 巨大ファイル
+# を二重防衛で除外する。
+# =============================================================================
+
+# Node / Next.js
+**/node_modules/
+**/.next/
+**/.turbo/
+**/.vercel/
+**/.cache/
+**/.swc/
+**/dist/
+**/build/
+**/out/
+**/*.tsbuildinfo
+
+# Test artifacts
+**/coverage/
+**/playwright-report/
+**/test-results/
+**/playwright/.cache/
+**/.tmp/
+
+# DB ローカル (Turso libSQL ファイル / バックアップ含む)
+**/local.db
+**/local.db-journal
+**/local.db.bak-*
+**/.turso/
+
+# Environment / secrets (二重防衛 — app/.gitignore でも除外しているが root でも明示)
+**/.env
+**/.env.local
+**/.env.*.local
+**/.env.development
+**/.env.development.local
+**/.env.production
+**/.env.production.local
+**/.env.test
+**/.env.test.local
+.env
+.env.local
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Sentry
+**/.sentryclirc
+
+# Generated artifacts
+**/*.pem
+
+# Drizzle local journals (migration スナップショットは管理対象なので明示的に許可)
+# drizzle/meta/_journal.json は commit する → exclude しない

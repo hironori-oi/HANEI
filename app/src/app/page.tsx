@@ -1,0 +1,79 @@
+import Link from "next/link";
+import {
+  AcademicCapIcon,
+  SparklesIcon,
+  ChartBarIcon,
+} from "@heroicons/react/24/outline";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+export default function HomePage() {
+  return (
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-12 px-6 py-16">
+      {/* Hero */}
+      <section className="text-center">
+        <p className="mb-3 text-sm font-medium uppercase tracking-widest text-primary">
+          HANEI / ハンエイ / 半英
+        </p>
+        <h1 className="mb-6 text-4xl font-bold leading-tight tracking-tight sm:text-6xl">
+          半年で、英検3級。
+          <br className="hidden sm:block" />
+          <span className="text-primary">AIコーチと、毎日いっしょに。</span>
+        </h1>
+        <p className="mx-auto mb-10 max-w-2xl text-lg text-muted-foreground">
+          HANEI は小学生のための英語学習アプリです。
+          英検5級から3級まで、本人のレベルに合わせて毎日1時間の学習プランをAIコーチが用意します。
+        </p>
+        <div className="flex flex-wrap justify-center gap-4">
+          <Button asChild size="lg" className="min-h-tap-cta min-w-tap-cta">
+            <Link href="/signup">無料ではじめる</Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="min-h-tap-cta">
+            <Link href="/login">ログイン</Link>
+          </Button>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="grid gap-6 sm:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <AcademicCapIcon className="mb-3 h-10 w-10 text-primary" aria-hidden="true" />
+            <CardTitle>英検 5級・4級・3級</CardTitle>
+            <CardDescription>
+              本人のレベルに合わせて自動進級。語彙・文法・リスニング・読解・ライティングを段階的に学べます。
+            </CardDescription>
+          </CardHeader>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <SparklesIcon className="mb-3 h-10 w-10 text-primary" aria-hidden="true" />
+            <CardTitle>AIコーチが伴走</CardTitle>
+            <CardDescription>
+              誤答の解説、わからないところの質問、その日の学習プラン。AIコーチが毎日サポートします。
+            </CardDescription>
+          </CardHeader>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <ChartBarIcon className="mb-3 h-10 w-10 text-primary" aria-hidden="true" />
+            <CardTitle>受験日まで逆算</CardTitle>
+            <CardDescription>
+              受験日を登録すると、合格に向けた週次・日次プランを自動生成。保護者にも進捗が見える化されます。
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </section>
+
+      {/* Footer */}
+      <footer className="mt-16 border-t pt-8 text-center text-sm text-muted-foreground">
+        <p>HANEI - 小学生向け英語学習アプリ</p>
+        <p className="mt-2">
+          現在クローズドβ準備中。ご利用は無料です。
+        </p>
+      </footer>
+    </main>
+  );
+}

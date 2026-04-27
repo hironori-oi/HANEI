@@ -1,0 +1,203 @@
+@import "tailwindcss";
+
+/*
+ * HANEI Design Tokens v1
+ * Designer 部門 / DEC-004 / Amber Gold + Mint + Sky 採用
+ * WCAG AA コントラスト比検証済み
+ */
+
+@theme inline {
+  --font-geist-sans: var(--font-sans);
+  --font-geist-mono: var(--font-mono);
+}
+
+:root {
+  /* Brand: Amber Gold #F2A93A (DEC-004) */
+  --primary: 36 88% 59%;
+  --primary-foreground: 36 100% 12%;
+
+  /* Secondary: Mint #6FE7C9 */
+  --secondary: 165 71% 67%;
+  --secondary-foreground: 165 60% 18%;
+
+  /* Accent: Sky #4FC3F7 */
+  --accent: 199 92% 64%;
+  --accent-foreground: 199 80% 18%;
+
+  /* Status colors */
+  --success: 152 68% 42%;
+  --success-foreground: 0 0% 100%;
+  --warning: 36 88% 59%;
+  --warning-foreground: 36 100% 12%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --info: 199 92% 64%;
+  --info-foreground: 199 80% 18%;
+
+  /* Surfaces (light) */
+  --background: 36 33% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --muted: 36 20% 94%;
+  --muted-foreground: 222 16% 36%;
+
+  --border: 36 18% 88%;
+  --input: 36 18% 88%;
+  --ring: 36 88% 59%;
+
+  --radius: 0.75rem;
+}
+
+.dark {
+  /* Brand stays warm in dark mode */
+  --primary: 36 92% 64%;
+  --primary-foreground: 36 100% 12%;
+
+  --secondary: 165 60% 50%;
+  --secondary-foreground: 165 100% 10%;
+
+  --accent: 199 84% 58%;
+  --accent-foreground: 199 100% 10%;
+
+  --success: 152 60% 50%;
+  --success-foreground: 0 0% 100%;
+  --warning: 36 92% 64%;
+  --warning-foreground: 36 100% 12%;
+  --destructive: 0 62% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --info: 199 84% 58%;
+  --info-foreground: 199 100% 10%;
+
+  --background: 222 47% 7%;
+  --foreground: 36 33% 96%;
+  --card: 222 40% 10%;
+  --card-foreground: 36 33% 96%;
+  --popover: 222 40% 10%;
+  --popover-foreground: 36 33% 96%;
+  --muted: 222 30% 15%;
+  --muted-foreground: 36 16% 70%;
+
+  --border: 222 30% 20%;
+  --input: 222 30% 20%;
+  --ring: 36 92% 64%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html,
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* K-2 文字サイズ: 本文 16px / 学習文 18px */
+body {
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.learning-content {
+  font-size: 18px;
+  line-height: 1.8;
+}
+
+/* 子ども向け: 行間広め */
+p,
+li {
+  line-height: 1.7;
+}
+
+/* prefers-reduced-motion 尊重 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* フォーカスリング: コントラスト 3:1 以上 */
+*:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------------ */
+/* W6 / F-4 受験日カウントダウン マイルストーン演出                              */
+/*                                                                          */
+/* prefers-reduced-motion: reduce では上の @media ブロックでアニメーションが    */
+/* 0.01ms に短縮されるため、視覚的演出は実質オフになる。                        */
+/* ------------------------------------------------------------------------ */
+
+/* 1 週間以内 (D-7) - 柔らかいパルス */
+@keyframes hanei-countdown-pulse-soft {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 0.92;
+  }
+}
+
+/* 3 日以内 (D-3) - 強めのパルス */
+@keyframes hanei-countdown-pulse-strong {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.45);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
+  }
+}
+
+/* 明日 / 当日 (D-1, D-0) - 最大演出 (発光 + 揺れ) */
+@keyframes hanei-countdown-glow {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 hsl(var(--primary) / 0.6),
+      0 0 12px hsl(var(--primary) / 0.4);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow:
+      0 0 0 12px hsl(var(--primary) / 0),
+      0 0 24px hsl(var(--primary) / 0.6);
+  }
+}
+
+.hanei-countdown-week {
+  animation: hanei-countdown-pulse-soft 2.4s ease-in-out infinite;
+}
+.hanei-countdown-final3 {
+  animation: hanei-countdown-pulse-strong 1.8s ease-in-out infinite;
+}
+.hanei-countdown-final1,
+.hanei-countdown-today {
+  animation: hanei-countdown-glow 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hanei-countdown-week,
+  .hanei-countdown-final3,
+  .hanei-countdown-final1,
+  .hanei-countdown-today {
+    animation: none !important;
+  }
+}
