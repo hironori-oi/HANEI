@@ -24,6 +24,7 @@ export async function createLearnerAction(formData: FormData): Promise<void> {
     current_level: formData.get("current_level"),
     target_level: formData.get("target_level"),
     exam_date: formData.get("exam_date"),
+    daily_goal_xp: formData.get("daily_goal_xp") ?? undefined,
   });
   if (!parsed.success) {
     redirect("/onboarding/learner?error=invalid_input");
@@ -41,6 +42,7 @@ export async function createLearnerAction(formData: FormData): Promise<void> {
     targetEikenLevel: data.target_level as "5" | "4" | "3",
     examDate: data.exam_date,
     dailyMinutesTarget: 60,
+    dailyGoalXp: data.daily_goal_xp,
   });
 
   // 受験日 + 周辺レコード初期化 (進捗・XP・キャラクター・本日プラン)

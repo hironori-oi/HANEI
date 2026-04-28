@@ -201,3 +201,37 @@ li {
     animation: none !important;
   }
 }
+
+/* ------------------------------------------------------------------------ */
+/* W8-T2 コンボカウンター (連続正解 3/5/10 で発動)                             */
+/*                                                                          */
+/* 数字が踊るパルス + 微弱な回転で「いま倍率が上がった」瞬間を可視化する。       */
+/* prefers-reduced-motion: reduce 環境では animation を完全に無効化する。      */
+/* ------------------------------------------------------------------------ */
+@keyframes hanei-combo-pulse {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  20% {
+    transform: scale(1.18) rotate(-3deg);
+  }
+  40% {
+    transform: scale(0.96) rotate(2deg);
+  }
+  60% {
+    transform: scale(1.08) rotate(-1deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.hanei-combo-pulse {
+  animation: hanei-combo-pulse 0.6s ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hanei-combo-pulse {
+    animation: none !important;
+  }
+}

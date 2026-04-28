@@ -131,6 +131,24 @@ export const learnerProfiles = sqliteTable(
     targetEikenLevel: text("target_eiken_level", { enum: ["5", "4", "3"] }).notNull(),
     examDate: text("exam_date"),
     dailyMinutesTarget: integer("daily_minutes_target").notNull().default(60),
+    /**
+     * 自己選択日次ゴール XP (W8-T5)
+     * - 4 段階: 10 (軽い) / 20 (ふつう) / 30 (がんばる) / 50 (本気)
+     * - default 20 = 「ふつう」 (10 分目安)
+     * - 学習者本人 or 保護者が settings から変更可
+     * - SDT Autonomy 充足の主軸 (Locke & Latham 1990 / Duolingo retention 主軸)
+     */
+    dailyGoalXp: integer("daily_goal_xp").notNull().default(20),
+    /**
+     * 学習者プリファレンス JSON (W8-T3 / W8-T4)
+     * - soundEnabled: 効果音 ON/OFF (default: true)
+     * - confettiEnabled: 紙吹雪演出 ON/OFF (default: true)
+     * 保護者が settings 画面から制御する。
+     */
+    preferences: text("preferences", { mode: "json" })
+      .$type<{ soundEnabled?: boolean; confettiEnabled?: boolean }>()
+      .notNull()
+      .default(sql`('{"soundEnabled":true,"confettiEnabled":true}')`),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

@@ -1,5 +1,101 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-046: W8 完遂検収 — Phase 2 第 1 週 6 タスク全完了 + Phase 3 戦略策定完了（2026-04-29 / CEO）
+
+- **DEC-045 受領後の並列フル稼働実行結果**:
+  - **Track A (Phase 3 リサーチ)**: `reports/phase3-strategy-research.md` 913 行 / 12 章完成
+    - 4 階層 Freemium: Free / Standard ¥980/月 ¥9,800/年 / Family ¥14,800/年 / Goal ¥19,800 半年合格保証
+    - Web Stripe で Apple/Google 30% 回避（2025-04-30 米連邦判決後の合法経路）
+    - 準 2 級 1,200 問拡張 / W13-W20 / 60 人日 / 8 週間
+    - スタディサプリ ENGLISH for KIDS が 2025-04 新規受付終了 = 市場機会
+  - **Track B (W8 開発 3 agent 並列)**:
+    - Agent B1 (Streak Freeze + Combo): 45 tests 追加, typecheck/lint clean
+    - Agent B2 (Sound + Confetti): 34 tests 追加, Web Audio API oscillator 合成（mp3 不使用 = 著作権リスク 0）
+    - Agent B3 (Daily Goal + Sakura Tree): 44 tests 追加, inline JSX SVG 7 段階
+- **W8 信頼検証結果（CEO 直接実行）**:
+  - typecheck: exit 0 ✅
+  - lint: exit 0 ✅
+  - tests: 32 files / 369 tests 全 PASS（baseline 246 → 369、+123 tests）✅
+  - coverage: lines 57.96% / branches 88.47% / functions 64.66% / statements 57.96% — 50% threshold 全項目通過 ✅
+- **重要技術判断**:
+  - **Web Audio API oscillator 合成方式採用**: mp3 / wav 等の audio asset 不使用で著作権リスク 0、bundle size +0KB
+  - **inline JSX SVG 採用（外部 SVG asset 化せず）**: 桜の木 7 段階を React component として保守
+  - **Migration 番号衝突解決**: W8-T3/T4 (preferences) を 0004、W8-T5 (daily_goal) を 0003 に分離
+  - **streak `applyLearnDayUpdate` 純関数化のみ**: submitAnswer 組み込みは W9 以降に持ち越し（既存 streak update 経路がないため）
+  - **Family Leaderboard ON/OFF**: W11 で families.preferences.familyLeaderboardEnabled を実装予定、デフォルト OFF 確定
+- **W8 成果物（22 ファイル新規 / 13 ファイル変更）**:
+  - lib: streak-freeze / combo / synthesize-feedback / audio-feedback / confetti / daily-goal / sakura-streak / actions/learner-preferences
+  - components: home/streak-shield-badge / home/daily-goal-ring / home/sakura-streak-display / home/sakura-stages/* / study/combo-counter / study/lesson-complete-modal / settings/sound-toggle / settings/daily-goal-toggle / onboarding/daily-goal-selector
+  - api: cron/streak-freeze-monthly
+  - drizzle: 0003_w8_daily_goal / 0004_w8_preferences
+- **判断**: W8 完遂を確定 → commit/push → CI GREEN 確認後 Phase 3 計画書をオーナー提示 + W9 着手 GO 確認
+
+---
+
+## DEC-045: Phase 2 全 GO + 個別判断確定 + Phase 3 同時策定指示（2026-04-29 / オーナー回答 / CEO）
+
+- **オーナー回答**: DEC-044 提示の判断要請 6 件すべて GO / 採用方針を承認
+  1. **Phase 2 全体 GO** — W8-W12 / 35 人日 / 5 週間で進行 ✅
+  2. **「桜の木」メタファ採用** ✅
+  3. **「ハネキン」命名採用** ✅
+  4. **Family Leaderboard は ON/OFF 可能化** ✅（家族内競争のリスク考慮、保護者が制御可能に）
+  5. **β 5 家族選定 = 社内コネ / 案件オーナー紹介 / 公募の 3 案併用** ✅
+  6. **Phase 3 を同時策定** ✅（Phase 2 着手と並行して計画書策定）
+- **CEO 即時アクション（並列フル稼働）**:
+  - **Track A**: Phase 3 リサーチ部門 agent 起動（β 後改善 / 課金モデル / B2B / 英検 4-準 2 級拡張 / モバイル化 / AI 深化）
+  - **Track B**: W8 開発部門 agent 3 体並列起動
+    - Agent B1: T1 Streak Freeze 自動付与 + T2 Combo Visual + 点数倍率
+    - Agent B2: T3 Sound Feedback 4 種 + T4 Confetti / 達成 Burst
+    - Agent B3: T5 自己選択日次ゴール + T6 桜の木メタファ Streak 表示
+  - **Track C**: CEO 監督 + 統合 + 信頼検証 + commit/push
+- **W8 設計確定事項（個別判断回答反映）**:
+  - 桜の木 SVG 7 段階（種 → 芽 → 若葉 → 蕾 → 開花 → 満開 → 桜並木）= countdown-variant 7 段階と semantic に対応
+  - ハネキン経済は閉じた循環（外部課金導線 0、DEC-012 完全無料運用継続）
+  - Family Leaderboard は `families.preferences.familyLeaderboardEnabled` boolean で ON/OFF（W11 で実装、デフォルト OFF）
+- **判断**: Phase 2 着手と Phase 3 策定の二正面作戦で進行
+
+---
+
+## DEC-044: Phase 2 ゲーミフィケーション方針確定 — Duolingo 徹底調査統合計画策定（2026-04-29 / CEO）
+
+- **オーナー指示**: 「duolingo について徹底的に調査して、子どもがあきない設計を取り入れていきましょう。最高に楽しいアプリにする方法について、徹底的に調査して実装計画を策定してください」
+- **CEO の調査体制（3 トラック並列）**:
+  - **A. リサーチ部門 agent**: Duolingo Engineering Blog / SDT / Octalysis / Yu-kai Chou / 競合分析 を WebSearch + WebFetch で徹底調査 → `reports/duolingo-gamification-research.md` (945 行 / Top 5 抽出)
+  - **B. 開発部門 agent (Explore)**: HANEI 既存ゲーミフィケーション要素の棚卸し → `reports/hanei-gamification-inventory.md`（既存 13 / 弱い 4 / 未実装 7）
+  - **C. CEO 直接観察**: claude-in-chrome で duolingo.com を直接観察 → 訴求 4 本柱「楽しさ × 科学 × やる気 × パーソナライズ」確認、Duolingo ABC が独立子供向けサービスとして存在する事実確認
+- **統合した戦略判断**:
+  - Duolingo の核心は「単一機能の天才性」ではなく **Streak × League × XP × Notification の四位一体ループ**
+  - HANEI には「白帽（内発動機）軸を中核 / 黒帽（損失回避）軸を抑制」の方針で取り入れる
+  - 理由: (1) 小学生は Erikson 第 4 段階「勤勉性 vs 劣等感」で罰よりも褒め、(2) 保護者がガイルト型 UX を嫌う、(3) HANEI は「半年で英検 3 級合格」終端ゴールを持つ
+- **HANEI 独自差別化軸 5 点**:
+  1. 「桜咲く山頂」型ゴール可視化（Duolingo の無限ループに対する終端ゴール演出）
+  2. 親子二者 UX（Family Streak / 親→子応援メッセージ）
+  3. AI コーチ誤答解説（既存 gpt-5-mini 実装活用）
+  4. 罰なき設計（Sad-Duo 封印、自動 Streak Freeze）
+  5. 日本語ネイティブ UX（kotodama-tori が方言混じりの優しい言葉）
+- **策定した Phase 2 サブフェーズ計画（W8〜W12 / 5 週間 / 35 人日）**:
+  - W8: 即効ファインチューン（Streak Freeze 自動付与 / Combo Visual / Sound / 自己選択日次ゴール / 桜の木メタファ）
+  - W9: キャラ伴走 + 達成可視化（kotodama-tori 5 段階育成 / Accessory / Badges 8 種 / 桜の木進化）
+  - W10: 経済システム + 5 分セッション（ハネキン閉じた経済 / Daily Quest / 5-7-10 分自動セッション / 過学習防止）
+  - W11: 保護者連動・家族化（Family Streak / 親→子メッセージ / Family Leaderboard / Daily Push）
+  - W12: 計測 + β 検収（KPI ダッシュボード / A/B test 基盤 / β 5 家族受入）
+- **重要倫理判断**:
+  - **Sad-Duo 型ガイルト通知絶対禁止**（児童発達心理 + 保護者信頼の両軸で NG）
+  - **Hearts/Energy システム不採用**（罰要素が小学生不適）
+  - **グローバル leaderboard 不採用 / Family 内のみ**（COPPA 準拠）
+  - **完全無料運用継続**（DEC-012 遵守、ハネキン経済は閉じた循環）
+  - **過学習防止 UX 必須**（30 分連続で休憩 modal / 60 分強制終了）
+- **期待効果（KPI 目標）**:
+  - Day-7 retention 30% → 60%
+  - Day-30 retention 10% → 35%
+  - 6 ヶ月継続率 5% → 25%
+- **追加コスト**: インフラ追加 ~¥0、AI 月額 +¥500-800
+- **成果物**: `reports/phase2-gamification-implementation-plan.md`（CEO 統合計画書 / 7 章 + 添付）
+- **オーナー判断要請（5 個別項目）**: 全体 GO / 「桜の木」メタファ / 「ハネキン」命名 / Family Leaderboard 範囲 / β 5 家族選定方法 / Phase 3 同時策定 vs 後置
+- **判断**: 計画書をオーナー提示 → 承認後 W8 着手予定
+
+---
+
 ## DEC-043: B-13 着手・完遂 — coverage 50% 復帰 (build forward)（2026-04-28 / CEO）
 
 - **発覚経緯**: DEC-042 後の CI 初回ラン結果。5 jobs 中 4 GREEN だが Vitest job のみ FAILURE → coverage 閾値 50% 未達 (実測 lines 43.92% / functions 46.73% / statements 43.92%)

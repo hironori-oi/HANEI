@@ -28,6 +28,7 @@ import {
 } from "@/lib/study/repository";
 import { initialCard, reviewCard, type SrsCardInput } from "@/lib/srs/fsrs";
 import { computeRunningStreak } from "@/lib/study/streak";
+import { applyComboToXp, type ComboTier } from "@/lib/study/combo";
 import { scoreWritingEssay } from "@/lib/ai/score-writing";
 import { getTodayCostJpy } from "@/lib/ai/cost-guard";
 
@@ -37,6 +38,13 @@ const SubmitAnswerSchema = z.object({
   // writing_essay は最大 600 字 (英検 3 級 writing 上限 ≒ 50 words / 余裕で許容)
   choice: z.string().min(1).max(600),
   timeSpentMs: z.number().int().min(0).max(600000),
+  /**
+   * クライアント側の連続正解数 (W8-T2 / 表示同期用)。
+   * サーバ側では answer_logs から再計算した正解 streak を真とし、
+   * このパラメータは UI が「直前まで」何連続だったかを伝えるヒント値として扱う。
+   * 上限 200 を超える値は防御的に切り詰める。
+   */
+  clientCombo: z.number().int().min(0).max(200).optional(),
 });
 
 export type SubmitAnswerInput = z.infer<typeof SubmitAnswerSchema>;
@@ -55,6 +63,12 @@ export interface SubmitAnswerResult {
    * answer_logs 起点で計算。
    */
   streak: number;
+  /**
+   * W8-T2: combo XP 倍率 (1.0 / 1.5 / 2.0 / 3.0)。サーバ側で計算済 (cheating 不可)。
+   */
+  comboMultiplier: number;
+  /** W8-T2: combo tier (0=未発動 / 1=1.5x / 2=2x / 3=3x) */
+  comboTier: ComboTier;
 }
 
 // computeRunningStreak は @/lib/study/streak.ts に分離 ("use server" 制約のため)。
@@ -177,8 +191,26 @@ export async function submitAnswer(input: SubmitAnswerInput): Promise<SubmitAnsw
     }
   }
 
-  // XP 加算 (正解=+10 / 連続誤答緩和のため不正解でも +1)
-  const xpDelta = correct ? 10 : 1;
+  // W8-T2: combo 倍率を適用した XP 加算 (サーバ側で計算 / cheating 不可)
+  // 直近の running streak を計算し、今回が正解なら +1 して combo として使用
+  // (これにより client が嘘の clientCombo を送っても server 側真値で上書きする)
+  // eslint-disable-next-line no-restricted-syntax -- 学習者本人スコープ済
+  const recentLogsForCombo = await db
+    .select({ isCorrect: answerLogs.isCorrect })
+    .from(answerLogs)
+    .where(eq(answerLogs.learnerId, learnerId))
+    .orderBy(desc(answerLogs.answeredAt))
+    .limit(50);
+  const serverCombo = computeRunningStreak(recentLogsForCombo);
+
+  // 基礎 XP: 正解=10 / 不正解=1
+  const baseXp = correct ? 10 : 1;
+  // combo 倍率は正解時のみ適用 (不正解は基礎 1 XP のまま)
+  const comboApplied = correct
+    ? applyComboToXp(baseXp, serverCombo)
+    : { xp: baseXp, multiplier: 1.0, tier: 0 as ComboTier };
+  const xpDelta = comboApplied.xp;
+
   // eslint-disable-next-line no-restricted-syntax -- 学習者本人スコープ済
   const xpRows = await db
     .select()
@@ -212,17 +244,11 @@ export async function submitAnswer(input: SubmitAnswerInput): Promise<SubmitAnsw
   // 次の問題
   const nextProblem = await getNextProblem(learnerId, problem.levelId, problem.skillId);
 
-  // running streak (W5 G-5 ことだまトリ mood 用):
-  // answer_logs を新しい順に最大 50 件取り、末尾から正解連続数を数える。
-  // 不正解だと 0。正解だと「直前まで連続していた正解数 + 1」。
-  // eslint-disable-next-line no-restricted-syntax -- 学習者本人スコープ済 (requireLearnerOwner 通過後)
-  const recentLogs = await db
-    .select({ isCorrect: answerLogs.isCorrect })
-    .from(answerLogs)
-    .where(eq(answerLogs.learnerId, learnerId))
-    .orderBy(desc(answerLogs.answeredAt))
-    .limit(50);
-  const streak = computeRunningStreak(recentLogs);
+  // running streak (W5 G-5 ことだまトリ mood 用) は serverCombo (XP 計算用に取得済) を再利用
+  const streak = serverCombo;
+
+  // 任意の clientCombo は防御的に参照のみ (UI 同期確認 / 将来のテレメトリ用)
+  void parsed.clientCombo;
 
   return {
     correct,
@@ -233,6 +259,8 @@ export async function submitAnswer(input: SubmitAnswerInput): Promise<SubmitAnsw
     nextDueAt: next.due.toISOString(),
     nextProblemId: nextProblem?.id ?? null,
     streak,
+    comboMultiplier: comboApplied.multiplier,
+    comboTier: comboApplied.tier,
   };
 }
 

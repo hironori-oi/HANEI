@@ -26,7 +26,6 @@ import {
   AcademicCapIcon,
   ChatBubbleLeftRightIcon,
   CalendarDaysIcon,
-  FireIcon,
   ChartBarIcon,
   TrophyIcon,
 } from "@heroicons/react/24/outline";
@@ -41,6 +40,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LearnerSwitcherTabs } from "@/components/learner/learner-switcher-tabs";
+import { StreakShieldBadge } from "@/components/home/streak-shield-badge";
+import { SakuraStreakDisplay } from "@/components/home/sakura-streak-display";
+import { DailyGoalRing } from "@/components/home/daily-goal-ring";
 
 import {
   requireAuth,
@@ -53,8 +55,9 @@ import {
   getMasteryCoverage,
   getCurrentStreak,
 } from "@/lib/study/aggregations";
+import { getDailyProgress } from "@/lib/study/daily-goal";
 import { eq } from "drizzle-orm";
-import { xpLevels } from "@/lib/db/schema";
+import { xpLevels, streaks } from "@/lib/db/schema";
 import { getLearnersForParent } from "@/lib/learner/repository";
 import { resolveActiveLearner } from "@/lib/study/learner-switch";
 import {
@@ -230,19 +233,29 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   // 5. データ集計 (並列)
   const levelId = pickLevelId(learner.targetEikenLevel);
-  const [streak, dailyCounts, coverage, xpRows] = await Promise.all([
-    getCurrentStreak(db, learner.id),
-    getDailySkillCounts(db, learner.id),
-    getMasteryCoverage(db, learner.id, levelId),
-    // eslint-disable-next-line no-restricted-syntax -- 認可済 (familyId スコープ + learner.id 解決済み)
-    db
-      .select({ totalXp: xpLevels.totalXp, level: xpLevels.level })
-      .from(xpLevels)
-      .where(eq(xpLevels.learnerId, learner.id))
-      .limit(1),
-  ]);
+  const [streak, dailyCounts, coverage, xpRows, streakRows, dailyGoalProgress] =
+    await Promise.all([
+      getCurrentStreak(db, learner.id),
+      getDailySkillCounts(db, learner.id),
+      getMasteryCoverage(db, learner.id, levelId),
+      // eslint-disable-next-line no-restricted-syntax -- 認可済 (familyId スコープ + learner.id 解決済み)
+      db
+        .select({ totalXp: xpLevels.totalXp, level: xpLevels.level })
+        .from(xpLevels)
+        .where(eq(xpLevels.learnerId, learner.id))
+        .limit(1),
+      // eslint-disable-next-line no-restricted-syntax -- 認可済 (familyId スコープ + learner.id 解決済み)
+      db
+        .select({ freezeTickets: streaks.freezeTickets })
+        .from(streaks)
+        .where(eq(streaks.learnerId, learner.id))
+        .limit(1),
+      // W8-T5: 自己選択日次ゴール 進捗
+      getDailyProgress(db, learner.id),
+    ]);
 
   const xp = xpRows[0] ?? { totalXp: 0, level: 1 };
+  const freezeTickets = streakRows[0]?.freezeTickets ?? 0;
   const daysUntilExam = computeDaysUntil(learner.examDate);
   const variant = pickCountdownVariant(daysUntilExam);
   const cd = presentCountdown(variant, daysUntilExam);
@@ -322,20 +335,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </CardContent>
         </Card>
 
-        {/* 連続記録 */}
-        <Card>
-          <CardHeader>
-            <FireIcon
-              className="mb-2 h-8 w-8 text-warning"
-              aria-hidden="true"
+        {/* 連続記録: W8-T6 桜の木メタファ (Duolingo 流の炎アイコンを置換) */}
+        <div className="space-y-2">
+          <SakuraStreakDisplay streakDays={streak} svgSize={88} />
+          {/* freeze ticket 残数バッジは桜カードの下に補助表示 */}
+          <div className="flex items-center justify-end px-1">
+            <StreakShieldBadge
+              count={freezeTickets}
+              examDate={learner.examDate}
             />
-            <CardTitle className="text-base">れんぞくきろく</CardTitle>
-            <CardDescription>毎日の積み重ねを大切に</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{streak} 日</p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* XP / レベル */}
         <Card>
@@ -354,6 +364,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* W8-T5: 今日のゴール プログレスリング */}
+      <section className="mt-8">
+        <DailyGoalRing progress={dailyGoalProgress} />
+      </section>
 
       {/* 今日の学習プラン */}
       <section className="mt-10">

@@ -9,7 +9,7 @@
  * - writing_essay は textarea + 文字数カウンタ + AI フィードバック表示 (W7 B-10 / DEC-039)
  */
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircleIcon,
@@ -24,11 +24,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { submitAnswer } from "@/lib/actions/study";
 import { KotodamaTori, pickMood } from "@/components/study/kotodama-tori";
+import { LessonCompleteModal } from "@/components/study/lesson-complete-modal";
+import { ComboCounter } from "@/components/study/combo-counter";
+import { isComboTierUpgrade, nextComboCount } from "@/lib/study/combo";
 import { MAX_REPLAY, canReplay, shouldShowAudioUi } from "@/lib/study/audio-gate";
 import {
   WRITING_INPUT_MAX_LENGTH,
   validateWritingInput,
 } from "@/lib/study/writing-input";
+import {
+  initAudioContext,
+  playFeedback,
+  setAudioEnabled,
+} from "@/lib/study/audio-feedback";
+import { setConfettiEnabled, triggerConfetti } from "@/lib/study/confetti";
 
 interface Choice {
   label: string;
@@ -43,6 +52,10 @@ interface FeedbackResult {
   totalXp: number;
   nextProblemId: string | null;
   streak: number;
+  /** W8-T2: combo XP 倍率 (server で計算済) */
+  comboMultiplier: number;
+  /** W8-T2: combo tier 0/1/2/3 */
+  comboTier: 0 | 1 | 2 | 3;
 }
 
 export function StudyClient(props: {
@@ -54,6 +67,9 @@ export function StudyClient(props: {
   choices: Choice[];
   audioUrl?: string | null;
   skill?: string;
+  /** 学習者 preferences (W8-T3 / W8-T4) — 効果音 / 紙吹雪 ON-OFF */
+  soundEnabled?: boolean;
+  confettiEnabled?: boolean;
 }) {
   const {
     learnerId,
@@ -63,6 +79,8 @@ export function StudyClient(props: {
     choices,
     audioUrl,
     skill,
+    soundEnabled = true,
+    confettiEnabled = true,
   } = props;
   const isWriting = problemType === "writing_essay";
   const router = useRouter();
@@ -71,6 +89,17 @@ export function StudyClient(props: {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [startTime] = useState<number>(() => Date.now());
+  // W8-T4: レッスン完了 modal 表示 state
+  const [showLessonComplete, setShowLessonComplete] = useState(false);
+  // W8-T2: 連続正解 combo state (1 セッション内のみ有効、不正解 / セッション終了でリセット)
+  const [combo, setCombo] = useState<number>(0);
+  const [comboJustUpgraded, setComboJustUpgraded] = useState<boolean>(false);
+
+  // W8-T3 / W8-T4: preferences をモジュール singleton に同期
+  useEffect(() => {
+    setAudioEnabled(soundEnabled);
+    setConfettiEnabled(confettiEnabled);
+  }, [soundEnabled, confettiEnabled]);
   // W7 B-10: writing_essay 用 textarea state
   const [essayDraft, setEssayDraft] = useState<string>("");
   const essayValidation = validateWritingInput(essayDraft);
@@ -104,6 +133,8 @@ export function StudyClient(props: {
   const submitChoiceValue = (value: string) => {
     if (feedback || isPending) return;
     setError(null);
+    // W8-T3: 最初のユーザー操作後に AudioContext を初期化 (autoplay policy)
+    initAudioContext();
     startTransition(async () => {
       try {
         const result = await submitAnswer({
@@ -111,8 +142,43 @@ export function StudyClient(props: {
           problemId,
           choice: value,
           timeSpentMs: Date.now() - startTime,
+          clientCombo: combo,
         });
         setFeedback(result);
+
+        // W8-T2: combo state 更新 (セッション内 / 不正解で 0 リセット)
+        const previousCombo = combo;
+        const newCombo = nextComboCount(previousCombo, result.correct);
+        setCombo(newCombo);
+        const tierUpgraded = isComboTierUpgrade(previousCombo, newCombo);
+        // tier 上昇瞬間のみ pulse animation を 1 回起動
+        if (tierUpgraded) {
+          setComboJustUpgraded(true);
+          // 600ms 後に flag を戻す (1 回の animation 用)
+          window.setTimeout(() => setComboJustUpgraded(false), 700);
+        } else {
+          setComboJustUpgraded(false);
+        }
+
+        // W8-T3 / W8-T4: 音響フィードバック + Confetti
+        // - tier upgrade 瞬間: combo 音 + 軽い confetti (W8-T2 と連動)
+        // - 通常正解: correct 音
+        // - 不正解: incorrect 音
+        // すべて silent fail-safe (preferences / autoplay policy で skip 可)
+        if (result.correct) {
+          if (tierUpgraded) {
+            void playFeedback("combo");
+            void triggerConfetti("light");
+          } else {
+            void playFeedback("correct");
+          }
+          // W8-T4: 5 問以上連続正解後の終了でレッスン完了 modal を表示
+          if (newCombo >= 5 && !result.nextProblemId) {
+            setShowLessonComplete(true);
+          }
+        } else {
+          void playFeedback("incorrect");
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "解答の送信に失敗しました");
         setSelected(null);
@@ -143,7 +209,12 @@ export function StudyClient(props: {
       setSelected(null);
       setFeedback(null);
       setEssayDraft("");
+      // W8-T2: combo はセッション中継続 (router.refresh() でも useState は維持される)
+      // ただし「不正解」では既に 0 リセット済み。意図的な離脱は別フローでハンドル。
     } else {
+      // セッション終了 -> combo を 0 リセット
+      setCombo(0);
+      setComboJustUpgraded(false);
       router.push("/home");
     }
   };
@@ -159,8 +230,23 @@ export function StudyClient(props: {
 
   return (
     <div className="space-y-6">
+      {/* W8-T2: combo カウンター (右上 fixed / tier 1 以上で表示) */}
+      <ComboCounter comboCount={combo} justUpgraded={comboJustUpgraded} />
+
       {/* G-5: ことだまトリ コンパニオン */}
       <KotodamaTori mood={mood} streak={streak} lastResult={lastResult} />
+
+      {/* W8-T4: レッスン完了 modal (5 問以上連続正解後の終了時) */}
+      <LessonCompleteModal
+        open={showLessonComplete}
+        streak={streak}
+        earnedXp={feedback?.xpDelta}
+        onContinue={() => {
+          setShowLessonComplete(false);
+          router.push("/home");
+        }}
+        onClose={() => setShowLessonComplete(false)}
+      />
 
       {/* G-2: listening 問題の TTS audio 再生 UI */}
       {showAudioUi && (

@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DailyGoalSelector } from "@/components/onboarding/daily-goal-selector";
 import { createLearnerAction } from "./actions";
 
 export const metadata = {
@@ -93,6 +94,9 @@ export default function LearnerOnboardingPage() {
                 ※受験日から逆算して、毎日の学習プランを自動で組みます。
               </p>
             </div>
+
+            {/* W8-T5: 自己選択日次ゴール */}
+            <DailyGoalSelector defaultValue={20} />
 
             <Button type="submit" size="lg" className="min-h-tap-cta w-full">
               この内容で進める
