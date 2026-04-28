@@ -1,5 +1,65 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-041: W7 完遂検収 — B-8 / B-9 / B-10 / B-11 全件 GREEN + W7 commit/push（2026-04-28 / CEO）
+
+- **オーナー指示**: 「pushを確認しましたので続きの作業を進めてください」（DEC-040 後の継続指示）→ DEC-039 「W6 GO：CEOにお任せします」の CEO 自律権限を継続行使
+- **W7 着手スコープ（DEC-040 申し送り B-8 / B-9 / B-10 + 新規発見 B-11）**:
+  - B-8 (P0): dev/E2E 環境衝突の構造的解消（`reuseExistingServer: !CI` → `false` 常時）
+  - B-9 (P0): 解説生成パイプライン DB 直結化（YAML 起点 → DB 起点に置換、再実行時の取りこぼし 0）
+  - B-10 (P1): writing_essay UI 完成（StudyClient.tsx に textarea 入力分岐 + 600 字制限 + K-1 タップ領域）
+  - B-11 (P0 新規発見): GitHub Actions CI ワークフローのパス不整合修正（`projects/PRJ-016/app` → `app`）
+- **CEO 直接実行 + 並列 agent 委任での成果**:
+  - **B-8** (CEO 直接編集): `app/playwright.config.ts` の `reuseExistingServer` を常時 `false` に固定。コメントで「dev `next dev` (port 3000 / `local.db`) を Playwright が再利用 → 誤った DB を見にいく silent skip / silent fail を構造的に防ぐ」と明記。build + start ~30 秒のオーバーヘッドは許容判断。検証: E2E 24/24 PASS (58.0 秒)
+  - **B-9** (general-purpose agent): 新スクリプト `scripts/generate-explanations-from-db.ts` + 共通モジュール `scripts/lib/explanation-generator.ts` 作成。`reading_passage_mcq` 型対応・DB 直結クエリ・冪等性保証。並列実行による race condition で 39 件重複が一度発生したが `dedupe-explanations-once.ts` 即時クリーンアップで 822/822 完全カバレッジ復元。コスト ~¥77（W6 承認 ¥350 予算内）
+  - **B-10** (general-purpose agent): `src/lib/study/writing-input.ts` 純粋関数モジュール（11 unit tests）+ `StudyClient.tsx` の `problem.type === "writing_essay"` 分岐実装（textarea / maxLength=600 / rows=6 / 文字カウンタ / モデル解答後出し）+ E2E `study-writing-smoke.spec.ts`
+  - **B-11** (CEO 直接編集): `app/.github/workflows/ci.yml` の 5 jobs × `working-directory: projects/PRJ-016/app` を全て `working-directory: app` に修正。`cache-dependency-path` / `path:` artifact パスも同様修正。`hironori-oi/HANEI` repo は PRJ-016/ をルートに push しているため、サブパス指定だと CI が起動できなかった
+- **最終 CEO 信頼検証ゲート（W7 確定前）**:
+  - typecheck: ✅ exit 0
+  - lint: ✅ exit 0（warning 0）
+  - unit: ✅ 214 tests / 21 files / 3.20s
+  - E2E (chromium): ✅ 24/24 PASS / 58.0s
+- **W7 で発見・対応した副次事象**:
+  - **B-9 race condition**: Bash tool の二重発火 → 同一スクリプトが並列で 2 プロセス起動 → 39 件重複 INSERT。agent が CEO の trust-but-verify エシックに従い honest reporting → 即時 cleanup 完遂。コスト超過は予算枠内で吸収
+  - **B-11 CI パスバグ**: 初回 push 後に発見。GitHub Actions が一度も green になっていない（パス解決失敗で全 jobs エラー）状態を構造的に修正
+  - **B-7 副次効果**: writing E2E 中に `[score-writing] primary failed, trying fallback model` ログが観測されたが、Jaccard fallback が機能して PASS。三層防衛設計が実環境で動作確認済
+- **判断理由**:
+  - W6 で 11/11 GREEN を達成しても、W7 の構造的負債（B-8 / B-9 / B-11）を残したまま Phase 2 に進むと、CI が永続 RED / E2E が dev DB を見にいく silent fail / 解説生成スクリプトが YAML drift で再起不能、という三重の罠が残る
+  - 特に **B-11 は P0**：オーナーが GitHub UI で「CI が一度も通らない」状態を見たら信頼を失う。次回 push までに必ず修正する必要があった
+- **W7 完遂評価**: GREEN（Phase 1 W7 全件達成、Phase 2 着手準備完了）
+- **次のアクション（オーナー判断要請）**:
+  - 1. **W7 commit + push 承認**: 本決定書 + B-8/B-9/B-10/B-11 修正を一括 commit → `origin/main` push（CEO は DEC-039 自律権限で push 実施予定）
+  - 2. **B-12 (Vercel デプロイ準備)**: `Vercel project 作成 + GitHub repo 連携 + env vars 投入（Turso / OpenAI / Resend / Sentry / CRON_SECRET）`の着手判断
+  - 3. **B-4 (W1〜W5 KPT 振り返り)**: 30 分タスク。W7 後に実施するか Phase 2 開始時に統合するか
+  - 4. **Phase 2 着手判断**: 残スコープ = 模試本番フロー / 自動採点 / 保護者ダッシュボード本番化 / 通知最適化 / β ローンチ前検収
+
+---
+
+## DEC-040: GitHub 化 + 初回 push — `hironori-oi/HANEI` repo（2026-04-28 / CEO）
+- **オーナー指示**: GitHub に `hironori-oi/HANEI` repo を作成済 → push 依頼
+- **CEO 直接実行**:
+  1. `projects/PRJ-016/` 直下に `.gitignore` 新設（root 二重防衛 / `.env*` / `local.db*` / `node_modules/` / `.next/` / `playwright-report/` 等を `**/...` glob で網羅）
+  2. `git init` → `git branch -M main`
+  3. `git add --dry-run --all` で staging 内容を事前検査 → 195 ファイル、機密ファイル混入なし（`.env.local.example` のみ matched = テンプレートで問題なし）
+  4. `git -c user.name="hironori-oi" commit -m "chore: initial commit — HANEI Phase 1 W1-W6 完遂版"`（global config に user.name が無いため commit 専用 inline 上書き、CLAUDE.md「NEVER update git config」厳守）
+  5. `git remote add origin https://github.com/hironori-oi/HANEI.git`
+  6. `git push -u origin main` ✅ 成功
+- **検証**: local `main` (25254ff) = `origin/main` (25254ff) 一致確認
+- **Commit 内容（要約）**:
+  - 195 ファイル（src/ + tests/ + scripts/ + drizzle/ + reports/ + decisions.md + project-brief.md + docs/ 含む）
+  - 機密除外: `.env.local`（本番 Turso URL）/ `.env.development.local`（dev override）/ `local.db`（個人データ含む）/ `local.db.bak-*` / `node_modules` / `.next` / `playwright-report` / `.tmp` 等すべて gitignore で除外済
+  - LF→CRLF 警告は Windows line ending normalization（無害）
+- **影響**:
+  - **W1〜W6 の全成果物が GitHub に永続化**（DEC-038 進捗確認時に発見した「PRJ-016 全体 git 未管理」リスクを完全解消）
+  - W7 以降は GitHub flow（feature ブランチ → PR → main マージ）に移行可能
+  - Vercel との GitHub 連携で auto-deploy 設定が可能（W7 で Vercel プロジェクト作成時に紐付け）
+- **W7 申し送り追加項目（B-11 として）**:
+  - **B-11**: GitHub Actions CI 設定（`app/.github/workflows/ci.yml` は既存 = W1 から準備済 / 動作未検証）→ push 時に typecheck + lint + unit + E2E が自動実行されるか初回検証
+  - **B-12**: Vercel プロジェクト作成 + GitHub repo 紐付け + env var（Turso / OpenAI / Resend / Sentry / CRON_SECRET）設定
+- **オーナー確認推奨事項**:
+  - GitHub 上で repo が public / private どちらか確認（HANEI は子ども向けプロダクトのため個人開発でも private 推奨。仕様検討は W7）
+  - `.env.local.example` を確認し、本番 env var 設定の参考に使う
+  - global git の `user.name` を一度だけ設定推奨（オーナー側作業）: `git config --global user.name "hironori-oi"`（以後の commit で `-c` 不要に）
+
 ## DEC-039: W6 着手決裁 + 完遂検収 — B-1〜B-7 + F-1〜F-4 全件 GREEN（2026-04-27 / CEO）
 - **オーナー指示（2026-04-27 23:00）**:
   - W6 GO（B-1〜B-7）: **CEO 一任**

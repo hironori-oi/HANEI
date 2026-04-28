@@ -46,7 +46,11 @@ export default defineConfig({
     command:
       "node -e \"const fs=require('fs');fs.mkdirSync('tests/e2e/.tmp',{recursive:true});if(!fs.existsSync('tests/e2e/.tmp/e2e.db'))fs.closeSync(fs.openSync('tests/e2e/.tmp/e2e.db','a'));\" && npm run build && npm run start",
     url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
+    // W7 / B-8: 常時 false。dev (`next dev` / `local.db`) が port 3000 を
+    // 占有していた場合、Playwright がそれを再利用して E2E が誤った DB を見にいき
+    // silent skip / silent fail する事故 (DEC-040 W7 申し送り B-8) を構造的に防ぐ。
+    // build + start のオーバーヘッドは ~30 秒程度許容する。
+    reuseExistingServer: false,
     timeout: 180 * 1000,
     env: {
       // webServer (Next.js 子プロセス) と fixture が同一 DB を見るための共有 file:

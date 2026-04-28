@@ -193,7 +193,7 @@ export async function seedFixture(client: Client): Promise<{
   // E2E は vocab + reading のみカバー (listening は TTS 音源が必要なので除外)。
   const skillSeedTargets: ReadonlyArray<{
     level: "5" | "4" | "3";
-    seedSkill: "vocab" | "reading";
+    seedSkill: "vocab" | "reading" | "writing";
     displayName: string;
   }> = [
     { level: "5", seedSkill: "vocab", displayName: "英検 5 級 語彙" },
@@ -202,6 +202,8 @@ export async function seedFixture(client: Client): Promise<{
     { level: "4", seedSkill: "reading", displayName: "英検 4 級 読解" },
     { level: "3", seedSkill: "vocab", displayName: "英検 3 級 語彙" },
     { level: "3", seedSkill: "reading", displayName: "英検 3 級 読解" },
+    // W7 B-10: writing_essay UI スモーク用
+    { level: "3", seedSkill: "writing", displayName: "英検 3 級 ライティング" },
   ];
   for (const s of skillSeedTargets) {
     await client.execute({
@@ -416,6 +418,46 @@ export async function seedFixture(client: Client): Promise<{
         `pe_${p.id}`,
         p.id,
         `${p.explanation} (cached explanation for E2E)`,
+        "curated",
+      ],
+    });
+  }
+
+  // ----- W7 B-10: writing_essay 問題 (3 級 / 1 問) -----
+  // OPENAI_API_KEY 未設定の E2E 環境では scoreWritingEssay() が
+  // jaccardWordOverlap ベースの決定論フォールバックに落ちるため、
+  // 模範解答と単語が十分重複する解答を送れば correct=true で次問へ進める。
+  {
+    const writingId = "prb_e2e_3_writing_001";
+    const writingQuestionJson = JSON.stringify({
+      prompt: "What sport do you like? Please write 2-3 sentences.",
+      modelAnswer:
+        "I like soccer. I play soccer with my friends every weekend. It is a lot of fun.",
+      wordCountMin: 15,
+      wordCountMax: 50,
+    });
+    await client.execute({
+      sql: `INSERT INTO problems (id, level_id, skill_id, type, question_json, correct_answer, explanation, qa_verdict, qa_status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        writingId,
+        "3",
+        mapSkillId("3", "writing"),
+        "writing_essay",
+        writingQuestionJson,
+        // correct_answer は writing_essay では「お手本」を保持するだけ (採点は scoreWritingEssay)
+        "I like soccer. I play soccer with my friends every weekend. It is a lot of fun.",
+        "ライティングは自分の言葉で書くことが大切です。",
+        "pass",
+        "live",
+        "ai_generated",
+      ],
+    });
+    await client.execute({
+      sql: `INSERT INTO problem_explanations (id, problem_id, explanation_text, generated_by) VALUES (?, ?, ?, ?)`,
+      args: [
+        `pe_${writingId}`,
+        writingId,
+        "ライティングはお手本と違っても OK です。 (cached explanation for E2E)",
         "curated",
       ],
     });

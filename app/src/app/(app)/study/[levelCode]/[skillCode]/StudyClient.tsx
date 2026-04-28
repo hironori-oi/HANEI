@@ -6,6 +6,7 @@
  * - 解説表示 → SRS 更新 (Server Action: submitAnswer)
  * - 連続正解で XP 加算 + ことだまトリ mood 変化 (W5 G-5)
  * - listening 問題は TTS audio 再生 UI を表示 (W5 G-2)
+ * - writing_essay は textarea + 文字数カウンタ + AI フィードバック表示 (W7 B-10 / DEC-039)
  */
 
 import { useRef, useState, useTransition } from "react";
@@ -24,6 +25,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { submitAnswer } from "@/lib/actions/study";
 import { KotodamaTori, pickMood } from "@/components/study/kotodama-tori";
 import { MAX_REPLAY, canReplay, shouldShowAudioUi } from "@/lib/study/audio-gate";
+import {
+  WRITING_INPUT_MAX_LENGTH,
+  validateWritingInput,
+} from "@/lib/study/writing-input";
 
 interface Choice {
   label: string;
@@ -43,18 +48,32 @@ interface FeedbackResult {
 export function StudyClient(props: {
   learnerId: string;
   problemId: string;
+  /** 問題種別 (W7 B-10): "writing_essay" は textarea 入力 / それ以外は 4 択ラジオ */
+  problemType?: "mcq" | "writing_essay";
   prompt: string;
   choices: Choice[];
   audioUrl?: string | null;
   skill?: string;
 }) {
-  const { learnerId, problemId, prompt, choices, audioUrl, skill } = props;
+  const {
+    learnerId,
+    problemId,
+    problemType = "mcq",
+    prompt,
+    choices,
+    audioUrl,
+    skill,
+  } = props;
+  const isWriting = problemType === "writing_essay";
   const router = useRouter();
   const [selected, setSelected] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [startTime] = useState<number>(() => Date.now());
+  // W7 B-10: writing_essay 用 textarea state
+  const [essayDraft, setEssayDraft] = useState<string>("");
+  const essayValidation = validateWritingInput(essayDraft);
 
   // G-2: audio 再生制御
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -82,16 +101,15 @@ export function StudyClient(props: {
     void el.play();
   };
 
-  const handleSelect = (label: string) => {
+  const submitChoiceValue = (value: string) => {
     if (feedback || isPending) return;
-    setSelected(label);
     setError(null);
     startTransition(async () => {
       try {
         const result = await submitAnswer({
           learnerId,
           problemId,
-          choice: label,
+          choice: value,
           timeSpentMs: Date.now() - startTime,
         });
         setFeedback(result);
@@ -102,12 +120,29 @@ export function StudyClient(props: {
     });
   };
 
+  const handleSelect = (label: string) => {
+    if (feedback || isPending) return;
+    setSelected(label);
+    submitChoiceValue(label);
+  };
+
+  const handleSubmitEssay = () => {
+    if (feedback || isPending) return;
+    if (!essayValidation.isValid) {
+      setError(essayValidation.errorMessage ?? "もう少しだけ書いてみよう。");
+      return;
+    }
+    setSelected(essayDraft);
+    submitChoiceValue(essayDraft);
+  };
+
   const handleNext = () => {
     if (feedback?.nextProblemId) {
       // 同じ URL へ refresh で次問取得 (server で due/未学習を再評価)
       router.refresh();
       setSelected(null);
       setFeedback(null);
+      setEssayDraft("");
     } else {
       router.push("/home");
     }
@@ -206,7 +241,9 @@ export function StudyClient(props: {
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
         <CardContent className="p-6 sm:p-8">
           <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
-            つぎの英文の ( ) に入る言葉をえらびましょう
+            {isWriting
+              ? "つぎのお題に英語で答えてみよう"
+              : "つぎの英文の ( ) に入る言葉をえらびましょう"}
           </p>
           <p
             className="text-xl font-medium leading-relaxed sm:text-2xl"
@@ -217,8 +254,76 @@ export function StudyClient(props: {
         </CardContent>
       </Card>
 
-      {/* 選択肢 (Mint カード) */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* writing_essay 入力 (W7 B-10) - お手本回答は送信前に出さない (カンニング防止) */}
+      {isWriting && (
+        <Card className="border-accent/30 bg-card">
+          <CardContent className="space-y-3 p-5 sm:p-6">
+            <label
+              htmlFor="essay-textarea"
+              className="block text-sm font-semibold"
+            >
+              あなたの こたえ
+            </label>
+            <textarea
+              id="essay-textarea"
+              data-testid="essay-textarea"
+              value={essayDraft}
+              onChange={(e) => setEssayDraft(e.target.value)}
+              onFocus={(e) => {
+                // モバイル想定: フォーカス時に textarea を可視領域に寄せる
+                if (typeof e.currentTarget.scrollIntoView === "function") {
+                  e.currentTarget.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                  });
+                }
+              }}
+              disabled={feedback !== null || isPending}
+              maxLength={WRITING_INPUT_MAX_LENGTH}
+              rows={6}
+              placeholder="自由に英語で書いてみよう。お手本があるけど、あなたの言葉が一番大切だよ。"
+              aria-label="英作文の解答を入力"
+              aria-describedby="essay-counter essay-hint"
+              className="block w-full resize-y rounded-md border-2 border-input bg-background px-3 py-3 text-base leading-relaxed ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <div className="flex items-center justify-between gap-3">
+              <p
+                id="essay-hint"
+                className="text-xs text-muted-foreground"
+              >
+                10文字いじょうから「決定」できるよ。
+              </p>
+              <span
+                id="essay-counter"
+                data-testid="essay-counter"
+                aria-live="polite"
+                className="text-xs tabular-nums text-muted-foreground"
+              >
+                {essayValidation.length} / {WRITING_INPUT_MAX_LENGTH}
+              </span>
+            </div>
+            <Button
+              type="button"
+              size="lg"
+              onClick={handleSubmitEssay}
+              disabled={
+                feedback !== null || isPending || !essayValidation.isValid
+              }
+              data-testid="essay-submit"
+              className="min-h-tap-cta w-full"
+            >
+              決定
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 選択肢 (Mint カード) — writing_essay では非表示 */}
+      <div
+        className={
+          isWriting ? "hidden" : "grid gap-3 sm:grid-cols-2"
+        }
+      >
         {choices.map((choice) => {
           const isSelected = selected === choice.label;
           const isCorrectChoice =
@@ -309,7 +414,7 @@ export function StudyClient(props: {
                 +{feedback.xpDelta} XP
               </span>
             </div>
-            {!feedback.correct && (
+            {!feedback.correct && !isWriting && (
               <p className="text-sm">
                 正解は{" "}
                 <span className="font-bold text-success">{feedback.correctAnswer}</span>{" "}
@@ -317,7 +422,9 @@ export function StudyClient(props: {
               </p>
             )}
             <div>
-              <h3 className="mb-1 text-sm font-semibold">かいせつ</h3>
+              <h3 className="mb-1 text-sm font-semibold">
+                {isWriting ? "せんせいから" : "かいせつ"}
+              </h3>
               <p
                 className="text-sm leading-relaxed text-foreground"
                 data-testid="study-explanation"
@@ -325,6 +432,14 @@ export function StudyClient(props: {
                 {feedback.explanation}
               </p>
             </div>
+            {isWriting && (
+              <div data-testid="essay-model-answer">
+                <h3 className="mb-1 text-sm font-semibold">おてほん</h3>
+                <p className="text-sm leading-relaxed text-foreground">
+                  {feedback.correctAnswer}
+                </p>
+              </div>
+            )}
             <Button
               onClick={handleNext}
               size="lg"

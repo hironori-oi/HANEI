@@ -112,10 +112,13 @@ export default async function StudyPage({
   }
 
   // questionJson は string | jsonable. Drizzle (mode:json) で deserialize 済
+  // writing_essay の場合は choices が無く modelAnswer が入る (seed-problems-runner / buildWritingQuestionJson)
   const questionJson = problem.questionJson as {
     prompt: string;
-    choices: Array<{ label: string; text: string }>;
+    choices?: Array<{ label: string; text: string }>;
+    modelAnswer?: string;
   };
+  const isWritingEssay = problem.type === "writing_essay";
 
   // メタ情報を avoid bug for null/undefined
   void and; // import 保持
@@ -139,8 +142,9 @@ export default async function StudyPage({
         key={problem.id}
         learnerId={learner.id}
         problemId={problem.id}
+        problemType={isWritingEssay ? "writing_essay" : "mcq"}
         prompt={questionJson.prompt}
-        choices={questionJson.choices}
+        choices={questionJson.choices ?? []}
         audioUrl={problem.audioUrl ?? null}
         skill={skill}
       />
