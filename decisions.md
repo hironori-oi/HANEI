@@ -1,5 +1,37 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-043: B-13 着手・完遂 — coverage 50% 復帰 (build forward)（2026-04-28 / CEO）
+
+- **発覚経緯**: DEC-042 後の CI 初回ラン結果。5 jobs 中 4 GREEN だが Vitest job のみ FAILURE → coverage 閾値 50% 未達 (実測 lines 43.92% / functions 46.73% / statements 43.92%)
+- **判断分岐 3 案を提示しオーナー GO**:
+  - A. 追加テストで 50% 達成 (build forward) ← **採用**
+  - B. 閾値 40% に引下げ (build back / 品質後退)
+  - C. coverage ゲートを CI から外す
+- **採用理由**:
+  1. Phase 1 末で品質ゲートを後退させると Phase 2 で取り戻すコストが構造的に高い
+  2. 未カバーの中に W6 F-1 (notifications/weekly-digest.ts) と F-3 (learner/repository.ts) の **テスト取りこぼし** が含まれており、本来 W6 で書くべきだったテストの後始末（償却）として正当
+  3. mock-based unit test なら agent 並列で 30〜45 分以内に解消可能 → 投資対効果が高い
+- **CEO → general-purpose agent 委任での成果**:
+  - 4 ファイル新規 + 既存 1 ファイル拡張：
+    - `tests/unit/notifications.weekly-digest.test.ts` 10 tests（happy / learner_not_found / no_parent_email / sendEmail 失敗 / parent.name fallback / mixed succeed-fail / throw catch / non-Error throw / empty list）
+    - `tests/unit/learner.repository.test.ts` 3 tests（家族あり / なし / nullish familyId）
+    - `tests/unit/lib.api-error.test.ts` 10 tests（7 status code × it.each / 内部 leak 防止 / structured log）
+    - `tests/unit/lib.utils.test.ts` 7 tests（cn() merge / dedupe / falsy / conditional / nested / empty）
+    - `tests/unit/ai.score-writing.test.ts` に純粋関数 2 件追加（buildUserPrompt / estimateInputTokens）
+  - 既存 `notifications.weekly-digest.test.ts`（template only）は `notifications.weekly-digest-template.test.ts` に rename → 旧名を digest service test の canonical 名として使用
+- **検証結果（agent 報告 + CEO 直接確認 exit 0）**:
+  - Lines: **50.59%** (≥ 50% ✅)
+  - Statements: **50.59%** (≥ 50% ✅)
+  - Functions: **53.76%** (≥ 50% ✅)
+  - Branches: **86.16%** (≥ 50% ✅)
+  - 25 files / **246 tests** PASS（214 → +32）
+  - typecheck / lint いずれも clean
+  - 対象 4 ファイル全て **100% カバー**
+- **判断**: B-13 GREEN。CI 全 5 jobs GREEN を次回 push で確認予定
+- **教訓**: 新規モジュール追加 (W6 F-1 / F-3) 時に「同 PR 内テスト併設」を組織的ルールにすべき。Phase 2 のコーディング規約に反映する候補
+
+---
+
 ## DEC-042: B-11 続報 — workflow ファイルの location bug 修正（2026-04-28 / CEO）
 
 - **発覚経緯**: DEC-041 commit + push 後、GitHub REST API で `total_count=0` を確認 → Actions runs が一度も走っていない

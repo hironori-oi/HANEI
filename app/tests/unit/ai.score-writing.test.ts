@@ -33,6 +33,8 @@ import {
   scoreWritingEssay,
   buildFallbackResult,
   buildSystemPrompt,
+  buildUserPrompt,
+  estimateInputTokens,
   jaccardWordOverlap,
   WRITING_PASS_THRESHOLD,
   WRITING_PER_REQUEST_HARD_CAP_JPY,
@@ -79,6 +81,33 @@ describe("buildSystemPrompt", () => {
     expect(sp).toContain("小学生");
     expect(sp).toContain("英検3級");
     expect(sp).toContain("JSON");
+  });
+});
+
+describe("buildUserPrompt", () => {
+  it("interpolates prompt / modelAnswer / userAnswer in JA labels", () => {
+    const up = buildUserPrompt({
+      userAnswer: "I like dogs.",
+      modelAnswer: "I like dogs because they are kind.",
+      prompt: "What animal do you like?",
+      level: "3",
+    });
+    expect(up).toContain("【設問】");
+    expect(up).toContain("What animal do you like?");
+    expect(up).toContain("【模範解答】");
+    expect(up).toContain("I like dogs because they are kind.");
+    expect(up).toContain("【子どもの作文】");
+    expect(up).toContain("I like dogs.");
+    expect(up).toContain("JSON");
+  });
+});
+
+describe("estimateInputTokens", () => {
+  it("approximates ~4 chars per token (rounded up)", () => {
+    expect(estimateInputTokens("")).toBe(0);
+    expect(estimateInputTokens("abcd")).toBe(1); // 4 / 4 = 1
+    expect(estimateInputTokens("abcde")).toBe(2); // 5 / 4 = 1.25 → ceil 2
+    expect(estimateInputTokens("a".repeat(100))).toBe(25); // 100 / 4 = 25
   });
 });
 
