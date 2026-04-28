@@ -1,5 +1,16 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-042: B-11 続報 — workflow ファイルの location bug 修正（2026-04-28 / CEO）
+
+- **発覚経緯**: DEC-041 commit + push 後、GitHub REST API で `total_count=0` を確認 → Actions runs が一度も走っていない
+- **根本原因**: workflow ファイルが `app/.github/workflows/ci.yml` にあった。**GitHub Actions は repo ルートの `.github/workflows/` のみを探索する** という仕様を見落としていた。前段 (DEC-041 B-11) で working-directory パスを直しても、そもそも GitHub から workflow ファイルが見えていなかった
+- **修正**: `app/.github/workflows/ci.yml` → `.github/workflows/ci.yml` (repo ルート) に物理移動。git rename detection で履歴は連続性を保つ
+- **判断理由**: B-11 を「片手落ち」のまま CI が永続 RED ではなく「永続 NULL」になる事故を即座に修正。オーナーが GitHub Actions タブを見て「何も走っていない」状態を見たら DEC-040 push 自体の信頼を損なう
+- **W7 完遂評価更新**: GREEN（B-11 は location 修正で完全解消、次回 push 時に CI 初回実行）
+- **教訓**: GitHub Actions のディレクトリ規約は「repo ルートからの `.github/workflows/`」のみ。サブディレクトリ配置は無効。プロジェクトルートが repo ルートと異なる場合の「monorepo 内 sub-app デプロイ」パターンでは要注意
+
+---
+
 ## DEC-041: W7 完遂検収 — B-8 / B-9 / B-10 / B-11 全件 GREEN + W7 commit/push（2026-04-28 / CEO）
 
 - **オーナー指示**: 「pushを確認しましたので続きの作業を進めてください」（DEC-040 後の継続指示）→ DEC-039 「W6 GO：CEOにお任せします」の CEO 自律権限を継続行使
