@@ -46,7 +46,13 @@ export async function applyMigrations(client: Client): Promise<void> {
   const fs = await import("node:fs/promises");
   const path = await import("node:path");
   const migrationsDir = path.resolve(__dirname, "../../../drizzle");
-  const files = ["0000_initial.sql", "0001_w2_extensions.sql"];
+  const files = [
+    "0000_initial.sql",
+    "0001_w2_extensions.sql",
+    // W8 (Phase 2 第1週): learner_profiles.daily_goal_xp + preferences
+    "0003_w8_daily_goal.sql",
+    "0004_w8_preferences.sql",
+  ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);
     const sql = await fs.readFile(fp, "utf-8");

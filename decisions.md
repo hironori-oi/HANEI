@@ -1,5 +1,30 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-047: W8 commit `aa3ecec` の CI E2E 失敗修正 — fixture migration 不足 + countdown 文言衝突（2026-04-29 / CEO）
+
+- **発覚経緯**: W8 commit `aa3ecec` push 後の CI で 5 jobs 中 4 GREEN だが Playwright E2E job が FAILURE
+  - Lint & TypeCheck ✅ / Vitest ✅ / Build ✅ / Lighthouse CI ✅ / Playwright E2E ❌
+  - 失敗テスト 6 本: study-smoke.spec / study-smoke-multi-level.spec (4 variants) / study-writing-smoke.spec
+  - エラーパターン: `expect(page).toHaveURL(/\/home$/)` で `Received: /onboarding/learner` (18 回 retry)
+- **CEO 直接ローカル再現**: `CI=true npx playwright test --project=chromium` → 同じ失敗を確認
+- **根本原因 2 件**:
+  1. **db-fixture.ts の migrations 不足** — fixture が `0000_initial.sql` + `0001_w2_extensions.sql` のみ流していた。W8 で追加した `0003_w8_daily_goal.sql`（learner_profiles.daily_goal_xp）+ `0004_w8_preferences.sql`（learner_profiles.preferences）が反映されず、`createLearnerAction` の INSERT が `no such column: daily_goal_xp` で例外 → server action throw → redirect `/home` 不発 → form 再表示で `/onboarding/learner` に留まる
+  2. **study-smoke.spec.ts:122 の regex 文言衝突** — `getByText(/あと \d+ 日/)` が以下 2 要素にマッチして strict mode 違反
+     - 受験日カウントダウン (`p[aria-live="polite"]` の「あと 183 日」)
+     - W8 で追加した sakura-streak-display 内の補助テキスト「あと 2 日で つぎの だんかい！」
+- **修正内容**:
+  - `tests/e2e/fixtures/db-fixture.ts` の `applyMigrations.files` に W8 migration 2 本を追記（順序維持: 0000 → 0001 → 0003 → 0004）
+  - `tests/e2e/study-smoke.spec.ts:122` を `page.locator('p[aria-live="polite"]').filter({ hasText: /あと \d+ 日/ })` に変更し、カウントダウン側だけを狙う
+- **再検証結果（CEO 直接実行）**:
+  - chromium project: 24 tests 全 PASS（23.3s）✅
+  - 両 project (chromium + mobile-chrome): 48 tests 全 PASS（1.2m）✅
+- **教訓 / 申し送り**:
+  - **新 migration を追加した際は db-fixture.ts の files 配列も連動更新する** ことを W9 以降の DoD に組み込み（同種事故の再発防止）
+  - 新規 UI コンポーネントが既存 E2E と文言衝突しないよう、E2E 担当 agent を W9 から並列起動する設計に変更
+- **判断**: W8 ロールバック不要。fixture + test 修正のみ追加 commit `chore(W8 fix)` で前進。CI re-run で全 5 jobs GREEN になることを確認後 W9 着手。
+
+---
+
 ## DEC-046: W8 完遂検収 — Phase 2 第 1 週 6 タスク全完了 + Phase 3 戦略策定完了（2026-04-29 / CEO）
 
 - **DEC-045 受領後の並列フル稼働実行結果**:

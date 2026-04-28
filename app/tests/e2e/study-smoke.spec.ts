@@ -119,7 +119,11 @@ test.describe("MVP 学習コアループ ハッピーパス (G-6)", () => {
     // 受験日カウントダウン (examDate が表示される + 「あと N 日」)
     await expect(page.getByText("受験日まで")).toBeVisible();
     await expect(page.getByText(examDate)).toBeVisible();
-    await expect(page.getByText(/あと \d+ 日/)).toBeVisible();
+    // W8 で sakura-streak-display も「あと N 日で つぎの だんかい！」を出すため
+    // 受験日カウントダウン側だけを指す aria-live="polite" のメイン日数表示を狙う。
+    await expect(
+      page.locator('p[aria-live="polite"]').filter({ hasText: /あと \d+ 日/ }),
+    ).toBeVisible();
 
     // 連続記録 / Lv は初期値 (空状態) で表示される
     await expect(page.getByText("れんぞくきろく")).toBeVisible();
