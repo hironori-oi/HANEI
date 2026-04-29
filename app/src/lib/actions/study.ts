@@ -31,6 +31,8 @@ import { computeRunningStreak } from "@/lib/study/streak";
 import { applyComboToXp, type ComboTier } from "@/lib/study/combo";
 import { scoreWritingEssay } from "@/lib/ai/score-writing";
 import { getTodayCostJpy } from "@/lib/ai/cost-guard";
+import { awardCoins, getCoinBalance } from "@/lib/actions/coins";
+import { COIN_REWARDS } from "@/lib/economy/ledger";
 
 const SubmitAnswerSchema = z.object({
   learnerId: z.string().min(1),
@@ -69,6 +71,10 @@ export interface SubmitAnswerResult {
   comboMultiplier: number;
   /** W8-T2: combo tier (0=未発動 / 1=1.5x / 2=2x / 3=3x) */
   comboTier: ComboTier;
+  /** W10-T1: 今回の解答で獲得したハネキン (はね金) */
+  coinDelta: number;
+  /** W10-T1: 解答後のハネキン残高 (denormalized cache) */
+  coinBalance: number;
 }
 
 // computeRunningStreak は @/lib/study/streak.ts に分離 ("use server" 制約のため)。
@@ -241,6 +247,35 @@ export async function submitAnswer(input: SubmitAnswerInput): Promise<SubmitAnsw
     .set({ mood: correct ? "excited" : "normal", updatedAt: new Date() })
     .where(eq(characters.learnerId, learnerId));
 
+  // W10-T1: ハネキン (はね金) 付与 — 正解時のみ COIN_REWARDS.LESSON_CORRECT
+  // - 不正解は罰則ゼロ (DEC-024 親メッセージ哲学 / 励まし主軸 と整合)
+  // - awardCoins 内部で再度 requireAuth + requireLearnerOwner を実行 (二重防御)
+  // - lesson は冪等不要 (同 problemId で再挑戦して再正解した場合は再付与 OK)
+  // - 失敗 / 不正解時は denormalized cache を 1 query で読む (PK 引きのため軽い)
+  let coinDelta = 0;
+  let coinBalance = 0;
+  if (correct && COIN_REWARDS.LESSON_CORRECT > 0) {
+    try {
+      const award = await awardCoins({
+        learnerId,
+        amount: COIN_REWARDS.LESSON_CORRECT,
+        reason: "lesson",
+        referenceId: parsed.problemId,
+        memo: `lesson correct (${problem.skillId})`,
+      });
+      if (award.ok) {
+        coinDelta = COIN_REWARDS.LESSON_CORRECT;
+        coinBalance = award.newBalance;
+      }
+    } catch {
+      // award 失敗は学習体験を中断しない (best-effort / Sentry に投げる経路は別途検討)
+    }
+  }
+  if (coinBalance === 0 && coinDelta === 0) {
+    // 不正解 / award 失敗時に現残高を 1 query で取得 (PK 引き / await badge.tsx と同等)
+    coinBalance = await getCoinBalance(learnerId);
+  }
+
   // 次の問題
   const nextProblem = await getNextProblem(learnerId, problem.levelId, problem.skillId);
 
@@ -261,6 +296,8 @@ export async function submitAnswer(input: SubmitAnswerInput): Promise<SubmitAnsw
     streak,
     comboMultiplier: comboApplied.multiplier,
     comboTier: comboApplied.tier,
+    coinDelta,
+    coinBalance,
   };
 }
 

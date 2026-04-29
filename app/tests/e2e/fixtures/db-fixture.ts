@@ -57,6 +57,8 @@ export async function applyMigrations(client: Client): Promise<void> {
     "0007_w9_badges_seed.sql",
     "0008_w9_parent_messages.sql",
     "0009_w9_accessories_seed.sql",
+    // W10 (Phase 2 第3週): ハネキン (はね金) 経済 foundation
+    "0010_w10_coin_economy.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);

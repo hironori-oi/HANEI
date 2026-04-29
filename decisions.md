@@ -1,5 +1,32 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-055: W10-T1 ハネキン (はね金) 経済 foundation — schema + migration 0010 + ledger 純関数 + Server Actions + submitAnswer hook を atomic commit（2026-04-29 / CEO）
+
+- **状況**: DEC-054 で W9 が「体験完成」として `/home` 上に統合表示された後、Phase 2 第3週 (W10) に着手。W10 は `phase2-gamification-implementation-plan.md` で「経済システム + 5 分セッション最適化 (8 人日)」と定義され、5 サブタスク (T1〜T5) で構成される。**W10-T1 (P0 / 2 人日) = 閉じた経済「ハネキン (はね金)」** は他全タスク (T2 Shop UI / T3 Daily Quest 報酬 / T5 過学習防止 — Streak Freeze 追加購入経路) の前提条件であり、最優先で着手。
+- **決裁**:
+  - **命名**: 仮想通貨は **「ハネキン (はね金)」** で確定。`gems` / `coins` 等の既製語を避ける独自命名で、HANEI ブランド (半英=はんえい / はね) と整合。子どもが「はね金 (キン)」として親しみやすく、JP-locale の語感も保つ。
+  - **DB Schema (1 列追加 + 1 table 新設)**:
+    - `learner_profiles.coin_balance` (`integer notNull default 0`) — denormalized cache. 真のソースは `coin_transactions.amount` の累計。
+    - `coin_transactions` 新設 (1 行 = 1 トランザクション): `id` / `learner_id` / `amount` (正=獲得 / 負=消費 / 0 不可) / `reason` (9 種 enum) / `reference_id` (冪等チェック用) / `memo` / `created_at`
+    - インデックス 2 本: `(learner_id, created_at)` 時系列 + `(learner_id, reason, reference_id)` 冪等チェック高速化
+  - **9 種 reason enum**: 獲得 5 種 (`lesson` / `streak` / `badge` / `quest` / `level_up`) + 消費 3 種 (`shop_purchase` / `freeze_purchase` / `feed_purchase`) + 両方向 1 種 (`manual_adjust` 運営サポート用)
+  - **`lib/economy/ledger.ts` (純関数 / DB I/O ゼロ)**:
+    - `validateAmount` / `validateSpend` / `computeNewBalance` / `validateReasonAmountSign` / `reduceTransactionsToBalance` / `rewardForBadgeTier`
+    - `COIN_REWARDS` 定数: `LESSON_CORRECT=2` / `LESSON_INCORRECT=0` (罰則ゼロ / DEC-024 励まし主軸 と整合) / `STREAK_DAY=5` `WEEK=20` `MONTH=100` / `BADGE_BRONZE=30 SILVER=60 GOLD=100 PLATINUM=200` / `QUEST_COMPLETE=15 ALL_DONE=30` / `LEVEL_UP=50`
+    - 設計値: 60 分学習 (≒ 30 問正解) で ≒ 60 ハネキン獲得 = アクセサリ小物 1 つ買える / 200 ハネキン = Streak Freeze 1 枚追加購入
+  - **`lib/actions/coins.ts` (Server Actions / 三層認可)**:
+    - `getCoinBalance(learnerId)` / `listTransactions(learnerId, opts)` / `hasReceivedFor(learnerId, reason, refId)` (冪等チェック) / `awardCoins({...})` / `spendCoins({...})`
+    - `awardCoins`: `validateAmount` + `validateReasonAmountSign` + (任意) 冪等チェック → INSERT(coin_transactions) + UPDATE(coin_balance += amount) を Server Action 内で連続実行 (SQLite serialized writes 前提)
+    - `spendCoins`: `validateSpend(balance, cost)` で残高検証 → INSERT(amount=-cost) + UPDATE(coin_balance -= cost) WHERE coin_balance >= cost (atomic conditional)
+    - 全 Server Action は内部で `requireAuth + requireLearnerOwner` を再実行 (FormData 改ざん防御 / 三層認可第二層)
+  - **`submitAnswer` hook 統合**: 正解時のみ `awardCoins({ learnerId, amount: COIN_REWARDS.LESSON_CORRECT, reason: "lesson", referenceId: problemId })` を呼ぶ。冪等チェック OFF (同 problemId 再正解は再付与 OK = 学習進捗のインセンティブ)。award 失敗は `try/catch` で握り、学習体験は中断しない (best-effort)。`SubmitAnswerResult` に `coinDelta` + `coinBalance` を追加し、UI が次画面で残高表示できる設計。
+  - **e2e fixture**: `tests/e2e/fixtures/db-fixture.ts` の migrations 配列に `0010_w10_coin_economy.sql` を追加。
+  - **Unit Tests** (`tests/unit/economy.ledger.test.ts`): 31 tests / 8 group (REASONS / validateAmount / validateSpend / computeNewBalance / validateReasonAmountSign / rewardForBadgeTier / reduceTransactionsToBalance / COIN_REWARDS 設計検証) で純関数の不変条件を完全網羅。
+  - **品質ゲート**: typecheck=clean / lint=clean / vitest **40 files / 486 tests = all green** (455 → 486, +31) / `next build` で 全 route 正常出力 (新 actions は server-only なので route 増減なし)
+  - **課金システム化禁止 (DEC-012)**: 外部購入導線ゼロの閉じた経済として実装。Stripe / Apple IAP / Google Play Billing 等の連携コードは一切なし。
+- **理由**: W10 の 4 タスク (T2 Shop / T3 Quest / T5 Freeze 追加購入) すべてがハネキン foundation を必要とし、T1 を atomic commit として確実に通すことで以降のサブタスクが「UI と hook 追加」に集中できる。`coin_balance` の denormalized cache + `coin_transactions` の append-only ledger 二段構成は、(1) 残高表示の高速化 (PK 1 query) (2) 監査トレイル (3) 冪等チェック (`reference_id` で重複付与検出) を同時に満たす定石。symptom: ハネキンが見えるのは W10-T2 (Shop UI) で `/shop` ページが追加されてから / 学習中の獲得演出は W10-T2 か polish 増分で `StudyClient.tsx` 側に表示する予定。
+- **影響**: W10 残タスク = T2 (Shop UI) → T3 (Daily Quest) → T4 (5-7 分セッション) → T5 (過学習防止) の順で atomic commit を継続。次は **W10-T2 `/shop` UI** を着手予定 (アクセサリ購入 + Streak Freeze 追加購入 + kotodama feed の 3 カテゴリ)。
+
 ## DEC-054: W9-Polish — /home に W9 三系統を統合表示 (CharacterWithAccessories overlay + 件数バッジ) を atomic commit（2026-04-29 / CEO）
 
 - **状況**: DEC-053 で W9 (進化キャラ + バッジ + アクセサリ + 親メッセージ) の 4 系統が本番投入可能になったが、`/home` では 3 系統が **個別動線ボタン** に留まっており「ことだまトリ + 装着アクセサリ + バッジ件数 + 未読メッセージ件数」が **一望できない** 状態だった。W9 体験統合面の polish が残課題。

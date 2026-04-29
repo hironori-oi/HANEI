@@ -149,6 +149,16 @@ export const learnerProfiles = sqliteTable(
       .$type<{ soundEnabled?: boolean; confettiEnabled?: boolean }>()
       .notNull()
       .default(sql`('{"soundEnabled":true,"confettiEnabled":true}')`),
+    /**
+     * W10-T1: ハネキン (はね金) 残高 (denormalized cache)
+     * - 真のソースは coin_transactions の累計 (`SUM(amount) WHERE learner_id = ?`)
+     *   だが 1 ユーザあたり毎日 10〜30 件の取引が想定されるため balance は denormalized.
+     * - INSERT(coin_transactions) + UPDATE(coin_balance) を一連の awardCoins / spendCoins
+     *   Server Action 内で原子的に行う (SQLite の serialized writes 前提)。
+     * - 不変条件: coin_balance >= 0 (spendCoins は WHERE coin_balance >= amount で防御)。
+     * - 課金システム化禁止 (DEC-012) : 外部購入導線ゼロの閉じた経済。
+     */
+    coinBalance: integer("coin_balance").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
@@ -850,6 +860,70 @@ export const parentMessages = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// 29. coin_transactions (W10-T1 ハネキン取引ログ)
+//
+// 仮想通貨「ハネキン (はね金)」の獲得 / 消費を 1 行 = 1 トランザクションで記録する。
+//
+// 不変条件:
+//   - amount > 0  : 獲得 (lesson / streak / badge / quest / level_up / manual_adjust)
+//   - amount < 0  : 消費 (shop_purchase / freeze_purchase / feed_purchase / manual_adjust)
+//   - amount = 0  : 不正
+//   - SUM(amount) WHERE learner_id = ?  ==  learner_profiles.coin_balance (denormalized)
+//
+// 三層認可:
+//   - 第二層: requireLearnerOwner (Server Action 入口)
+//   - 第三層: 全クエリに learner_id スコープ条件
+//
+// 課金システム化禁止 (DEC-012): 外部購入導線ゼロの閉じた経済。
+// ---------------------------------------------------------------------------
+export const coinTransactions = sqliteTable(
+  "coin_transactions",
+  {
+    id: text("id").primaryKey(),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learnerProfiles.id, { onDelete: "cascade" }),
+    /** 正 = 獲得 / 負 = 消費 / 0 不可 */
+    amount: integer("amount").notNull(),
+    /**
+     * 取引理由: 獲得 5 種 + 消費 3 種 + manual_adjust。
+     * "lesson" は問題正解での獲得、"streak" は連続記録達成、"badge" はバッジ獲得、
+     * "quest" は Daily Quest 完了 (W10-T3)、"level_up" はレベル昇格 (任意)。
+     * "shop_purchase" / "freeze_purchase" / "feed_purchase" は W10-T2 Shop UI で消費。
+     */
+    reason: text("reason", {
+      enum: [
+        "lesson",
+        "streak",
+        "badge",
+        "quest",
+        "level_up",
+        "shop_purchase",
+        "freeze_purchase",
+        "feed_purchase",
+        "manual_adjust",
+      ],
+    }).notNull(),
+    /** 関連 ID (problemId / badgeId / questId / accessoryCode 等) - 監査・冪等チェック用 */
+    referenceId: text("reference_id"),
+    /** 表示用メモ (任意 / "週次連続 7 日達成" 等) */
+    memo: text("memo"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    learnerIdx: index("coin_transactions_learner_idx").on(t.learnerId, t.createdAt),
+    /** 冪等チェック用 (同一 reason + referenceId の重複付与を検出する SELECT が高速) */
+    learnerReasonRefIdx: index("coin_transactions_learner_reason_ref_idx").on(
+      t.learnerId,
+      t.reason,
+      t.referenceId,
+    ),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Drizzle inferred types
 // ---------------------------------------------------------------------------
 export type User = typeof users.$inferSelect;
@@ -899,3 +973,7 @@ export type MessageTemplate = typeof messageTemplates.$inferSelect;
 export type NewMessageTemplate = typeof messageTemplates.$inferInsert;
 export type ParentMessage = typeof parentMessages.$inferSelect;
 export type NewParentMessage = typeof parentMessages.$inferInsert;
+
+// W10-T1 / ハネキン (はね金) 経済
+export type CoinTransaction = typeof coinTransactions.$inferSelect;
+export type NewCoinTransaction = typeof coinTransactions.$inferInsert;
