@@ -28,6 +28,7 @@ import {
   CalendarDaysIcon,
   ChartBarIcon,
   EnvelopeIcon,
+  ShoppingBagIcon,
   SparklesIcon,
   TrophyIcon,
 } from "@heroicons/react/24/outline";
@@ -510,7 +511,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </Card>
       </section>
 
-      {/* W9-C / W9-B / W9-D: バッジ + アクセサリ + メッセージ コレクションへの動線 (W9-Polish: 件数バッジ表示) */}
+      {/* W9-C / W9-B / W9-D + W10-T2: バッジ + アクセサリ + メッセージ + ショップ 4 ボタン構成 */}
       <section className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
         <Button asChild variant="outline" size="lg" className="min-h-tap-cta">
           <Link
@@ -563,6 +564,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 </span>
               )}
             </span>
+          </Link>
+        </Button>
+        {/* W10-T2: ショップ ボタン (DEC-056 4 ボタン構成) */}
+        <Button asChild variant="outline" size="lg" className="min-h-tap-cta">
+          <Link
+            href={`/shop?learner=${encodeURIComponent(activeId)}`}
+            className="inline-flex items-center gap-2"
+            data-testid="home-shop-link"
+          >
+            <ShoppingBagIcon className="h-5 w-5" aria-hidden="true" />
+            <span>ショップ</span>
           </Link>
         </Button>
       </section>

@@ -924,6 +924,62 @@ export const coinTransactions = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// 30. learner_inventory (W10-T2 / Shop 購入で増えるアイテム在庫)
+//
+// アイテム種:
+//   - 'streak_freeze'           : Streak 維持アイテム (W8 で 1 個無料配布 base / W10-T2 追加購入)
+//   - 'kotodama_feed_normal'    : ことだまトリの普通エサ (mood +1)
+//   - 'kotodama_feed_premium'   : ことだまトリの特上エサ (mood +3 + 24h 持続)
+//   - 'kotodama_feed_rainy'     : 雨の日限定エサ (Phase 3 で天気 API 連動)
+//
+// 不変条件:
+//   - 1 学習者 × 1 item_type = 1 行 (uniqueIndex で保証)
+//   - quantity >= 0 (アプリ層で +1 のみ / 消費は W10-T5 以降)
+//   - shop 購入経路でのみ INSERT/UPDATE (DEC-056 アクセサリは購入経路を持たない)
+//
+// 課金システム化禁止 (DEC-012): 外部購入導線ゼロの閉じた経済。
+// ---------------------------------------------------------------------------
+export const learnerInventory = sqliteTable(
+  "learner_inventory",
+  {
+    id: text("id").primaryKey(),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learnerProfiles.id, { onDelete: "cascade" }),
+    /**
+     * Shop で購入できる item_type 識別子。
+     * shop-prices.ts の `SHOP_ITEMS` キーと完全一致する必要がある。
+     */
+    itemType: text("item_type", {
+      enum: [
+        "streak_freeze",
+        "kotodama_feed_normal",
+        "kotodama_feed_premium",
+        "kotodama_feed_rainy",
+      ],
+    }).notNull(),
+    /** 在庫数 (常に >= 0) */
+    quantity: integer("quantity").notNull().default(0),
+    /** 最終取得日時 (購入で更新) */
+    lastAcquiredAt: integer("last_acquired_at", { mode: "timestamp" }),
+    /** 最終使用日時 (W10-T5 以降の消費 hook で更新予定) */
+    lastUsedAt: integer("last_used_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    uniqLearnerItem: uniqueIndex("learner_inventory_learner_item_idx").on(
+      t.learnerId,
+      t.itemType,
+    ),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Drizzle inferred types
 // ---------------------------------------------------------------------------
 export type User = typeof users.$inferSelect;
@@ -977,3 +1033,7 @@ export type NewParentMessage = typeof parentMessages.$inferInsert;
 // W10-T1 / ハネキン (はね金) 経済
 export type CoinTransaction = typeof coinTransactions.$inferSelect;
 export type NewCoinTransaction = typeof coinTransactions.$inferInsert;
+
+// W10-T2 / Shop 在庫
+export type LearnerInventory = typeof learnerInventory.$inferSelect;
+export type NewLearnerInventory = typeof learnerInventory.$inferInsert;

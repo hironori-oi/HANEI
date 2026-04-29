@@ -1,5 +1,57 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-056: W10-T2 /shop UI スコープ確定 — 案B採用 (Streak Freeze 追加購入 + kotodama feed のみ / アクセサリ購入経路は閉鎖)（2026-04-30 / オーナー承認 / CEO）
+
+- **状況**: DEC-055 で W10-T1 ハネキン経済 foundation (schema / ledger / Server Actions / submitAnswer hook) が atomic commit 完了。次は W10-T2 = `/shop` UI に着手するに当たり、アクセサリ category を W9-B (DEC-052) の解禁条件 (level / streak / xp / badge) と shop 購入解禁の **デュアル経路** にするか、**W9-B 解禁条件のみに限定**するかが設計分岐点となった。
+- **採用案 (案B / CEO 推奨 → オーナー承認)**:
+  - **アクセサリ category は /shop に出さない**。W9-B (DEC-052) の達成条件解禁のみを唯一の獲得経路として維持。
+  - **/shop UI スコープ = 2 category のみ**:
+    1. **Streak アイテム**: Streak Freeze 追加購入 (W8 で 1 個無料配布済み = base, ハネキンで予備在庫を増やす)
+    2. **kotodama-tori エサ (feed)**: 特殊エサで mood ブースト (Octalysis CD3「自分の選択で何かを変えられる」を担当)
+- **却下した案A (デュアル経路)**:
+  - アクセサリ全 12 種 = W9-B 解禁条件達成 OR ハネキン購入で先取り の併用
+  - **却下理由**:
+    1. **DEC-052 の slot mutex / 解禁演出設計の希釈**: アクセサリは「課題達成の証」としての意味付けで slot mutex (帽子/メガネ/ペンダント) と解禁時の祝祭演出が組まれている。ハネキン課金で先取り可能になると「達成の証」の象徴性が薄れ、設計意図と乖離する。
+    2. **Octalysis CD3 (Empowerment of Creativity & Feedback) は kotodama feed で十分充足**: feed による mood ブーストは「子どもが自分の選択でキャラ状態を変える」体験そのものであり、CD3 の本質要件を満たす。アクセサリ購入経路を加える必要なし。
+    3. **経済設計の単純化**: アクセサリ購入を許すと「達成 vs 課金」の二択で子どもに不要な選好負荷を強いる。子ども向け × 親観察前提の本プロダクトでは、課金導線を最小に絞り、達成導線を主軸にするほうが教育倫理面でも整合。
+- **/shop UI 詳細仕様**:
+  - **ページ上部**: 現残高 (ハネキン X 個) を **大きく表示** (HanekinBalanceHeader コンポーネント新設、Amber Gold + 黄金グロー)
+  - **2 category タブ or 縦並びセクション**: 「Streak アイテム」「ことだまトリのエサ」(子ども向け語感)
+  - **購入フロー**: 各アイテムカード → 「買う」CTA → confirm dialog (購入後の残高プレビュー) → `spendCoins` Server Action 呼出 (DEC-055 の `coin_transactions` に `freeze_purchase` / `feed_purchase` reason で行を追加 + 在庫テーブル更新) → 即時所有反映 + tossy toast 「ありがとう！」
+  - **残高不足時**: 「ハネキンが X 個足りないよ」表示 + 「クエストで貯める」CTA (`/quests` への動線)
+  - **冪等性**: `reference_id` に client-generated UUID を載せ、同一 UUID の再 submit は no-op (DEC-055 の冪等チェック index `(learner_id, reason, reference_id)` を活用)
+- **/home 動線への残高 / shop 導線追加**:
+  - W9-Polish (DEC-054) で導入した 3 ボタン構成 (`/badges` / `/accessories` / `/messages`) に **「ショップ」ボタンを追加して 4 ボタン構成**
+  - もしくは **header に残高バッジ常時表示** (`HanekinBalanceBadge` 小サイズ、ボタン化して `/shop` に遷移)
+  - **採用**: 4 ボタン化 + header 残高バッジの **両方**。残高バッジは全ページ共通 layout に配置 (`/home` 以外でも常時可視)
+- **W9-B (アクセサリ) との明示的な切り分け**:
+  - `/shop` ページに「アクセサリは ことだまトリと一緒にがんばると もらえるよ」のヘルプテキストを配置 (子ども向け語感)。`/accessories` への内部リンクで導線を担保 (購入はできないが解禁条件と現状の確認は可能)
+- **新設テーブル / 列追加 (Dev 部門で migration 0011 必須)**:
+  - `learner_inventory` (新設): `id` / `learner_id` / `item_type` ('streak_freeze' | 'kotodama_feed_*') / `quantity` (integer notNull default 0) / `last_acquired_at` / `last_used_at` — 在庫管理
+  - インデックス: `(learner_id, item_type)` UNIQUE で 1 学習者 1 item_type = 1 行
+  - feed の細分化 (普通エサ / 特上エサ / 雨の日限定エサ など) は `item_type` の suffix で管理
+- **価格設計 (初期値 / 後続調整可)**:
+  - **Streak Freeze**: 30 ハネキン / 1 個 (W8 base 1 個 + 購入 max 5 個まで在庫保持)
+  - **普通エサ**: 5 ハネキン / 1 個 (mood +1)
+  - **特上エサ**: 20 ハネキン / 1 個 (mood +3 + 24h 持続)
+  - **雨の日限定エサ**: 15 ハネキン / 1 個 (天気 API 連動の演出強化、Phase 3 候補だが価格枠だけ確保)
+- **品質ゲート**:
+  - `submitAnswer` 経路で残高変動が起きたら `/shop` の残高表示が optimistic update で即時反映 (revalidatePath or React Query mutate)
+  - E2E: 残高 0 → 購入失敗 / 残高十分 → 購入成功 → 在庫 +1 + 残高 -price + transaction 記録 + 冪等性 (同一 UUID 二重 submit が no-op)
+  - a11y: 「買う」ボタンの aria-label 日本語固定 (子ども × screen reader)、価格は数字 + 「ハネキン」明示 (currency aria-label)
+  - K-1 タップ領域 56px / K-2 文字サイズ + ふりがな維持
+- **W10-T2 から外す事項 (W10-T3 以降 / Phase 3 候補)**:
+  - 期間限定セール / バンドル販売 / ガチャ的要素は **不採用** (子ども向け × dark pattern 回避)
+  - 親による残高チャージ (リアル課金) は **Phase 1 完全無料方針 (DEC-006) に矛盾するため不採用**
+  - 残高履歴の保護者ダッシュボード可視化は W10-T4 (保護者 weekly digest) に統合
+- **影響**:
+  - 開発: `/shop` page + `HanekinBalanceHeader` + `HanekinBalanceBadge` + `ShopItemCard` + `ConfirmPurchaseDialog` + `spendCoins` Server Action 拡張 (item_type 引数追加) + migration 0011 (learner_inventory) + E2E 1 spec 新設
+  - PM: WBS の W10-T2 を「2.5 人日 → 2 人日 (案B でスコープ削減)」に更新
+  - レビュー: DEC-052 slot mutex / W9-B 解禁演出 への regression 確認を品質ゲート必須項目に追加
+- **関連**: DEC-055 (W10-T1 ハネキン経済 foundation), DEC-052 (W9-B アクセサリ slot mutex), DEC-054 (W9-Polish /home 統合), DEC-006 (Phase 1 完全無料), DEC-024 (罰則ゼロ励まし主軸), Octalysis CD3, `phase2-gamification-implementation-plan.md`
+
+---
+
 ## DEC-055: W10-T1 ハネキン (はね金) 経済 foundation — schema + migration 0010 + ledger 純関数 + Server Actions + submitAnswer hook を atomic commit（2026-04-29 / CEO）
 
 - **状況**: DEC-054 で W9 が「体験完成」として `/home` 上に統合表示された後、Phase 2 第3週 (W10) に着手。W10 は `phase2-gamification-implementation-plan.md` で「経済システム + 5 分セッション最適化 (8 人日)」と定義され、5 サブタスク (T1〜T5) で構成される。**W10-T1 (P0 / 2 人日) = 閉じた経済「ハネキン (はね金)」** は他全タスク (T2 Shop UI / T3 Daily Quest 報酬 / T5 過学習防止 — Streak Freeze 追加購入経路) の前提条件であり、最優先で着手。
