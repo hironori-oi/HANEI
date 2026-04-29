@@ -72,6 +72,8 @@ import {
 } from "@/lib/study/countdown-variant";
 import { loadAccessoriesPageData } from "@/lib/actions/accessories";
 import { getMessagesForLearner } from "@/lib/actions/parent-messages";
+import { getOrGenerateTodayQuests } from "@/lib/actions/quests";
+import { DailyQuestSummaryRibbon } from "@/components/quest/DailyQuestSummaryRibbon";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
@@ -251,6 +253,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     kotodamaInput,
     accessoriesPageData,
     messages,
+    questSummary,
   ] = await Promise.all([
     getCurrentStreak(db, learner.id),
     getDailySkillCounts(db, learner.id),
@@ -275,6 +278,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     loadAccessoriesPageData(learner.id),
     // W9-Polish: 親メッセージ一覧 (未読数 / 受信総数のため)
     getMessagesForLearner(learner.id),
+    // W10-T3: Daily Quest 今日の 3 件 (lazy generation 入口)
+    getOrGenerateTodayQuests(learner.id),
   ]);
 
   const xp = xpRows[0] ?? { totalXp: 0, level: 1 };
@@ -288,6 +293,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const accessoriesUnlockedCount = accessoriesPageData.unlocked.length;
   const ACCESSORIES_TOTAL = 12;
   const unreadMessagesCount = messages.filter((m) => m.readAt === null).length;
+
+  // W10-T3: Daily Quest 集計
+  const questClaimableCount = questSummary.quests.filter((q) => q.isClaimable)
+    .length;
 
   // 6. todaysMission target 配分 (1 分 = 1 問換算 / 4 スキル均等)
   const totalDailyMinutes = learner.dailyMinutesTarget ?? 60;
@@ -509,6 +518,18 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </div>
           </CardContent>
         </Card>
+      </section>
+
+      {/* W10-T3: Daily Quest サマリ リボン (4 ボタン群の上に配置 / 罰則ゼロ哲学) */}
+      <section className="mt-6">
+        <DailyQuestSummaryRibbon
+          learnerId={activeId}
+          totalCount={questSummary.totalCount}
+          completedCount={questSummary.completedCount}
+          claimedCount={questSummary.claimedCount}
+          claimableCount={questClaimableCount}
+          allBonusClaimed={questSummary.allBonusClaimed}
+        />
       </section>
 
       {/* W9-C / W9-B / W9-D + W10-T2: バッジ + アクセサリ + メッセージ + ショップ 4 ボタン構成 */}

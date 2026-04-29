@@ -980,6 +980,90 @@ export const learnerInventory = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// 31. daily_quests (W10-T3 / Daily Quest デイリーミッション)
+//
+// 1 行 = 1 学習者 × 1 quest_date (JST) × 1 quest_type のクエスト割り当て。
+//
+// quest_type (7 種 / Phase 1):
+//   - 'vocab_count'        : 今日 N 問の語彙正解 (skill='vocabulary')
+//   - 'listening_perfect'  : 今日 N 問の listening を全問正解 (skill='listening')
+//   - 'reading_count'      : 今日 N 問の reading 解答 (skill='reading')
+//   - 'writing_count'      : 今日 1〜2 問の writing 解答 (skill='writing')
+//   - 'streak_keep'        : 今日 1 問でも解いて streak をつなぐ
+//   - 'badge_progress'     : 今日 N 問正解 (汎用)
+//   - 'mock_warmup'        : 今日 1 度ミニ模試予熱 (Phase 3 stub / 進捗 0 のままでも完了不可)
+//
+// 不変条件:
+//   - 1 (learner_id, quest_date, quest_type) = 1 行 (uniqueIndex で保証)
+//   - progress >= 0 / progress <= target で UI の clamp は別途
+//   - status は 'in_progress' → 'completed'(target 到達) → 'claimed'(報酬受け取り済) のみ
+//   - claimed 後は再付与不可 (idempotency: claimQuestReward の冪等チェックで担保)
+//   - quest_date は 'YYYY-MM-DD' 形式 (JST 6:00 境界で日付確定 / DEC-024 整合)
+//
+// Lazy generation:
+//   - cron は使わない (Vercel Hobby plan 制約)
+//   - /home or /quests への初回アクセスで「今日の 3 件」を deterministic に生成
+//   - 同 (learner_id, quest_date) で既に行があれば再生成しない (冪等)
+//
+// 罰則ゼロ哲学 (DEC-024): 未達でも streak は減らさない / マイナス pop は出さない。
+// ---------------------------------------------------------------------------
+export const dailyQuests = sqliteTable(
+  "daily_quests",
+  {
+    id: text("id").primaryKey(),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learnerProfiles.id, { onDelete: "cascade" }),
+    /** JST ローカル日付 ('YYYY-MM-DD') / 6:00 境界で日付確定 */
+    questDate: text("quest_date").notNull(),
+    questType: text("quest_type", {
+      enum: [
+        "vocab_count",
+        "listening_perfect",
+        "reading_count",
+        "writing_count",
+        "streak_keep",
+        "badge_progress",
+        "mock_warmup",
+      ],
+    }).notNull(),
+    /** UI 表示タイトル (生成時 snapshot / 文言変更しても過去日は不変) */
+    title: text("title").notNull(),
+    /** 達成目標 (例: vocab_count なら 5 = 今日 5 問正解) */
+    target: integer("target").notNull(),
+    /** 現在の進捗 (submitAnswer の hook で incrementQuestProgress 経由で進む) */
+    progress: integer("progress").notNull().default(0),
+    /** 完了時の報酬ハネキン (生成時 snapshot / COIN_REWARDS.QUEST_COMPLETE 既定) */
+    rewardCoins: integer("reward_coins").notNull(),
+    /** 'in_progress' (未達 or 達成だが未受領) / 'claimed' (報酬受領済) */
+    status: text("status", { enum: ["in_progress", "claimed"] })
+      .notNull()
+      .default("in_progress"),
+    /** 達成 (progress >= target) になった瞬間 (UI のお祝い演出基準) */
+    completedAt: integer("completed_at", { mode: "timestamp" }),
+    /** 報酬受領日時 */
+    claimedAt: integer("claimed_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    /** 1 学習者 × 1 quest_date × 1 quest_type = 1 行 (lazy gen 冪等性) */
+    uniqLearnerDateType: uniqueIndex(
+      "daily_quests_learner_date_type_idx",
+    ).on(t.learnerId, t.questDate, t.questType),
+    /** 「今日のクエスト一覧」取得用 */
+    learnerDateIdx: index("daily_quests_learner_date_idx").on(
+      t.learnerId,
+      t.questDate,
+    ),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Drizzle inferred types
 // ---------------------------------------------------------------------------
 export type User = typeof users.$inferSelect;
@@ -1037,3 +1121,7 @@ export type NewCoinTransaction = typeof coinTransactions.$inferInsert;
 // W10-T2 / Shop 在庫
 export type LearnerInventory = typeof learnerInventory.$inferSelect;
 export type NewLearnerInventory = typeof learnerInventory.$inferInsert;
+
+// W10-T3 / Daily Quests
+export type DailyQuest = typeof dailyQuests.$inferSelect;
+export type NewDailyQuest = typeof dailyQuests.$inferInsert;

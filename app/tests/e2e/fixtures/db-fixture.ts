@@ -61,6 +61,8 @@ export async function applyMigrations(client: Client): Promise<void> {
     "0010_w10_coin_economy.sql",
     // W10-T2: Shop inventory (Streak Freeze + kotodama feed)
     "0011_w10_shop_inventory.sql",
+    // W10-T3: Daily Quest (デイリーミッション lazy generation)
+    "0012_w10_daily_quests.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);
@@ -121,6 +123,8 @@ export async function seedFixture(client: Client): Promise<{
 
   // 既存 seed を全削除 (冪等)
   for (const tbl of [
+    // W10-T3: Daily Quest 行も flush (signup 起点の E2E は learner_id 別なので必須ではないが安全側)
+    "daily_quests",
     "user_badges",
     "ai_coach_messages",
     "ai_coach_conversations",

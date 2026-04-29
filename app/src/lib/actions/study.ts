@@ -32,6 +32,7 @@ import { applyComboToXp, type ComboTier } from "@/lib/study/combo";
 import { scoreWritingEssay } from "@/lib/ai/score-writing";
 import { getTodayCostJpy } from "@/lib/ai/cost-guard";
 import { awardCoins, getCoinBalance } from "@/lib/actions/coins";
+import { incrementQuestProgress } from "@/lib/actions/quests";
 import { COIN_REWARDS } from "@/lib/economy/ledger";
 
 const SubmitAnswerSchema = z.object({
@@ -274,6 +275,29 @@ export async function submitAnswer(input: SubmitAnswerInput): Promise<SubmitAnsw
   if (coinBalance === 0 && coinDelta === 0) {
     // 不正解 / award 失敗時に現残高を 1 query で取得 (PK 引き / await badge.tsx と同等)
     coinBalance = await getCoinBalance(learnerId);
+  }
+
+  // W10-T3: Daily Quest 進捗反映 (best-effort / 学習体験を中断しない)
+  // problem.skillId ("vocabulary-5" 等) から skill code を抽出して
+  // 当日の quest 行に progress += 1 する。当日 lazy gen 未実行なら何もしない。
+  try {
+    const skillRe = /^(vocabulary|grammar|listening|reading|writing)(?:-[0-9]+)?$/;
+    const skillMatch = skillRe.exec(problem.skillId);
+    if (skillMatch) {
+      const skill = skillMatch[1] as
+        | "vocabulary"
+        | "grammar"
+        | "listening"
+        | "reading"
+        | "writing";
+      await incrementQuestProgress({
+        learnerId,
+        skill,
+        isCorrect: correct,
+      });
+    }
+  } catch {
+    // best-effort / 学習体験を中断しない (Sentry 経路は別途検討)
   }
 
   // 次の問題
