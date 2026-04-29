@@ -27,6 +27,7 @@ import {
   ChatBubbleLeftRightIcon,
   CalendarDaysIcon,
   ChartBarIcon,
+  EnvelopeIcon,
   SparklesIcon,
   TrophyIcon,
 } from "@heroicons/react/24/outline";
@@ -450,8 +451,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <KotodamaStageDisplay input={kotodamaInput} svgSize={140} />
       </section>
 
-      {/* W9-C / W9-B: バッジ + アクセサリ コレクションへの動線 */}
-      <section className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+      {/* W9-C / W9-B / W9-D: バッジ + アクセサリ + メッセージ コレクションへの動線 */}
+      <section className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
         <Button asChild variant="outline" size="lg" className="min-h-tap-cta">
           <Link
             href={`/badges?learner=${encodeURIComponent(activeId)}`}
@@ -468,6 +469,15 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           >
             <SparklesIcon className="h-5 w-5" aria-hidden="true" />
             アクセサリを かざる
+          </Link>
+        </Button>
+        <Button asChild variant="outline" size="lg" className="min-h-tap-cta">
+          <Link
+            href={`/messages?learner=${encodeURIComponent(activeId)}`}
+            className="inline-flex items-center gap-2"
+          >
+            <EnvelopeIcon className="h-5 w-5" aria-hidden="true" />
+            おうえん メッセージを みる
           </Link>
         </Button>
       </section>

@@ -1,5 +1,22 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-053: W9-D 親→子メッセージ UI 完遂 — /parent/messages/new + /messages + テンプレ選択 + 既読更新 を atomic commit、W9 クローズ（2026-04-29 / CEO）
+
+- **状況**: DEC-052 (W9-B 完遂) に続き、W9 最後のサブタスクである W9-D を atomic commit として完遂。これにより W9 (Phase 2 第2週 = 進化キャラ + バッジ + アクセサリ + 親メッセージ) を完全クローズする。
+- **決裁**:
+  - **既存基盤の最大活用**: `lib/actions/parent-messages.ts` (sendMessageFromTemplate / sendCustomMessage / getMessagesForLearner / markMessageRead) と `lib/messages/template-catalog.ts` (30 種テンプレ) は W9-foundation で実装済 → 今回は **UI のみ追加** で 1 commit。
+  - **`/parent/messages/new` Page** (新規 / parent 認可ゾーン): カテゴリ tab 切替 + テンプレ 6 件リスト + プレビュー + 「そのまま送る」/「カスタムする」を 1 ページに集約。Server Action は `activeId` をクロージャ束縛 (FormData は templateCode / body のみ)。
+  - **`TemplatePicker` Client Component** (`components/messages/template-picker.tsx`): `useTransition` で送信中の disabled 制御。カテゴリ tab + 30 種を 5 グループで描画 + textarea (200 文字制限 + tabular-nums カウンタ + aria-live)。
+  - **`/messages` Page** (新規 / app 認可ゾーン = 学習者向け受信箱): `getMessagesForLearner(activeId)` を Server Component で 1 await。`ParentMessageCard` で未読/既読を表示分け (未読 = ring + NEW バッジ + 「読みました」ボタン / 既読 = 取得日 + 既読日)。Phase 1 では学習者直ログイン経路がないため、保護者代理で「読みました」を打つ運用を維持 (W11 で再評価)。
+  - **`ParentMessageCard` Server Component** (`components/messages/parent-message-card.tsx`): EnvelopeIcon (未読) / EnvelopeOpenIcon (既読) で視覚区別。`whitespace-pre-wrap` + `break-words` で長文 200 字も safe。category ラベルを CATEGORY_LABEL_JA から引いて表示。
+  - **動線追加**:
+    - `/home`: 既存「バッジ / アクセサリ」ボタン群に **「おうえん メッセージを みる」** (EnvelopeIcon + `/messages?learner=`) を追加 → flex-wrap で 3 ボタン横並び。
+    - `/parent/dashboard`: ヘッダーに **「メッセージを 送る」** ボタン (EnvelopeIcon + `/parent/messages/new?learner=`) を追加 (CTA 強調).
+  - **Server Action の認可冗長性**: `markMessageRead` / `sendMessageFromTemplate` / `sendCustomMessage` は内部で `requireAuth + requireParent + requireFamilyMember + requireLearnerOwner` を再実行する設計 (DEC-003 三層認可)。closure-bound activeId に加えて Server Action 内部チェックで二重防御。
+  - **品質ゲート**: typecheck=clean / lint=clean / vitest 455 全 green / `next build` で `/messages` + `/parent/messages/new` 両方が ƒ (dynamic) で正しく出力される。
+- **理由**: W9-D は「親が学習体験に入り込む装置」であり、「**罰なき / プレッシャーなし / 励ましと祝福のみ**」という DEC-024 の親メッセージ哲学を 30 テンプレ × 5 カテゴリで体現する見せ場。既存 actions が完成していたため、UI だけを atomic commit することでスコープを絞り、W9 を予定通りクローズした。
+- **影響**: **W9 完了**。Phase 2 第2週「進化キャラ + バッジ + アクセサリ + 親メッセージ」の 4 系統すべてが本番投入可能。次は W10 (UI ポリッシュ + 模試演出 + AI コーチ深化) へ進むか、Phase 3 計画策定 (β 公開準備) かをオーナー判断に委ねる。
+
 ## DEC-052: W9-B アクセサリ UI 完遂 — 12 SVG 装着 + /settings/accessories + Server Action mutex + seed 0009 を atomic commit（2026-04-29 / CEO）
 
 - **状況**: DEC-051 (W9-C 完遂) に続き、W9-B を atomic commit として完遂。

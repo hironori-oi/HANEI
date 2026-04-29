@@ -129,14 +129,23 @@ export default async function ParentDashboardPage({
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
-      <header className="mb-8 flex items-center justify-between">
+      <header className="mb-8 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
             {learner.nickname} さんの学習状況
           </p>
           <h1 className="text-3xl font-bold">保護者ダッシュボード</h1>
         </div>
-        <div className="hidden sm:block">
+        <div className="flex items-center gap-3">
+          <Button asChild size="sm" variant="default" className="min-h-tap-cta">
+            <Link
+              href={`/parent/messages/new?learner=${encodeURIComponent(learner.id)}`}
+              className="inline-flex items-center gap-2"
+            >
+              <EnvelopeIcon className="h-4 w-4" aria-hidden="true" />
+              メッセージを 送る
+            </Link>
+          </Button>
           <Link
             href="/home"
             className="text-sm text-muted-foreground underline"
