@@ -56,6 +56,7 @@ export async function applyMigrations(client: Client): Promise<void> {
     "0006_w9_accessories.sql",
     "0007_w9_badges_seed.sql",
     "0008_w9_parent_messages.sql",
+    "0009_w9_accessories_seed.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);

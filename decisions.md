@@ -1,5 +1,21 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-052: W9-B アクセサリ UI 完遂 — 12 SVG 装着 + /settings/accessories + Server Action mutex + seed 0009 を atomic commit（2026-04-29 / CEO）
+
+- **状況**: DEC-051 (W9-C 完遂) に続き、W9-B を atomic commit として完遂。
+- **決裁**:
+  - **12 アクセサリ完備**: hat (4) / scarf (4) / wing_charm (4) の inline JSX SVG はすでに 11 種実装済 → 12 種目 `wing-charm-moonlight` (10000 XP / 三日月+星+夜空) を新規追加。
+  - **Component Registry**: `ACCESSORY_COMPONENT_BY_CODE: Record<AccessoryCode, ComponentType>` を `components/character/accessories/index.ts` に新設。`/settings/accessories` グリッドと `CharacterWithAccessories` overlay の双方が同一 source-of-truth を参照する。
+  - **Server Actions** (`lib/actions/accessories.ts`): `resolveUnlockStats` (xpLevels + streaks + userBadges → UnlockStats) / `resolveUnlockedAccessories` / `awardNewlyUnlockedAccessories` (catalog × stats → 新規 INSERT) / **`toggleEquippedAccessory` で同 slot mutex** (装着切替時に同 slot の他全部を OFF してから ON) / `loadAccessoriesPageData` (Server Component で 1 await)。三層認可: 全 SQL に `learner_id` スコープ条件 + `toggleEquippedAccessory` 内部で再度 `requireAuth + requireLearnerOwner` を呼ぶことで URL 改ざん防御。
+  - **`/settings/accessories` Page**: 3 スロット × 4 種 = 12 タイル grid + ページ上部に **`CharacterWithAccessories`** で「現在装着中の overlay 付き」プレビュー描画 (キャラ + hat top-center / scarf middle / wing_charm bottom-right)。Server Action は `activeId` をクロージャで束縛し、`code` のみ FormData で受け取る (FormData 改ざん不可)。
+  - **Migration 0009**: `0009_w9_accessories_seed.sql` で 12 行 UPSERT (ON CONFLICT(code) DO UPDATE)。0006 で table を作成、0009 で seed 投入する 2 段運用。
+  - **e2e fixture**: `db-fixture.ts` に 0009 を追加 (E2E が seed 後の DB を観測可能)。
+  - **`/home` 動線追加**: `バッジ コレクション` ボタンの隣に **`アクセサリを かざる`** ボタン (SparklesIcon + `/settings/accessories?learner=`) を追加。
+  - **Unit Tests**: `accessories.components-registry.test.ts` で「12 種登録 / 重複なし / slot ごと 4 種均等 / displayOrder 1..4」を検証 (5 テスト全 pass)。
+  - **品質ゲート**: typecheck=clean / lint=clean / vitest 455 tests = all green (450 → 455, +5) / `next build` で `/settings/accessories` route が ƒ (dynamic) として正しく出力される。
+- **理由**: W9 は「自社 LP デザイン哲学を学習体験に反映する見せ場」であり、ストックされていた 11 種 SVG を **「装着・切替・解禁演出が動くページ」** にしてはじめて価値が出る。Server Action mutex を slot 単位で実装したことで「同 slot で複数装着」の不正状態を SQL レベルで根絶 (uniqueIndex は (learner, code) のみ → slot mutex はアプリ責務)。
+- **影響**: W9 残タスクは W9-D (parent_messages UI) のみ。 `/parent/messages/new` + `/messages` を atomic commit で完遂し、W9 をクローズする予定。
+
 ## DEC-051: W9-C バッジ UI 完遂 — 7 SVG + grid + celebration + /badges + seed 0007 を atomic commit（2026-04-29 / CEO）
 
 - **状況**: DEC-050 (W9-A 統合) に続き、W9-C を CEO 単独で完遂。

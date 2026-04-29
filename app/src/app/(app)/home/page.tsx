@@ -27,6 +27,7 @@ import {
   ChatBubbleLeftRightIcon,
   CalendarDaysIcon,
   ChartBarIcon,
+  SparklesIcon,
   TrophyIcon,
 } from "@heroicons/react/24/outline";
 
@@ -449,8 +450,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <KotodamaStageDisplay input={kotodamaInput} svgSize={140} />
       </section>
 
-      {/* W9-C: バッジ コレクションへの動線 */}
-      <section className="mt-6 flex justify-center">
+      {/* W9-C / W9-B: バッジ + アクセサリ コレクションへの動線 */}
+      <section className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
         <Button asChild variant="outline" size="lg" className="min-h-tap-cta">
           <Link
             href={`/badges?learner=${encodeURIComponent(activeId)}`}
@@ -458,6 +459,15 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           >
             <TrophyIcon className="h-5 w-5" aria-hidden="true" />
             バッジ コレクションを みる ({kotodamaInput.badgeCount} / 8)
+          </Link>
+        </Button>
+        <Button asChild variant="outline" size="lg" className="min-h-tap-cta">
+          <Link
+            href={`/settings/accessories?learner=${encodeURIComponent(activeId)}`}
+            className="inline-flex items-center gap-2"
+          >
+            <SparklesIcon className="h-5 w-5" aria-hidden="true" />
+            アクセサリを かざる
           </Link>
         </Button>
       </section>
