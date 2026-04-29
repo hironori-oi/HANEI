@@ -52,6 +52,9 @@ export async function applyMigrations(client: Client): Promise<void> {
     // W8 (Phase 2 第1週): learner_profiles.daily_goal_xp + preferences
     "0003_w8_daily_goal.sql",
     "0004_w8_preferences.sql",
+    // W9 (Phase 2 第2週): accessories + parent_messages
+    "0006_w9_accessories.sql",
+    "0008_w9_parent_messages.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);

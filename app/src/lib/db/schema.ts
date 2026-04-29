@@ -686,6 +686,70 @@ export const problemExplanations = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// 26-A. accessories (W9-T2 / アクセサリ マスタ)
+//
+// ことだまトリ装着用アクセサリ。3 スロット (hat / scarf / wing_charm) × 4 種 = 12 種。
+// unlock 条件は `unlock_type` + `unlock_value` の機械可読 enum で表現する。
+//   - unlock_type = 'level': xp_levels.level >= unlock_value (number)
+//   - unlock_type = 'streak': streaks.currentStreak >= unlock_value (number)
+//   - unlock_type = 'xp': xp_levels.totalXp >= unlock_value (number)
+//   - unlock_type = 'badge': user_badges に対応する badges.code を保持
+// ---------------------------------------------------------------------------
+export const accessories = sqliteTable(
+  "accessories",
+  {
+    id: text("id").primaryKey(),
+    code: text("code").notNull(), // 'hat_school_cap' 等
+    slot: text("slot", { enum: ["hat", "scarf", "wing_charm"] }).notNull(),
+    name: text("name").notNull(),
+    unlockType: text("unlock_type", {
+      enum: ["level", "streak", "xp", "badge"],
+    }).notNull(),
+    unlockValue: text("unlock_value").notNull(),
+    description: text("description").notNull(),
+    displayOrder: integer("display_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    codeIdx: uniqueIndex("accessories_code_idx").on(t.code),
+    slotIdx: index("accessories_slot_idx").on(t.slot, t.displayOrder),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// 26-B. learner_accessories (W9-T2 / 解禁 + 装着状態)
+// ---------------------------------------------------------------------------
+export const learnerAccessories = sqliteTable(
+  "learner_accessories",
+  {
+    id: text("id").primaryKey(),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learnerProfiles.id, { onDelete: "cascade" }),
+    /**
+     * accessories.code を参照。FK は付けない (code 主軸 enum / seed 順序非依存)。
+     */
+    accessoryCode: text("accessory_code").notNull(),
+    unlockedAt: integer("unlocked_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    /** 0 / 1 (drizzle SQLite mode: boolean) */
+    isEquipped: integer("is_equipped", { mode: "boolean" })
+      .notNull()
+      .default(false),
+  },
+  (t) => ({
+    uniqLearnerAccessory: uniqueIndex("learner_accessories_learner_code_idx").on(
+      t.learnerId,
+      t.accessoryCode,
+    ),
+    learnerIdx: index("learner_accessories_learner_idx").on(t.learnerId),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // 26. exam_dates (受験日登録 / 1学習者複数登録可・最新を採用)
 // ---------------------------------------------------------------------------
 export const examDates = sqliteTable(
@@ -707,6 +771,77 @@ export const examDates = sqliteTable(
   },
   (t) => ({
     learnerIdx: index("exam_dates_learner_idx").on(t.learnerId, t.examDate),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// 27. message_templates (W9-T5 親→子応援メッセージテンプレ マスタ)
+//
+// 30 種 = 5 カテゴリ × 6 種:
+//   - encourage_start  (A1..A6) 学習開始の応援
+//   - celebrate        (B1..B6) 達成への祝福
+//   - encourage_struggle (C1..C6) 困難への励まし
+//   - check_in         (D1..D6) 学習継続の確認
+//   - exam_countdown   (E1..E6) 受験日カウントダウン
+//
+// body 内 placeholder: {streak_days} / {exam_days} は送信時に解決される。
+// ---------------------------------------------------------------------------
+export const messageTemplates = sqliteTable(
+  "message_templates",
+  {
+    id: text("id").primaryKey(),
+    code: text("code").notNull(), // 'A1' .. 'E6'
+    category: text("category", {
+      enum: [
+        "encourage_start",
+        "celebrate",
+        "encourage_struggle",
+        "check_in",
+        "exam_countdown",
+      ],
+    }).notNull(),
+    body: text("body").notNull(),
+    displayOrder: integer("display_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    codeIdx: uniqueIndex("message_templates_code_idx").on(t.code),
+    categoryIdx: index("message_templates_category_idx").on(t.category, t.displayOrder),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// 28. parent_messages (W9-T5 親→子メッセージ送信ログ)
+//
+// 三層認可境界:
+//   - 第二層: requireParent + requireLearnerOwner (同 family_id 強制)
+//   - 第三層: family_id を SQL 条件で必須化
+// ---------------------------------------------------------------------------
+export const parentMessages = sqliteTable(
+  "parent_messages",
+  {
+    id: text("id").primaryKey(),
+    familyId: text("family_id")
+      .notNull()
+      .references(() => families.id, { onDelete: "cascade" }),
+    fromUserId: text("from_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    toLearnerId: text("to_learner_id")
+      .notNull()
+      .references(() => learnerProfiles.id, { onDelete: "cascade" }),
+    templateCode: text("template_code"), // NULL なら自由文
+    body: text("body").notNull(), // placeholder 解決後の本文
+    readAt: integer("read_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    toLearnerIdx: index("parent_messages_to_learner_idx").on(t.toLearnerId, t.createdAt),
+    familyIdx: index("parent_messages_family_idx").on(t.familyId, t.createdAt),
   }),
 );
 
@@ -748,3 +883,15 @@ export type NewGeneratedProblemsQueue = typeof generatedProblemsQueue.$inferInse
 export type ProblemExplanation = typeof problemExplanations.$inferSelect;
 export type NewProblemExplanation = typeof problemExplanations.$inferInsert;
 export type ExamDate = typeof examDates.$inferSelect;
+
+// W9-T2 / Accessories
+export type Accessory = typeof accessories.$inferSelect;
+export type NewAccessory = typeof accessories.$inferInsert;
+export type LearnerAccessory = typeof learnerAccessories.$inferSelect;
+export type NewLearnerAccessory = typeof learnerAccessories.$inferInsert;
+
+// W9-T5 / Parent → Child Messages
+export type MessageTemplate = typeof messageTemplates.$inferSelect;
+export type NewMessageTemplate = typeof messageTemplates.$inferInsert;
+export type ParentMessage = typeof parentMessages.$inferSelect;
+export type NewParentMessage = typeof parentMessages.$inferInsert;

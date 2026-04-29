@@ -1,5 +1,64 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-049: W9 Foundation 採取 — 4 agent API 制限により lib/SVG/migration を先行 commit、UI 統合は次セッション持越し（2026-04-29 / CEO）
+
+- **状況**: DEC-048 で起動した W9-A/B/C/D 4 agent が Anthropic API 使用上限「resets 12pm Etc/GMT-9」（≒ 12 時 JST）に揃って到達し、各 track の作業を中途で停止。
+  - W9-A: kotodama-tori 5 段階純関数 + 5 stage SVG + display 完了 / sakura-tier-up + 0005 migration + 統合 + tests **未完**
+  - W9-B: accessories catalog + unlock-engine + 11/12 SVG + 0006 migration + schema 完了 / 12 番目 SVG + UI page + actions + seed + tests **未完**
+  - W9-C: badge-codes/engine/catalog/celebration + 1/8 icon + medallion-frame 完了 / 7 icon + modal + page + actions + seed + 0007 + tests **未完**
+  - W9-D: message templates 30 種 + resolve-placeholders + parent-messages action + 0008 migration + schema 完了 / UI components + page + seed + tests **未完**
+- **CEO 直接判断**:
+  1. **完成済 lib + 純関数 + SVG asset を commit して GREEN を確保**（後戻り防止 / git history を整理）
+  2. **CEO 自身で純関数 5 種に対する vitest 78 本を新規追加**（kotodama-tori-stage / badge-engine / accessories.unlock-engine / messages.resolve-placeholders / messages.template-catalog）→ 既存 369 と合わせて 447 PASS
+  3. **db-fixture.ts に 0006 + 0008 migration を追記**（DEC-047 教訓: 新 migration 追加時 fixture 連動更新を W9 でも遵守）
+  4. **W9 UI 統合 + 残り SVG + 0005/0007 migration + E2E は次セッション再開**（API 上限解除後 / オーナー承認の上で agent 再起動 or CEO 直接実装）
+- **CEO 修正コミット内容**:
+  - typecheck エラー 16 件修正（hat-sakura-crown.tsx の SVG attribute 型 + kotodama-tori-stage.ts の noUncheckedIndexedAccess 安全化）
+  - 4 lib + 23 component file（5 stage + 11 accessory SVG + 1 badge icon + medallion-frame + display + celebration）+ 2 migration + 2 schema 拡張 + 5 unit test = 計 35+ ファイル
+- **信頼検証結果（CEO 直接実行）**:
+  - typecheck: exit 0 ✅
+  - lint: exit 0 ✅
+  - unit tests: 37 files / 447 tests 全 PASS（baseline 369 → 447、+78 tests）✅
+  - E2E: ローカル未実行 / CI で検証（schema 拡張は CREATE TABLE IF NOT EXISTS のみ + UI 未統合のため既存 E2E 影響なしと判断）
+- **次セッションで完遂すべき W9 残タスク**:
+  - **W9-A 残**: drizzle/0005_w9_character_stage.sql（learner_profiles に kotodama_stage カラム追加）/ sakura-tier-up.tsx / /home + StudyClient 統合 / submitAnswer 進化 hook / sakura-tier-detector.test
+  - **W9-B 残**: wing-charm-moonlight.tsx（12 番目）/ accessory-unlock-toast.tsx / character-with-accessories.tsx / /settings/accessories/page.tsx / lib/actions/accessories.ts / seed-accessories.ts
+  - **W9-C 残**: 7 badge icon（streak-keeper..sakura-keeper）/ badge-celebration-modal / badge-progress-card / badge-grid / /badges/page.tsx / lib/actions/badges.ts / seed-badges.ts / drizzle/0007_w9_badges_seed.sql + schema tier カラム
+  - **W9-D 残**: components/messages/{parent-message-card, template-picker, template-preview-modal}.tsx / /parent/messages/new/page.tsx / /messages/page.tsx / seed-message-templates.ts / schema.ts に message_templates 用 select 型ヘルパー
+- **教訓 / 申し送り**:
+  - 4 agent 並列は API 使用量を約 4 倍消費するため、上限到達リスクを事前に織り込む（次回は agent ごとに「commit 単位」を明示し、途中放棄しても fallback できるようにする）
+  - lib (純関数) + SVG (純データ) + migration (idempotent) は単独で commit 可能 = 「foundation を先に固める」戦略は有効
+  - UI 統合 + E2E + seed は agent 並列より CEO 単独で完遂したほうが早い局面もある（依存関係が密集するため）
+- **判断**: W9 Foundation を確定 → commit/push → CI GREEN 確認後オーナーに状況報告 + 次アクション判断要請（CEO 直接完遂 / 次回 agent 起動 / W10 先行のいずれか）
+
+---
+
+## DEC-048: W9 着手 + Phase 3 後置 + 4 agent 並列体制（2026-04-29 / オーナー回答 / CEO）
+
+- **オーナー回答**:
+  1. **W9 着手 GO** ✅ 「最高のデザイン、アニメーションを実装してください」
+  2. **Phase 3 は β 結果反映後に再判断** ✅（W9 進行優先 / 課金開始 / 半年合格保証は β 後判断）
+  3. **CI GREEN 確認後の 4 agent 並列体制 OK** ✅
+- **CEO 即時アクション（4 agent 並列起動 + CI 背景監視）**:
+  - **Agent W9-A (T1 + T4)**: kotodama-tori 5 段階育成（雛 → 若鳥 → 成鳥 → 賢者 → 守護神）+ 桜の木「進化」演出（Streak tier 移行アニメ）
+  - **Agent W9-B (T2)**: Accessory システム（帽子・マフラー・羽飾り / Streak/XP/Badge unlock）
+  - **Agent W9-C (T3)**: Badges 8 種（初飛行 / 連続学習者 / 4 スキルマスター / 受験者 / 桜守）
+  - **Agent W9-D (T5)**: 親→子応援メッセージテンプレ拡充（30+ template / W11 Family Streak の前哨戦）
+  - **CEO 監督**: CI 監視（task `bk2ew5mkg` / commit `46d4d8d`）+ 4 agent 統合 + 信頼検証 + commit/push
+- **W9 共通設計要件（agent 全員に適用）**:
+  - 「最高のデザイン、アニメーション」: 60fps 維持 / Lighthouse Mobile 90 以上 / 和の美意識（Amber Gold #F2A93A 主軸）/ 過剰演出禁止
+  - prefers-reduced-motion 完全対応（CSS `@media (prefers-reduced-motion: reduce)` + JS `matchMedia` guard）
+  - 絵文字禁止 / inline JSX SVG + Heroicons / tap target ≥ 44px / 文字 16-18px+ふりがな
+  - DB schema 拡張時 migration 番号: T1+T4 = 0005、T2 = 0006、T3 = 0007、T5 = 0008（衝突回避）
+  - 既存資産活用: characters table (level + accessory_ids_json) / badges + user_badges / sakura-streak 7 段階 / kotodama-tori 5 mood
+- **Phase 3 の取り扱い（オーナー判断 2 反映）**:
+  - W12 で β 5 家族から取得する NPS / SUS / 自由記述に基づき再判断
+  - Phase 3 戦略書 `reports/phase3-strategy-research.md` は **アーカイブ位置づけ**で保存継続（β 後の判断材料として活用）
+  - 課金開始タイミング・半年合格保証 ¥19,800 発動条件は **β 結果と並行して再策定**
+- **判断**: W9 を 4 agent 並列で本日中完遂目標。CI（46d4d8d）GREEN 確認は背景で継続。
+
+---
+
 ## DEC-047: W8 commit `aa3ecec` の CI E2E 失敗修正 — fixture migration 不足 + countdown 文言衝突（2026-04-29 / CEO）
 
 - **発覚経緯**: W8 commit `aa3ecec` push 後の CI で 5 jobs 中 4 GREEN だが Playwright E2E job が FAILURE
