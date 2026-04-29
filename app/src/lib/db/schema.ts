@@ -459,6 +459,10 @@ export const badges = sqliteTable(
     name: text("name").notNull(),
     description: text("description").notNull(),
     iconName: text("icon_name").notNull(), // Heroicon name (e.g., 'TrophyIcon')
+    /** W9-C: tier (rarity / 演出強度) — "bronze" | "silver" | "gold" | "platinum" */
+    tier: text("tier", { enum: ["bronze", "silver", "gold", "platinum"] })
+      .notNull()
+      .default("bronze"),
     criteriaJson: text("criteria_json", { mode: "json" }),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()

@@ -1,5 +1,42 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-051: W9-C バッジ UI 完遂 — 7 SVG + grid + celebration + /badges + seed 0007 を atomic commit（2026-04-29 / CEO）
+
+- **状況**: DEC-050 (W9-A 統合) に続き、W9-C を CEO 単独で完遂。
+- **追加ファイル**:
+  - **SVG icons (7)**: streak-keeper / vocab-master / grammar-master / reading-master / listening-master / first-mock-exam / sakura-keeper（first-flight + 7 = 全 8 種完成）
+  - **icons/index.ts**: `BADGE_ICON_BY_CODE` static registry（`react-hooks/static-components` 違反回避のため Record 直引き）
+  - **components/badges**: badge-progress-card.tsx（tier ring + 進捗バー）/ badge-grid.tsx（8 種 grid）/ badge-celebration-modal.tsx（tier 別 confetti / 桜吹雪 / prefers-reduced-motion 対応）
+  - **lib/actions/badges.ts**: resolveBadgeStats / resolveEarnedBadges / awardNewlyEarnedBadges / loadBadgesPageData (Server Actions, 三層認可遵守)
+  - **app/(app)/badges/page.tsx**: 認可 + learner switcher + grid Server Component
+  - **drizzle/0007_w9_badges_seed.sql**: badges.tier ALTER + 8 種 UPSERT (idempotent)
+  - **schema.ts**: badges.tier 列追加（"bronze"|"silver"|"gold"|"platinum"）
+  - **db-fixture.ts**: 0007 を migrations 配列に追記
+  - **home/page.tsx**: バッジコレクション動線 (TrophyIcon + `{badgeCount}/8`) を kotodama-stage の下に追加
+  - **tests/unit/badges.icons-registry.test.ts**: 3 tests
+- **検証結果**:
+  - typecheck: exit 0 ✅
+  - lint: exit 0 ✅（`no-restricted-syntax` を learner_id スコープ条件付き db.select に対し inline disable で 4 箇所許容）
+  - unit tests: 38 files / 450 tests 全 PASS（baseline 447 → 450, +3 tests）✅
+  - next build: exit 0 ✅（/badges route 正常生成）
+- **意思決定**:
+  - `getBadgeIconComponent(code)` を関数で返す pattern は `react-hooks/static-components` 違反 → kotodama-stage-display と同じ `BADGE_ICON_BY_CODE[code]` 直引き pattern に統一
+  - badges.tier はスキーマ拡張 (default 'bronze') で既存 user_badges 行とも互換、UPSERT で正しい tier を上書き
+  - 三層認可: /badges page で requireAuth + getFamilyIdForUser + resolveActiveLearner + requireLearnerOwner を順に実行（/home と同等）
+- **DEC-049 残タスク 進捗**: W9-C 完了 / W9-A 統合済 / W9-B / W9-D は次 increment
+
+---
+
+## DEC-050: W9-A /home 統合 — KotodamaStageDisplay を home page に inline、stage resolver lib を実装（2026-04-29 / CEO）
+
+- **状況**: DEC-049 直後の continuation で W9-A の最小 atomic increment を実施。
+- **実装内容**:
+  - lib/study/kotodama-stage-resolver.ts (DB query layer / xp_levels + streaks + user_badges 集計)
+  - app/(app)/home/page.tsx に KotodamaStageDisplay セクション挿入（svgSize=140）
+- **検証**: typecheck/lint/tests/build 全 GREEN、commit `d78ecde` push 済み
+
+---
+
 ## DEC-049: W9 Foundation 採取 — 4 agent API 制限により lib/SVG/migration を先行 commit、UI 統合は次セッション持越し（2026-04-29 / CEO）
 
 - **状況**: DEC-048 で起動した W9-A/B/C/D 4 agent が Anthropic API 使用上限「resets 12pm Etc/GMT-9」（≒ 12 時 JST）に揃って到達し、各 track の作業を中途で停止。

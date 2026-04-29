@@ -449,6 +449,19 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <KotodamaStageDisplay input={kotodamaInput} svgSize={140} />
       </section>
 
+      {/* W9-C: バッジ コレクションへの動線 */}
+      <section className="mt-6 flex justify-center">
+        <Button asChild variant="outline" size="lg" className="min-h-tap-cta">
+          <Link
+            href={`/badges?learner=${encodeURIComponent(activeId)}`}
+            className="inline-flex items-center gap-2"
+          >
+            <TrophyIcon className="h-5 w-5" aria-hidden="true" />
+            バッジ コレクションを みる ({kotodamaInput.badgeCount} / 8)
+          </Link>
+        </Button>
+      </section>
+
       {/* AI コーチ ひとこと */}
       <section className="mt-10">
         <Card>
