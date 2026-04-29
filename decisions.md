@@ -1,5 +1,21 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-054: W9-Polish — /home に W9 三系統を統合表示 (CharacterWithAccessories overlay + 件数バッジ) を atomic commit（2026-04-29 / CEO）
+
+- **状況**: DEC-053 で W9 (進化キャラ + バッジ + アクセサリ + 親メッセージ) の 4 系統が本番投入可能になったが、`/home` では 3 系統が **個別動線ボタン** に留まっており「ことだまトリ + 装着アクセサリ + バッジ件数 + 未読メッセージ件数」が **一望できない** 状態だった。W9 体験統合面の polish が残課題。
+- **決裁**:
+  - **キャラ表示の差し替え**: `/home` 中段の `<KotodamaStageDisplay input={kotodamaInput} svgSize={140} />` を、**`<CharacterWithAccessories>` overlay 付き** の inline Card レイアウトに置換。子は自分の装着アクセサリ (hat / scarf / wing_charm) を着けた状態で **「いま、自分のことだまトリがどう成長しているか」** を一望できる。
+  - **stage 情報の保持**: `describeKotodamaStage(kotodamaInput)` を /home page 内で直接呼び、Card 右側に stage 説明 / nextStageHint / 最終段階メッセージを変わらず表示。**KotodamaStageDisplay コンポーネントは差し替えるが、表示情報量は維持**。
+  - **件数バッジ統合**: 3 ボタン (バッジ / アクセサリ / メッセージ) すべてに件数を表示:
+    - `バッジ ({badgeCount} / 8)` — 既存の表示を維持
+    - `アクセサリ ({accessoriesUnlockedCount} / 12)` — `loadAccessoriesPageData(activeId).unlocked.length` を新規計算
+    - `おうえん メッセージ <未読 N 通 pill>` — 未読 0 のときは `(未読 0 通)` グレー表示、未読あれば primary 色丸バッジで強調
+  - **データ取得**: 既存 `Promise.all` 配列に `loadAccessoriesPageData(learner.id)` と `getMessagesForLearner(learner.id)` を追加 (並列化済み / 認可は内部の三層認可で再確認)。
+  - **a11y**: 未読件数バッジに `aria-label="未読 N 通"` を付与、`tabular-nums` で桁ぶれを防止。`data-testid="home-messages-link"` + `data-unread={unreadMessagesCount}` を追加し、E2E が未読件数を直接 assert 可能に。
+  - **品質ゲート**: typecheck=clean / lint=clean / vitest 455 tests = all green / `next build` で `/home` route が ƒ (dynamic) として正しく出力される (新規 import = `loadAccessoriesPageData` + `getMessagesForLearner` + `CharacterWithAccessories` + `describeKotodamaStage`)。
+- **理由**: W9 で実装した 4 系統を **/home という日常起点の画面で物理的に統合** することで、子は学習を始める前に「自分の成長状態」を視覚的に確認でき、親メッセージの未読件数も入口で把握できる。`KotodamaStageDisplay` の Card レイアウトを inline 化したのは、`bareSvg` モードを `CharacterWithAccessories` 経由で利用するためで、表示情報量は同等。`getMessagesForLearner` は内部で `requireParent` を呼ぶ設計のため、Phase 1 親プロキシ運用 (DEC-024) と整合。
+- **影響**: W9 が「実装完了」から「体験完成」へ昇格。次の atomic increment は W10 (W10-T1 ハネキン経済 / W10-T2 Shop UI / W10-T3 Daily Quest / W10-T4 5-7 分セッション設計 / W10-T5 過剰学習防止 UX) もしくは Phase 3 計画策定 (β 公開準備) をオーナー判断に委ねる。
+
 ## DEC-053: W9-D 親→子メッセージ UI 完遂 — /parent/messages/new + /messages + テンプレ選択 + 既読更新 を atomic commit、W9 クローズ（2026-04-29 / CEO）
 
 - **状況**: DEC-052 (W9-B 完遂) に続き、W9 最後のサブタスクである W9-D を atomic commit として完遂。これにより W9 (Phase 2 第2週 = 進化キャラ + バッジ + アクセサリ + 親メッセージ) を完全クローズする。

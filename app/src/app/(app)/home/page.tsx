@@ -45,7 +45,7 @@ import { LearnerSwitcherTabs } from "@/components/learner/learner-switcher-tabs"
 import { StreakShieldBadge } from "@/components/home/streak-shield-badge";
 import { SakuraStreakDisplay } from "@/components/home/sakura-streak-display";
 import { DailyGoalRing } from "@/components/home/daily-goal-ring";
-import { KotodamaStageDisplay } from "@/components/character/kotodama-stage-display";
+import { CharacterWithAccessories } from "@/components/character/accessories/character-with-accessories";
 
 import {
   requireAuth,
@@ -60,6 +60,7 @@ import {
 } from "@/lib/study/aggregations";
 import { getDailyProgress } from "@/lib/study/daily-goal";
 import { getKotodamaStageInput } from "@/lib/study/kotodama-stage-resolver";
+import { describeKotodamaStage } from "@/lib/study/kotodama-tori-stage";
 import { eq } from "drizzle-orm";
 import { xpLevels, streaks } from "@/lib/db/schema";
 import { getLearnersForParent } from "@/lib/learner/repository";
@@ -68,6 +69,8 @@ import {
   pickCountdownVariant,
   type CountdownVariant,
 } from "@/lib/study/countdown-variant";
+import { loadAccessoriesPageData } from "@/lib/actions/accessories";
+import { getMessagesForLearner } from "@/lib/actions/parent-messages";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
@@ -245,6 +248,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     streakRows,
     dailyGoalProgress,
     kotodamaInput,
+    accessoriesPageData,
+    messages,
   ] = await Promise.all([
     getCurrentStreak(db, learner.id),
     getDailySkillCounts(db, learner.id),
@@ -265,6 +270,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     getDailyProgress(db, learner.id),
     // W9-T1: ことだまトリ 5 段階進化 入力 (totalXp + currentStreak + badge)
     getKotodamaStageInput(db, learner.id),
+    // W9-Polish: アクセサリ装着状況 + 解禁数 (12 種中 N 種)
+    loadAccessoriesPageData(learner.id),
+    // W9-Polish: 親メッセージ一覧 (未読数 / 受信総数のため)
+    getMessagesForLearner(learner.id),
   ]);
 
   const xp = xpRows[0] ?? { totalXp: 0, level: 1 };
@@ -272,6 +281,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const daysUntilExam = computeDaysUntil(learner.examDate);
   const variant = pickCountdownVariant(daysUntilExam);
   const cd = presentCountdown(variant, daysUntilExam);
+
+  // W9-Polish: 統合 /home 用集計値
+  const stageInfo = describeKotodamaStage(kotodamaInput);
+  const accessoriesUnlockedCount = accessoriesPageData.unlocked.length;
+  const ACCESSORIES_TOTAL = 12;
+  const unreadMessagesCount = messages.filter((m) => m.readAt === null).length;
 
   // 6. todaysMission target 配分 (1 分 = 1 問換算 / 4 スキル均等)
   const totalDailyMinutes = learner.dailyMinutesTarget ?? 60;
@@ -446,12 +461,56 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </Card>
       </section>
 
-      {/* W9-T1: ことだまトリ 5 段階進化 ステータス */}
+      {/* W9-Polish: ことだまトリ 5 段階進化 + 装着アクセサリ overlay 統合表示
+          (W9-T1 stage info + W9-B equipped accessories) */}
       <section className="mt-10">
-        <KotodamaStageDisplay input={kotodamaInput} svgSize={140} />
+        <Card
+          data-testid="kotodama-stage-display"
+          data-stage={stageInfo.stage}
+          data-progress-to-next={stageInfo.progressToNext}
+        >
+          <CardHeader>
+            <CardTitle className="text-base">ことだまトリ</CardTitle>
+            <CardDescription>
+              いま:{" "}
+              <ruby>
+                {stageInfo.furigana}
+                <rt>{stageInfo.label}</rt>
+              </ruby>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+              <div className="flex shrink-0 items-center justify-center rounded-md bg-muted/30 p-2">
+                <CharacterWithAccessories
+                  input={kotodamaInput}
+                  equippedBySlot={accessoriesPageData.equippedBySlot}
+                  svgSize={160}
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {stageInfo.description}
+                </p>
+                {stageInfo.nextStageHint && (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-bold text-primary">
+                      {stageInfo.nextStageHint}
+                    </span>
+                  </p>
+                )}
+                {stageInfo.nextStage === null && (
+                  <p className="text-xs text-muted-foreground">
+                    さいこうの だんかいに とうたつしました。
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
-      {/* W9-C / W9-B / W9-D: バッジ + アクセサリ + メッセージ コレクションへの動線 */}
+      {/* W9-C / W9-B / W9-D: バッジ + アクセサリ + メッセージ コレクションへの動線 (W9-Polish: 件数バッジ表示) */}
       <section className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
         <Button asChild variant="outline" size="lg" className="min-h-tap-cta">
           <Link
@@ -459,7 +518,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             className="inline-flex items-center gap-2"
           >
             <TrophyIcon className="h-5 w-5" aria-hidden="true" />
-            バッジ コレクションを みる ({kotodamaInput.badgeCount} / 8)
+            <span>
+              バッジ
+              <span className="ml-2 tabular-nums text-muted-foreground">
+                ({kotodamaInput.badgeCount} / 8)
+              </span>
+            </span>
           </Link>
         </Button>
         <Button asChild variant="outline" size="lg" className="min-h-tap-cta">
@@ -468,16 +532,37 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             className="inline-flex items-center gap-2"
           >
             <SparklesIcon className="h-5 w-5" aria-hidden="true" />
-            アクセサリを かざる
+            <span>
+              アクセサリ
+              <span className="ml-2 tabular-nums text-muted-foreground">
+                ({accessoriesUnlockedCount} / {ACCESSORIES_TOTAL})
+              </span>
+            </span>
           </Link>
         </Button>
         <Button asChild variant="outline" size="lg" className="min-h-tap-cta">
           <Link
             href={`/messages?learner=${encodeURIComponent(activeId)}`}
             className="inline-flex items-center gap-2"
+            data-testid="home-messages-link"
+            data-unread={unreadMessagesCount}
           >
             <EnvelopeIcon className="h-5 w-5" aria-hidden="true" />
-            おうえん メッセージを みる
+            <span>
+              おうえん メッセージ
+              {unreadMessagesCount > 0 ? (
+                <span
+                  className="ml-2 inline-flex items-center justify-center rounded-full bg-primary px-2 py-0.5 text-xs font-bold tabular-nums text-primary-foreground"
+                  aria-label={`未読 ${unreadMessagesCount} 通`}
+                >
+                  {unreadMessagesCount} 通
+                </span>
+              ) : (
+                <span className="ml-2 text-xs tabular-nums text-muted-foreground">
+                  (未読 0 通)
+                </span>
+              )}
+            </span>
           </Link>
         </Button>
       </section>
