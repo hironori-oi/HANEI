@@ -43,6 +43,7 @@ import { LearnerSwitcherTabs } from "@/components/learner/learner-switcher-tabs"
 import { StreakShieldBadge } from "@/components/home/streak-shield-badge";
 import { SakuraStreakDisplay } from "@/components/home/sakura-streak-display";
 import { DailyGoalRing } from "@/components/home/daily-goal-ring";
+import { KotodamaStageDisplay } from "@/components/character/kotodama-stage-display";
 
 import {
   requireAuth,
@@ -56,6 +57,7 @@ import {
   getCurrentStreak,
 } from "@/lib/study/aggregations";
 import { getDailyProgress } from "@/lib/study/daily-goal";
+import { getKotodamaStageInput } from "@/lib/study/kotodama-stage-resolver";
 import { eq } from "drizzle-orm";
 import { xpLevels, streaks } from "@/lib/db/schema";
 import { getLearnersForParent } from "@/lib/learner/repository";
@@ -233,26 +235,35 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   // 5. データ集計 (並列)
   const levelId = pickLevelId(learner.targetEikenLevel);
-  const [streak, dailyCounts, coverage, xpRows, streakRows, dailyGoalProgress] =
-    await Promise.all([
-      getCurrentStreak(db, learner.id),
-      getDailySkillCounts(db, learner.id),
-      getMasteryCoverage(db, learner.id, levelId),
-      // eslint-disable-next-line no-restricted-syntax -- 認可済 (familyId スコープ + learner.id 解決済み)
-      db
-        .select({ totalXp: xpLevels.totalXp, level: xpLevels.level })
-        .from(xpLevels)
-        .where(eq(xpLevels.learnerId, learner.id))
-        .limit(1),
-      // eslint-disable-next-line no-restricted-syntax -- 認可済 (familyId スコープ + learner.id 解決済み)
-      db
-        .select({ freezeTickets: streaks.freezeTickets })
-        .from(streaks)
-        .where(eq(streaks.learnerId, learner.id))
-        .limit(1),
-      // W8-T5: 自己選択日次ゴール 進捗
-      getDailyProgress(db, learner.id),
-    ]);
+  const [
+    streak,
+    dailyCounts,
+    coverage,
+    xpRows,
+    streakRows,
+    dailyGoalProgress,
+    kotodamaInput,
+  ] = await Promise.all([
+    getCurrentStreak(db, learner.id),
+    getDailySkillCounts(db, learner.id),
+    getMasteryCoverage(db, learner.id, levelId),
+    // eslint-disable-next-line no-restricted-syntax -- 認可済 (familyId スコープ + learner.id 解決済み)
+    db
+      .select({ totalXp: xpLevels.totalXp, level: xpLevels.level })
+      .from(xpLevels)
+      .where(eq(xpLevels.learnerId, learner.id))
+      .limit(1),
+    // eslint-disable-next-line no-restricted-syntax -- 認可済 (familyId スコープ + learner.id 解決済み)
+    db
+      .select({ freezeTickets: streaks.freezeTickets })
+      .from(streaks)
+      .where(eq(streaks.learnerId, learner.id))
+      .limit(1),
+    // W8-T5: 自己選択日次ゴール 進捗
+    getDailyProgress(db, learner.id),
+    // W9-T1: ことだまトリ 5 段階進化 入力 (totalXp + currentStreak + badge)
+    getKotodamaStageInput(db, learner.id),
+  ]);
 
   const xp = xpRows[0] ?? { totalXp: 0, level: 1 };
   const freezeTickets = streakRows[0]?.freezeTickets ?? 0;
@@ -431,6 +442,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             })}
           </CardContent>
         </Card>
+      </section>
+
+      {/* W9-T1: ことだまトリ 5 段階進化 ステータス */}
+      <section className="mt-10">
+        <KotodamaStageDisplay input={kotodamaInput} svgSize={140} />
       </section>
 
       {/* AI コーチ ひとこと */}
