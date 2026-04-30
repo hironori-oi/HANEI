@@ -27,6 +27,7 @@ import {
   ExclamationTriangleIcon,
   ChartBarIcon,
   ClockIcon,
+  HeartIcon,
 } from "@heroicons/react/24/outline";
 
 import {
@@ -47,6 +48,7 @@ import {
 } from "@/lib/study/aggregations";
 import { getTodayLearningSeconds } from "@/lib/actions/study-sessions";
 import { describeTodayMinutes } from "@/lib/study/study-time";
+import { getFamilyStreak } from "@/lib/study/family-streak";
 import {
   Card,
   CardContent,
@@ -118,7 +120,7 @@ export default async function ParentDashboardPage({
   await requireLearnerOwner(session.userId, learner.id);
 
   // 4. 集計 (並列)
-  const [summary, exam, mistakes, inactivity, todayLearningSeconds] =
+  const [summary, exam, mistakes, inactivity, todayLearningSeconds, familyStreak] =
     await Promise.all([
       getWeeklySummary(db, learner.id),
       getNearestExamCountdown(db, learner.id),
@@ -126,8 +128,26 @@ export default async function ParentDashboardPage({
       shouldSendInactivityReminder(db, learner.id, 7),
       // W10-T5: 「今日 X 分」 (study_sessions の cumulative_seconds を JST 6:00 境界で集計)
       getTodayLearningSeconds(learner.id),
+      // W11-T1: 家族のれんぞく X 日 (1 人でも当日学習すれば family streak 維持 / 兄弟救済)
+      getFamilyStreak(familyId),
     ]);
   const todayLabel = describeTodayMinutes(todayLearningSeconds);
+
+  // W11-T1: 家族 streak の表示コピーを罰則ゼロ哲学 (DEC-024) で組み立てる
+  //   - days >= 1 + isAlive=true     → 「家族のれんぞく X 日 — 今日もみんなでつながったね」
+  //   - days === 0 + isAlive=false   → 「今日 1 日目をはじめよう」 (前向き / 罰なし)
+  //   - days >= 1 + isAlive=false    → 切れている表示。前向きコピーで「またいつでも始められるよ」
+  //     (現状 getFamilyStreak は切れた瞬間 days=0 を返すため、ここは days>=1 単独になることはない)
+  const familyStreakHeadline =
+    familyStreak.days > 0
+      ? `家族のれんぞく ${familyStreak.days} 日`
+      : "家族のれんぞく";
+  const familyStreakHint =
+    familyStreak.days > 0 && familyStreak.isAlive
+      ? "今日も みんなで つながったね"
+      : familyStreak.days > 0
+        ? "またいつでも はじめられるよ"
+        : "今日 1 日目を はじめよう";
 
   const accuracyPct =
     summary.weeklyAccuracy === null
@@ -193,6 +213,41 @@ export default async function ParentDashboardPage({
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
               30 分で「ひと休み」を提案、60 分で「きょうは じゅうぶん」と区切ります (DEC-024 罰則ゼロ哲学)。
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* W11-T1: 家族のれんぞく (1 人でも当日学習すれば家族 streak 維持 / 兄弟救済) */}
+      <section aria-labelledby="family-streak" className="mb-8">
+        <h2
+          id="family-streak"
+          className="mb-4 flex items-center gap-2 text-xl font-semibold"
+        >
+          <HeartIcon className="h-6 w-6 text-primary" aria-hidden="true" />
+          家族のれんぞく
+        </h2>
+        <Card
+          data-testid="family-streak-card"
+          data-family-streak-days={familyStreak.days}
+          data-family-streak-alive={familyStreak.isAlive ? "1" : "0"}
+          aria-label={`家族のれんぞく ${familyStreak.days} 日`}
+          className={
+            familyStreak.isAlive && familyStreak.days > 0
+              ? "border-2 border-primary bg-primary/5"
+              : ""
+          }
+        >
+          <CardHeader>
+            <CardTitle className="text-base">{familyStreakHeadline}</CardTitle>
+            <CardDescription>{familyStreakHint}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-4xl font-bold tabular-nums text-primary">
+              {familyStreak.days} <span className="text-xl">日</span>
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              ひとりでも 学習したら 家族の れんぞくが つながります (兄弟救済 / DEC-024 罰則ゼロ)。
             </p>
           </CardContent>
         </Card>

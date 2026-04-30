@@ -54,6 +54,19 @@ export const families = sqliteTable("families", {
   id: text("id").primaryKey(),
   displayName: text("display_name"),
   plan: text("plan", { enum: ["free"] }).notNull().default("free"),
+  /**
+   * W11-T1: Family 内 Streak (家族のれんぞく)
+   *  - 同一 family の learner 全員が共通の Family Streak を持つ.
+   *  - 1 人でも当日学習すれば家族 Streak 維持 (兄弟がいる家庭の救済).
+   *  - DEC-024 罰則ゼロ哲学: 切れた日も罰なく「またいつでも始められるよ」と前向きに表示.
+   */
+  familyStreakDays: integer("family_streak_days").notNull().default(0),
+  /**
+   * W11-T1: 直近で family streak が更新された日付 ('YYYY-MM-DD' / JST 6:00 境界).
+   *  - getJstQuestDate(now) と同形式. quest_date と整合.
+   *  - NULL = 一度も家族として学習していない (初学習で 1 になる).
+   */
+  lastFamilyActiveDate: text("last_family_active_date"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),

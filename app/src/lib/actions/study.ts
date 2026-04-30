@@ -17,6 +17,7 @@ import {
   problems,
   characters,
   answerLogs,
+  learnerProfiles,
 } from "@/lib/db/schema";
 import { requireAuth, requireLearnerOwner } from "@/lib/auth/guards";
 import {
@@ -33,6 +34,7 @@ import { scoreWritingEssay } from "@/lib/ai/score-writing";
 import { getTodayCostJpy } from "@/lib/ai/cost-guard";
 import { awardCoins, getCoinBalance } from "@/lib/actions/coins";
 import { incrementQuestProgress } from "@/lib/actions/quests";
+import { updateFamilyStreakOnLearn } from "@/lib/actions/family-streak";
 import { COIN_REWARDS } from "@/lib/economy/ledger";
 
 const SubmitAnswerSchema = z.object({
@@ -298,6 +300,25 @@ export async function submitAnswer(input: SubmitAnswerInput): Promise<SubmitAnsw
     }
   } catch {
     // best-effort / 学習体験を中断しない (Sentry 経路は別途検討)
+  }
+
+  // W11-T1: Family 内 Streak 更新 (best-effort / 学習体験を中断しない)
+  // - learner.familyId を引いて updateFamilyStreakOnLearn を 1 回呼ぶ.
+  // - 同日 2 回目以降は computeFamilyStreakRollover が shouldUpdate=false を返し no-op (DEC-055 / 兄弟救済の冪等性).
+  // - hard_limit (60 分) で session が終わっても本処理は streak を減らさない (DEC-024 / 罰則ゼロ).
+  try {
+    // eslint-disable-next-line no-restricted-syntax -- 認可済 (requireLearnerOwner 通過後の learner.family_id 取得)
+    const learnerFamilyRows = await db
+      .select({ familyId: learnerProfiles.familyId })
+      .from(learnerProfiles)
+      .where(eq(learnerProfiles.id, learnerId))
+      .limit(1);
+    const familyId = learnerFamilyRows[0]?.familyId;
+    if (familyId) {
+      await updateFamilyStreakOnLearn(familyId);
+    }
+  } catch {
+    // best-effort / 学習体験を中断しない (family_streak 更新失敗は表示の遅延でしかない)
   }
 
   // 次の問題

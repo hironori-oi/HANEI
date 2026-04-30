@@ -1,5 +1,36 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-060: Phase 2 W11-T1 Family 内 Streak 着手 GO 判定（2026-05-01 / CEO 着手判断）
+
+- **状況**: DEC-059 で Phase 2 W10 全 5 タスク (T1-T5) atomic 採用 / `c337bf9` main push 完遂直後、オーナー「phase2 続きの実装を進めてください」継続マンデート受領。`phase2-gamification-implementation-plan.md` §W11 (lines 228-267) は「保護者連動・家族化（7 人日）」で 5 タスク（W11-T1 Family Streak P0 / W11-T2 親→子応援メッセージ P0 / W11-T3 Family Leaderboard P1 / W11-T4 Daily Push 通知 P0 / W11-T5 Weekly Digest 強化 P1）。
+- **判断**: **W11-T1 Family 内 Streak（P0 / 1.5 人日）を最初の atomic として着手 GO**。
+- **採択理由**:
+  1. **最小スコープ・基盤性**: families テーブルに `familyStreakDays` / `lastFamilyActiveDate` カラム追加 + 既存 learner streak roll-up パターンを家族集計に拡張するだけ。W11-T3 Family Leaderboard が同じ family scope 集計基盤を再利用できるため、T3 着手前提条件を整える。
+  2. **外部ブロッカー無し**: W11-T4 (Daily Push 通知) は VAPID 鍵 / Service Worker / push subscription 等オーナー側設定が前提（Phase 2 後段または DEC-029 系手動セットアップ枠で扱うのが安全）。W11-T2 (応援メッセージ) は moderation pipeline / kotodama-tori 代読 modal の UX 設計 + family_messages テーブル + スパム/不適切語フィルタが絡み 2 人日 / W11-T1 より重い。**W11-T1 だけは外部依存ゼロで完遂可能**。
+  3. **HANEI 独自差別化軸**: 兄弟救済設計（1 人でも当日学習すれば family streak 維持）は Duolingo Family Plan を超える「日本の家族にフィットする」核心。Phase 2 の最大訴求 USP の最初の 1 ピース。
+  4. **W10 で確立した knowledge を再利用可能**: JST 6:00 境界（`getJstQuestDate`）/ atomic UPDATE with UNIQUE INDEX による idempotency / DEC-055 厳守 / 3 層認可（requireAuth → requireFamilyOwner → scopedQueries(familyId)）/ DEC-024 punishment-zero copy / Next.js 16 Turbopack `"use server"` sync export 禁止対応。
+- **dev へのブリーフ要点（同梱必須）**:
+  1. **migration 0015**: `families.family_streak_days INTEGER NOT NULL DEFAULT 0` / `families.last_family_active_date TEXT NULL`（JST 6:00 境界 quest_date 形式 `YYYY-MM-DD` UTC string）
+  2. **`updateFamilyStreakOnLearn(familyId, learnerId, now)` server action**: 任意 learner の当日学習発生時に family streak を atomic に進める。学習発生は既存の `updateLearnerStreakOnQuestComplete` / `recordStudySession` 等の終端で 1 回だけ呼ばれる（idempotency 必須 / 同日 2 回目以降は no-op）。
+  3. **`getFamilyStreak(familyId)` server function**: 当日 family streak 表示用。`getJstQuestDate(now) === lastFamilyActiveDate` の場合のみ family streak が「生きて」いる扱い、前日の場合は表示時点で「+1 候補」として返す（roll-over の判定は write 経路で確定）。
+  4. **保護者ダッシュボード `/parent/dashboard` に「家族のれんぞく X 日」表示**: 既存「今日 X 分学習」セクションの隣 or 上に追加。学習者ごとの個人 streak とは独立した別セクションで、兄弟がいる家庭では「家族みんなで今日もつながった」感を強調するコピー（DEC-024 punishment-zero / 罰やプレッシャーを示さない）。`data-family-streak-days` 属性で E2E 検証 hook 提供。
+  5. **学習者向け `/home` または `/study` 完了画面に family streak ミニ表示**: 「家族のれんぞく X 日」を kotodama-tori が読み上げるコピー or バッジで提示（必須ではないが UX 連動として推奨）。
+  6. **unit test 追加**: `family-streak.test.ts` で純関数 `computeFamilyStreakRollover(prev, lastActiveDate, todayDate)` を 6+ ケース網羅（同日 2 回目 no-op / 連続日 +1 / 1 日空き reset / JST 境界跨ぎ / 初回学習で 1 設定 / null lastActiveDate）。`"use server"` ファイル外の純関数として `src/lib/study/family-streak-rollover.ts` 等に切り出す（W10-T5 で確立した Turbopack 制約対応パターン）。
+  7. **E2E 1 件**: `family-streak.spec.ts` = 同一 family に learner A / learner B を作成 → A が当日学習 → family streak が 1 になる → B が同日学習しても family streak は 1 のまま（兄弟救済の冪等性）→ 翌日 A だけ学習で family streak 2 に進む（reload 後保持）/ B が学習しなくても family streak は維持される（兄弟救済の本旨）。
+- **受入基準**:
+  - vitest 全件 PASS（W10-T5 時点 603 + 新規 unit test）
+  - typecheck **0 errors** / lint **0 errors / 0 warnings** / next build ✓
+  - migration 0015 `bun drizzle-kit generate` 確認可能
+  - family-streak E2E green（port 3100 fallback）
+  - 保護者ダッシュボード `data-family-streak-days` 属性で正しく表示
+  - DEC-024 / DEC-006 / DEC-055 厳守、3 層認可厳守
+  - 既存 learner 個人 streak ロジックを破壊しない（W7 で確立した `learner_streaks` 系の動作は不変）
+- **報告先**: `projects/PRJ-016/reports/dev-w11-t1-family-streak-done.md`、レビュー部門呼び出しは CEO（次に呼ぶ）
+- **優先度**: P0（W11 全体 7 人日のうち最小・基盤、Phase 2 W11 atomic 第 1 弾）
+- **次の atomic 候補**: W11-T1 完遂後 → W11-T2 (親→子応援メッセージ) を P0 として続けるか、または W11-T3 (Family Leaderboard) を T1 基盤上に薄く乗せるかを CEO 再判定（W11-T2 は moderation pipeline が必要なため知見蓄積に値する / W11-T3 は T1 基盤の即活用で速い）。
+
+---
+
 ## DEC-059: W10-T5 過学習防止「もう少しで終わるよ」UX 実装 → レビュー APPROVE → main push（2026-04-30 / CEO 最終決裁）
 
 - **状況**: DEC-058 (W10-T4 `29ca2e7` push) 完遂を受け W10-T5 (P1 / 1 人日 / `phase2-gamification-implementation-plan.md` §W10-T5) に即着手。CEO ブリーフ「同梱必須 4 点 = study_sessions 0014 / learner_preferences 拡張 / session_cumulative E2E / overtime_cumulative E2E」を厳守。dev 1 セッション完遂 → レビュー部門 **APPROVE**（Critical / Major 指摘ゼロ / Minor 3 件は後続吸収可）→ CEO 判断で main push 実行。W10 過学習防止 UX を Phase 2 完遂の最終層として被せ、W10 全 5 タスク (T1 ハネキン / T2 Shop / T3 Daily Quest / T4 5-7 分セッション / T5 過学習防止) が atomic に揃う。

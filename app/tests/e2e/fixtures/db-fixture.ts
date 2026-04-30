@@ -67,6 +67,8 @@ export async function applyMigrations(client: Client): Promise<void> {
     "0013_w10_coin_idempotency_unique.sql",
     // W10-T5: study_sessions テーブル新設 (過学習防止 / 「今日 X 分」可視化)
     "0014_w10_study_sessions.sql",
+    // W11-T1: families.family_streak_days + families.last_family_active_date (家族のれんぞく)
+    "0015_w11_family_streak.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);
