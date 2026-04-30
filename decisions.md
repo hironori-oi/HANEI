@@ -1,5 +1,65 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-058: W10-T4 5-7 分セッション自動設計 dev 実装完遂（レビュー前 / 2026-04-30 / Dev → CEO 提出）
+
+- **状況**: DEC-057 (W10-T3 main push) 完遂を受け W10-T4 (P0 / 1.5 人日 / `phase2-gamification-implementation-plan.md` §W10-T4) に着手。dev 部門が「純関数 composeStudySession + SessionPicker + SessionCompleteModal」の 3 軸で 1 atomic commit 実装完了 → CEO レビュー / レビュー部門投入 待ち。
+- **採用設計**:
+  1. **純関数 `composeStudySession({learnerId, durationMinutes, now})`**: AI 呼び出しゼロ / DB I/O ゼロ / `(learner, day, duration)` で deterministic な planSize + review:fresh:weakness 構成比を返す。Phase 2 plan §W10-T4 推定問題数表 (5 分 = 5-8 / 7 分 = 8-12 / 10 分 = 12-18) を内部 PLAN_VARIANTS table で展開し、mulberry32 + cyrb53 派生 hash で variant を選ぶ
+  2. **`/study` 新 Server Component + SessionPicker Client Component**: 三層認可 (`requireAuth` → `getFamilyIdForUser` → `requireLearnerOwner`) → `?dur=` / `?session=<uuid>` 付きで `/study/eiken-N/<skill>` に遷移。「いつもの長さでいい」は `useSyncExternalStore` で localStorage 購読 (effect 内 setState 回避 / lint clean)
+  3. **SessionCompleteModal**: `natural` (planSize 到達) / `abort` (「ここまでにする」) / `overtime` (経過時間 >= duration*1.5) の 3 reason で適切な祝福 + サマリ。overtime は **強制終了せず** 「もうすこし やる」/「おしまいに する」両方を提示（DEC-024 罰則ゼロ哲学整合）
+- **同梱 W10-T3 review minor**:
+  - **M-1**: `tests/e2e/quests.spec.ts` test 1 を「signup → /home で既に 3 件 lazy gen 済 / /quests 遷移後も同 id 集合」spec に書き換え (1 line ではなく ケース全体を spec 整合に書き直し)
+  - **M-2**: `drizzle/0013_w10_coin_idempotency_unique.sql` 新設 (DEC-055 補強 / `coin_transactions(learner_id, reason, reference_id) WHERE reference_id IS NOT NULL` partial UNIQUE INDEX)
+  - **M-4**: `/home/page.tsx` の `getOrGenerateTodayQuests` を `.catch(...) → null fallback` でガード + リボン non-render
+- **新設 / 修正ファイル**:
+  - 新規: `drizzle/0013_w10_coin_idempotency_unique.sql`, `src/lib/study/session-composer.ts`, `src/components/study/{SessionPicker,SessionCompleteModal}.tsx`, `src/app/(app)/study/page.tsx`, `tests/unit/study.session-composer.test.ts` (31 件)
+  - 修正: `src/app/(app)/home/page.tsx`, `src/app/(app)/study/[levelCode]/[skillCode]/{page,StudyClient}.tsx`, `tests/e2e/quests.spec.ts`, `tests/e2e/fixtures/db-fixture.ts`
+- **品質ゲート結果（dev 自己検証）**:
+  - `npx tsc --noEmit`: clean
+  - `npm run lint`: clean (warning / error なし)
+  - `npm run test -- --run`: 573 / 573 passed (新規 31 + 既存 542)
+  - `npx playwright test --list`: 62 tests / 10 files
+- **永続化方針 (CEO 判断ポイント)**: `study_sessions` テーブル / migration 0014 は **本コミットには含めず** W10-T5 へ繰越。理由 = (i) atomic commit のスコープ管理 (ii) Phase 1 では URL 伝搬で十分 (iii) Phase 2 後半で「セッション履歴 / 振り返り」と一緒に DB 変更を最小化したい
+- **罰則ゼロ哲学整合**: 0 問完了でも「きょうも きてくれて ありがとう」/ 不正解多くても「ことだまトリも うれしそう」/ overtime も強制終了なし / 否定形コピーなし (unit test で `(ない|だめ|失敗|やめろ)` regex 排除確認)
+- **次アクション**: CEO レビュー → レビュー部門投入 → 結果に応じて main push（dev は **push しない**）
+- **関連**: DEC-057 (W10-T3 push), DEC-055 (W10-T1 ハネキン経済), DEC-024 (罰則ゼロ哲学), DEC-006 (Phase 1 完全無料), `phase2-gamification-implementation-plan.md` §W10-T4, `reports/dev-w10-t4-session-design-done.md`, `reports/review-w10-t3-daily-quest.md` (M-1 / M-2 / M-4 close 元)
+
+---
+
+## DEC-057: W10-T3 Daily Quest デイリーミッション 実装完遂 + レビュー APPROVE → main push（2026-04-30 / CEO）
+
+- **状況**: DEC-056 (W10-T2 /shop UI 案B atomic commit `0e9cd76`) 完遂を受けて W10-T3 (P0 / 2 人日 / `phase2-gamification-implementation-plan.md` §W10-T3) に着手。dev 部門が「決定論的生成 + lazy generation + atomic claim + best-effort 進捗 hook」の 4 軸で 1 atomic commit 実装完了 → レビュー部門投入 → APPROVE → main push までを 1 セッションで完遂。
+- **採用設計（dev 部門 done レポート §1-5 全採用）**:
+  1. **決定論的生成**: `mulberry32` PRNG + `cyrb53` 派生 hash seed `(learnerId|questDate)` で同 (learner, date) は何度呼んでも同 3 件 + 同 target が出る → unit test 25 件で実証。AI 呼び出しゼロ / コスト 0 / 再現性 100%
+  2. **lazy generation**: Vercel Hobby plan の cron 1/day 制約に巻き込まれない設計。`/home` または `/quests` 初回アクセスで `getOrGenerateTodayQuests` が発火 → DB UNIQUE `(learner_id, quest_date, quest_type)` + アプリ層 deterministic 同一性の **二重防御** で race-safe
+  3. **JST 6:00 境界**: `getJstQuestDate` で「今日」を 6:00 JST 開始 = DEC-024 罰則ゼロ哲学整合（夜更かし学習者が 0:01 に取り損ねる UX を排除 / 海外渡航は Phase 2 範囲外で日本標準時 DST なしを利用）
+  4. **claim atomic**: `WHERE id=? AND learner_id=? AND status='in_progress'` の atomic UPDATE で連打 / 並行 tab に race-safe / `coin_transactions.referenceId` (`quest_<id>` / `all_done_<date>`) で冪等保証
+  5. **all-done bonus**: 同日 3 件全 claimed で 1 度だけ +30 ハネキン bonus (referenceId `all_done_<date>` で重複防止)
+  6. **submitAnswer hook**: `incrementQuestProgress` を best-effort (try-catch 握り潰し) で結線 / `problem.skillId` の `-N` 剥がし regex で skill code 抽出
+  7. **Phase 1 = 6 種 quest_type**: `mock_warmup` のみ `enabled=false` (Phase 3 用) / `streak_keep` を 1 件目固定 / 残り 2 件は deterministic shuffle で重複なく抜く
+- **新設 / 修正ファイル (実装本体)**:
+  - 新規: `drizzle/0012_w10_daily_quests.sql`, `src/lib/quest/{jst-date,quest-templates,quest-generator}.ts`, `src/lib/actions/quests.ts`, `src/components/quest/{DailyQuestCard,DailyQuestSummaryRibbon}.tsx`, `src/app/(app)/quests/page.tsx`, `tests/unit/quest.{jst-date,templates,generator}.test.ts` (56 件), `tests/e2e/quests.spec.ts` (4 ケース)
+  - 修正: `src/lib/db/schema.ts`, `src/lib/actions/study.ts`, `src/app/(app)/home/page.tsx`, `tests/e2e/fixtures/db-fixture.ts`
+- **品質ゲート結果（レビュー部門 `review-w10-t3-daily-quest.md`）**:
+  - **判定**: APPROVE (条件なし承認)
+  - **必須観点 A-H 全 8 項目**: 決定論性 / 7 type バランス / JST 6:00 境界 / 冪等性 race / DEC-055 coin_transactions 影響なし / DEC-024 罰則ゼロ整合 / 三層認可 / submitAnswer hook best-effort — 全て根拠ベースで OK
+  - **静的検査**: typecheck / lint clean / unit 542 件 GREEN
+  - **E2E**: port 3100 で実走 PASS 3/4（4 ケース中 production 仕様で意味のある 3 件 = lazy gen 冪等 / claim+bonus / 重複 claim skip は **3/3 PASS**。残 1 件 fail は test 側の assertion 前提誤り = M-1: signup → /home が既に lazy gen を発火させるため `before === 0` が成立しない / production code は完全に正しい）
+  - **Critical / Major: 0 件 / Minor: 4 件 (M-1〜M-4) / Nits: 1 件**
+- **push 実行**: HANEI repo (`projects/PRJ-016/app/`) `8ff21a7 feat(W10-T3): デイリーミッション (Daily Quest) 実装` を `0e9cd76..8ff21a7  main -> main` で remote `origin/main` (https://github.com/hironori-oi/dummy/HANEI.git) に push 完遂
+- **繰越事項（W10-T4 で同時対応）**:
+  - **M-1**: `quests.spec.ts` ケース 1 を「signup → /home 後に 3 件生成済」に書き換え（production code 不変 / test 側 1 行修正）
+  - **M-2**: `coin_transactions` partial UNIQUE INDEX `(learner_id, reason, reference_id)` を `0013_w10_coin_idempotency_unique.sql` で投入（DB 層 race-safe をさらに堅牢化 / W10-T4 か W11 polish）
+  - **M-4**: `/home` Server Component の Promise.all 内で `getOrGenerateTodayQuests` を try-catch wrap（リボン非表示 fallback / Phase 2 hardening）
+  - **M-3**: `incrementQuestProgress` の loop 内 UPDATE 一括化（Phase 2 perf / W11 以降）
+- **W10-T4 着手判断**: **GO**（5-7 分セッション自動設計 / P0 / 1.5 人日 / `phase2-gamification-implementation-plan.md` §W10-T4）。M-1 を W10-T4 の 1 line 修正で同時 close、M-2 / M-4 は W10-T4 内で同時投入推奨
+- **影響**:
+  - 親リポ: `dashboard/active-projects.md` に W10-T3 APPROVE / push 完遂を反映、`reports/dev-w10-t3-daily-quest-done.md` + `reports/review-w10-t3-daily-quest.md` を tracked 化（W10-T2 レビュー artifact `review-w10-t2-shop.md` も同タイミングで commit）
+  - HANEI repo: 経済 + 蓄積導線 + 達成導線 (T1 + T2 + T3) が体験として接続。W10-T4 (5-7 分セッション) で「今日やる量の可視化」と「Daily Quest 進捗」が同期。W10-T5 (過学習防止) で「やりすぎ抑制」を最終層として被せる構造
+- **関連**: DEC-056 (W10-T2 /shop 案B), DEC-055 (W10-T1 ハネキン経済), DEC-024 (罰則ゼロ哲学), DEC-006 (Phase 1 完全無料), DEC-052 (W9-B アクセサリ slot mutex / regression なし), DEC-008 (品質ゲート 68 項目), `phase2-gamification-implementation-plan.md` §W10-T3, `reports/dev-w10-t3-daily-quest-done.md`, `reports/review-w10-t3-daily-quest.md`
+
+---
+
 ## DEC-056: W10-T2 /shop UI スコープ確定 — 案B採用 (Streak Freeze 追加購入 + kotodama feed のみ / アクセサリ購入経路は閉鎖)（2026-04-30 / オーナー承認 / CEO）
 
 - **状況**: DEC-055 で W10-T1 ハネキン経済 foundation (schema / ledger / Server Actions / submitAnswer hook) が atomic commit 完了。次は W10-T2 = `/shop` UI に着手するに当たり、アクセサリ category を W9-B (DEC-052) の解禁条件 (level / streak / xp / badge) と shop 購入解禁の **デュアル経路** にするか、**W9-B 解禁条件のみに限定**するかが設計分岐点となった。

@@ -63,6 +63,8 @@ export async function applyMigrations(client: Client): Promise<void> {
     "0011_w10_shop_inventory.sql",
     // W10-T3: Daily Quest (デイリーミッション lazy generation)
     "0012_w10_daily_quests.sql",
+    // W10-T4: coin_transactions 冪等チェック partial UNIQUE INDEX (DEC-055 補強)
+    "0013_w10_coin_idempotency_unique.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);

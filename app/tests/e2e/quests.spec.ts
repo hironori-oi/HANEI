@@ -176,16 +176,26 @@ async function signupAndOnboard(
 }
 
 test.describe("/quests UI (W10-T3 / Daily Quest)", () => {
-  test("初回アクセスで 3 件の quest が deterministic に生成される (lazy gen)", async ({
+  test("signup → /home の段階で 3 件 lazy gen 済 / /quests 遷移後も同 id 集合で冪等", async ({
     page,
   }, testInfo) => {
+    // review-w10-t3 M-1: signup → /home の遷移で既に lazy gen が走るため、
+    // 「signup 直後に 0 件」を期待するのは spec 不整合だった。
+    // 新しい assertion は「signup 後 = 既に 3 件 / /quests 遷移しても同 id 集合のまま」。
     const { learnerId } = await signupAndOnboard(page, testInfo.workerIndex);
 
-    // 初期は 0 件
-    const before = await readQuestRows(learnerId);
-    expect(before.length).toBe(0);
+    // signup → /home リダイレクト時点で既に 3 件 lazy gen 済 (home page のクエスト summary 用)
+    const afterHome = await readQuestRows(learnerId);
+    expect(afterHome.length).toBe(3);
+    // streak_keep を必ず含む
+    expect(afterHome.some((q) => q.quest_type === "streak_keep")).toBe(true);
+    // mock_warmup は Phase 1 で除外
+    expect(afterHome.some((q) => q.quest_type === "mock_warmup")).toBe(false);
+    // 同日なので quest_date は 1 種類だけ
+    expect(new Set(afterHome.map((q) => q.quest_date)).size).toBe(1);
+    const idsAfterHome = afterHome.map((q) => q.id).sort();
 
-    // /quests へ遷移 (lazy gen 入口)
+    // /quests へ遷移 (lazy gen 入口 / 冪等性確認)
     await page.goto(`/quests?learner=${encodeURIComponent(learnerId)}`);
     await expect(
       page.getByRole("heading", { name: /^クエスト$/ }),
@@ -195,15 +205,11 @@ test.describe("/quests UI (W10-T3 / Daily Quest)", () => {
     const grid = page.locator('[data-testid="quests-grid"]');
     await expect(grid).toBeVisible();
 
-    // DB レイヤで 3 件確認
-    const after = await readQuestRows(learnerId);
-    expect(after.length).toBe(3);
-    // streak_keep を必ず含む
-    expect(after.some((q) => q.quest_type === "streak_keep")).toBe(true);
-    // mock_warmup は Phase 1 で除外
-    expect(after.some((q) => q.quest_type === "mock_warmup")).toBe(false);
-    // 同日なので quest_date は 1 種類だけ
-    expect(new Set(after.map((q) => q.quest_date)).size).toBe(1);
+    // /quests 遷移後も件数 / id 集合が変わらない (lazy gen 二重起動なし)
+    const afterQuests = await readQuestRows(learnerId);
+    expect(afterQuests.length).toBe(3);
+    const idsAfterQuests = afterQuests.map((q) => q.id).sort();
+    expect(idsAfterQuests).toEqual(idsAfterHome);
   });
 
   test("同日 2 度目の /quests 遷移でも 3 件のまま (冪等)", async ({

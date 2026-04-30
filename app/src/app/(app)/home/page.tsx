@@ -279,7 +279,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     // W9-Polish: 親メッセージ一覧 (未読数 / 受信総数のため)
     getMessagesForLearner(learner.id),
     // W10-T3: Daily Quest 今日の 3 件 (lazy generation 入口)
-    getOrGenerateTodayQuests(learner.id),
+    // W10-T4 / review M-4: クエスト生成失敗時に /home が 500 にならないよう
+    // try-catch で握りつぶし null fallback (リボンは null チェックで非表示)
+    getOrGenerateTodayQuests(learner.id).catch((err) => {
+      console.error("[home] getOrGenerateTodayQuests failed:", err);
+      return null;
+    }),
   ]);
 
   const xp = xpRows[0] ?? { totalXp: 0, level: 1 };
@@ -294,9 +299,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const ACCESSORIES_TOTAL = 12;
   const unreadMessagesCount = messages.filter((m) => m.readAt === null).length;
 
-  // W10-T3: Daily Quest 集計
-  const questClaimableCount = questSummary.quests.filter((q) => q.isClaimable)
-    .length;
+  // W10-T3: Daily Quest 集計 (questSummary が null の場合はリボン非表示)
+  const questClaimableCount = questSummary
+    ? questSummary.quests.filter((q) => q.isClaimable).length
+    : 0;
 
   // 6. todaysMission target 配分 (1 分 = 1 問換算 / 4 スキル均等)
   const totalDailyMinutes = learner.dailyMinutesTarget ?? 60;
@@ -520,17 +526,20 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </Card>
       </section>
 
-      {/* W10-T3: Daily Quest サマリ リボン (4 ボタン群の上に配置 / 罰則ゼロ哲学) */}
-      <section className="mt-6">
-        <DailyQuestSummaryRibbon
-          learnerId={activeId}
-          totalCount={questSummary.totalCount}
-          completedCount={questSummary.completedCount}
-          claimedCount={questSummary.claimedCount}
-          claimableCount={questClaimableCount}
-          allBonusClaimed={questSummary.allBonusClaimed}
-        />
-      </section>
+      {/* W10-T3: Daily Quest サマリ リボン (4 ボタン群の上に配置 / 罰則ゼロ哲学)
+          W10-T4 / review M-4: 生成失敗時 (questSummary === null) はリボン自体を非表示 */}
+      {questSummary ? (
+        <section className="mt-6">
+          <DailyQuestSummaryRibbon
+            learnerId={activeId}
+            totalCount={questSummary.totalCount}
+            completedCount={questSummary.completedCount}
+            claimedCount={questSummary.claimedCount}
+            claimableCount={questClaimableCount}
+            allBonusClaimed={questSummary.allBonusClaimed}
+          />
+        </section>
+      ) : null}
 
       {/* W9-C / W9-B / W9-D + W10-T2: バッジ + アクセサリ + メッセージ + ショップ 4 ボタン構成 */}
       <section className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
@@ -626,7 +635,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           きょうのミッションをはじめましょう。
         </p>
         <div className="flex flex-wrap justify-center gap-3">
+          {/* W10-T4: メイン CTA は /study に変えて時間選択を経由させる */}
           <Button asChild size="lg" className="min-h-tap-cta">
+            <Link
+              href={`/study?learner=${encodeURIComponent(activeId)}`}
+              data-testid="home-start-study-cta"
+            >
+              がくしゅうを はじめる
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="min-h-tap-cta">
             <Link href={`/study/eiken-${levelId}/vocab`}>
               語彙(英検{levelId}級)をはじめる
             </Link>

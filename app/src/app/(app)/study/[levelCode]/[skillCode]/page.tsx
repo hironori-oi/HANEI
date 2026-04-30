@@ -14,6 +14,11 @@ import { db } from "@/lib/db/client";
 import { eq, and } from "drizzle-orm";
 import { learnerProfiles } from "@/lib/db/schema";
 import { getNextProblem } from "@/lib/study/repository";
+import {
+  composeStudySession,
+  isSessionDurationMinutes,
+  type SessionDurationMinutes,
+} from "@/lib/study/session-composer";
 import { StudyClient } from "./StudyClient";
 
 // /study/eiken-5 → "5", /study/eiken-4 → "4", /study/eiken-3 → "3"
@@ -49,8 +54,10 @@ export const metadata = {
 
 export default async function StudyPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ levelCode: string; skillCode: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { levelCode, skillCode } = await params;
   const level = parseLevelCode(levelCode);
@@ -58,6 +65,15 @@ export default async function StudyPage({
   if (!level || !skillBase) notFound();
   // DB canonical: "<base>-<level>" (例: "vocabulary-5")
   const skill = `${skillBase}-${level}`;
+
+  // W10-T4: セッションパラメータ (?dur=5|7|10 & session=<uuid>) を解釈
+  // 既存ルートとの後方互換のため optional / 不正値は無視
+  const sp = (await searchParams) ?? {};
+  const durRaw = Array.isArray(sp.dur) ? sp.dur[0] : sp.dur;
+  const sessionRaw = Array.isArray(sp.session) ? sp.session[0] : sp.session;
+  const durParsed = durRaw ? Number.parseInt(durRaw, 10) : null;
+  const sessionDurationMinutes: SessionDurationMinutes | null =
+    durParsed !== null && isSessionDurationMinutes(durParsed) ? durParsed : null;
 
   const session = await requireAuth();
   const familyId = await getFamilyIdForUser(session.userId);
@@ -147,6 +163,20 @@ export default async function StudyPage({
         choices={questionJson.choices ?? []}
         audioUrl={problem.audioUrl ?? null}
         skill={skill}
+        sessionDurationMinutes={sessionDurationMinutes ?? undefined}
+        sessionPlanSize={
+          sessionDurationMinutes
+            ? composeStudySession({
+                learnerId: learner.id,
+                durationMinutes: sessionDurationMinutes,
+              }).planSize
+            : undefined
+        }
+        sessionId={
+          typeof sessionRaw === "string" && sessionRaw.length > 0
+            ? sessionRaw
+            : undefined
+        }
       />
     </main>
   );

@@ -19,12 +19,14 @@ import {
   SpeakerWaveIcon,
   PauseIcon,
   ArrowPathIcon,
+  StopCircleIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { submitAnswer } from "@/lib/actions/study";
 import { KotodamaTori, pickMood } from "@/components/study/kotodama-tori";
 import { LessonCompleteModal } from "@/components/study/lesson-complete-modal";
+import { SessionCompleteModal } from "@/components/study/SessionCompleteModal";
 import { ComboCounter } from "@/components/study/combo-counter";
 import { isComboTierUpgrade, nextComboCount } from "@/lib/study/combo";
 import { MAX_REPLAY, canReplay, shouldShowAudioUi } from "@/lib/study/audio-gate";
@@ -38,6 +40,12 @@ import {
   setAudioEnabled,
 } from "@/lib/study/audio-feedback";
 import { setConfettiEnabled, triggerConfetti } from "@/lib/study/confetti";
+import {
+  hasReachedOvertime,
+  isSessionDurationMinutes,
+  summarizeSession,
+  type SessionDurationMinutes,
+} from "@/lib/study/session-composer";
 
 interface Choice {
   label: string;
@@ -70,6 +78,12 @@ export function StudyClient(props: {
   /** 学習者 preferences (W8-T3 / W8-T4) — 効果音 / 紙吹雪 ON-OFF */
   soundEnabled?: boolean;
   confettiEnabled?: boolean;
+  /** W10-T4: セッション情報 (Phase 1 既存ルート互換のため optional) */
+  sessionDurationMinutes?: SessionDurationMinutes;
+  /** W10-T4: planSize (composeStudySession で計算 / Server から下ろす) */
+  sessionPlanSize?: number;
+  /** W10-T4: セッション ID (URL から伝搬 / 同一セッション識別用) */
+  sessionId?: string;
 }) {
   const {
     learnerId,
@@ -81,6 +95,9 @@ export function StudyClient(props: {
     skill,
     soundEnabled = true,
     confettiEnabled = true,
+    sessionDurationMinutes,
+    sessionPlanSize,
+    sessionId,
   } = props;
   const isWriting = problemType === "writing_essay";
   const router = useRouter();
@@ -94,6 +111,44 @@ export function StudyClient(props: {
   // W8-T2: 連続正解 combo state (1 セッション内のみ有効、不正解 / セッション終了でリセット)
   const [combo, setCombo] = useState<number>(0);
   const [comboJustUpgraded, setComboJustUpgraded] = useState<boolean>(false);
+
+  // W10-T4: セッション集計 state (problemType 横断 / 同一 sessionId 内で持続)
+  const sessionActive =
+    isSessionDurationMinutes(sessionDurationMinutes) &&
+    typeof sessionPlanSize === "number" &&
+    sessionPlanSize > 0;
+  const [sessionAnswers, setSessionAnswers] = useState<
+    Array<{ correct: boolean }>
+  >([]);
+  const [sessionEarnedCoins, setSessionEarnedCoins] = useState<number>(0);
+  const [showSessionComplete, setShowSessionComplete] = useState(false);
+  const [sessionEndReason, setSessionEndReason] = useState<
+    "natural" | "abort" | "overtime"
+  >("natural");
+  const [sessionStartTime] = useState<number>(() => Date.now());
+  const [overtimeOffered, setOvertimeOffered] = useState(false);
+
+  // W10-T4: overtime 監視 (sessionActive な時のみ / 1 回のみ提案)
+  useEffect(() => {
+    if (!sessionActive || overtimeOffered || showSessionComplete) return;
+    if (!isSessionDurationMinutes(sessionDurationMinutes)) return;
+    const interval = window.setInterval(() => {
+      const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
+      if (hasReachedOvertime(sessionDurationMinutes, elapsedSec)) {
+        setOvertimeOffered(true);
+        setSessionEndReason("overtime");
+        setShowSessionComplete(true);
+        window.clearInterval(interval);
+      }
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [
+    sessionActive,
+    overtimeOffered,
+    showSessionComplete,
+    sessionDurationMinutes,
+    sessionStartTime,
+  ]);
 
   // W8-T3 / W8-T4: preferences をモジュール singleton に同期
   useEffect(() => {
@@ -173,11 +228,22 @@ export function StudyClient(props: {
             void playFeedback("correct");
           }
           // W8-T4: 5 問以上連続正解後の終了でレッスン完了 modal を表示
-          if (newCombo >= 5 && !result.nextProblemId) {
+          // W10-T4: ただしセッションモードでは SessionCompleteModal を優先
+          if (newCombo >= 5 && !result.nextProblemId && !sessionActive) {
             setShowLessonComplete(true);
           }
         } else {
           void playFeedback("incorrect");
+        }
+
+        // W10-T4: セッション集計 (problemType 横断 / Phase 1 では LESSON_CORRECT XP=2 ≒ ハネキン換算)
+        // ハネキン獲得は server (DEC-055 LESSON_CORRECT=2) で別途行われる前提のため
+        // ここでは XP delta を一時的な可視化値として持つ (server-of-truth は coin_transactions)
+        if (sessionActive) {
+          setSessionAnswers((prev) => [...prev, { correct: result.correct }]);
+          if (result.correct) {
+            setSessionEarnedCoins((prev) => prev + 2);
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "解答の送信に失敗しました");
@@ -203,6 +269,16 @@ export function StudyClient(props: {
   };
 
   const handleNext = () => {
+    // W10-T4: セッションモードで planSize に到達したら SessionCompleteModal を優先
+    if (
+      sessionActive &&
+      typeof sessionPlanSize === "number" &&
+      sessionAnswers.length >= sessionPlanSize
+    ) {
+      setSessionEndReason("natural");
+      setShowSessionComplete(true);
+      return;
+    }
     if (feedback?.nextProblemId) {
       // 同じ URL へ refresh で次問取得 (server で due/未学習を再評価)
       router.refresh();
@@ -217,6 +293,12 @@ export function StudyClient(props: {
       setComboJustUpgraded(false);
       router.push("/home");
     }
+  };
+
+  // W10-T4: 「ここまでにする」ボタン
+  const handleAbortSession = () => {
+    setSessionEndReason("abort");
+    setShowSessionComplete(true);
   };
 
   // G-5: ことだまトリ mood 計算
@@ -247,6 +329,56 @@ export function StudyClient(props: {
         }}
         onClose={() => setShowLessonComplete(false)}
       />
+
+      {/* W10-T4: セッション完了 modal (planSize 到達 / 「ここまで」/ overtime 提案) */}
+      {sessionActive &&
+        isSessionDurationMinutes(sessionDurationMinutes) &&
+        showSessionComplete && (
+          <SessionCompleteModal
+            open={showSessionComplete}
+            durationMinutes={sessionDurationMinutes}
+            reason={sessionEndReason}
+            summary={summarizeSession(sessionAnswers, sessionEarnedCoins)}
+            onContinue={() => {
+              setShowSessionComplete(false);
+              router.push("/home");
+            }}
+            onContinueStudy={() => {
+              // overtime で「もうすこし やる」が押された場合: モーダルを閉じてセッション続行
+              setShowSessionComplete(false);
+            }}
+            onClose={() => setShowSessionComplete(false)}
+          />
+        )}
+
+      {/* W10-T4: セッションモード時のみ「ここまでにする」ボタン (任意中断 / 罰則ゼロ) */}
+      {sessionActive && !showSessionComplete && (
+        <div
+          className="flex items-center justify-between gap-2"
+          data-session-id={sessionId ?? undefined}
+        >
+          <p
+            className="text-xs tabular-nums text-muted-foreground"
+            data-testid="session-progress-line"
+            data-answered={sessionAnswers.length}
+            data-plan-size={sessionPlanSize}
+          >
+            セッション {sessionAnswers.length} / {sessionPlanSize} もん
+            ({sessionDurationMinutes} ふん)
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={handleAbortSession}
+            data-testid="session-abort-cta"
+            aria-label="セッションを ここまでにする"
+          >
+            <StopCircleIcon className="h-4 w-4" aria-hidden="true" />
+            <span className="ml-1 text-xs">ここまでに する</span>
+          </Button>
+        </div>
+      )}
 
       {/* G-2: listening 問題の TTS audio 再生 UI */}
       {showAudioUi && (
