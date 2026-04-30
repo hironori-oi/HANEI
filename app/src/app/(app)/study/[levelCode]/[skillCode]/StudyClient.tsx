@@ -164,6 +164,31 @@ export function StudyClient(props: {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playCount, setPlayCount] = useState(0);
 
+  // W10-T4 fix (M-A1): session-mode では page.tsx の key を session-stable にしたため
+  // StudyClient は問題遷移で unmount されない。よって「問題が変わったときにリセットすべき
+  // UI state」(選択 / フィードバック / エラー / essay 入力 / 音声再生回数) は明示的に
+  // problemId 変化を観測してリセットする。
+  //
+  // React 公式 "Resetting state when a prop changes" pattern (render 中に prev を比較し
+  // 検知時に同期 setState する) を採用 — useEffect 内 setState は cascading render を
+  // 招くため (react-hooks/set-state-in-effect) 避ける。
+  //
+  // - session-mode 外 (key=problem:<id>) では従来通り unmount による初期化なので冗長だが、
+  //   挙動は同一 (副作用なし) なので分岐せず一律リセット
+  // - combo はセッション内継続が仕様 (W8-T2) のためここでは触らない
+  // - sessionAnswers / sessionEarnedCoins / sessionStartTime / overtimeOffered も
+  //   セッションスコープなので problem 単位ではリセットしない
+  const [prevProblemId, setPrevProblemId] = useState(problemId);
+  if (prevProblemId !== problemId) {
+    setPrevProblemId(problemId);
+    setSelected(null);
+    setFeedback(null);
+    setError(null);
+    setEssayDraft("");
+    setPlayCount(0);
+    setIsPlaying(false);
+  }
+
   const showAudioUi = shouldShowAudioUi(audioUrl, skill);
 
   const handlePlayToggle = () => {

@@ -20,7 +20,7 @@
  *  - 強制終了は **しない**
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   SparklesIcon,
   ArrowRightIcon,
@@ -94,14 +94,24 @@ export function SessionCompleteModal(props: Props) {
     onContinueStudy,
   } = props;
 
+  // W10-T4 fix (M-A2): summary はオブジェクト参照なので毎 render で新規参照になる。
+  // deps に含めると open している間に親 state 変化 (sessionAnswers 増加など) のたびに
+  // effect 再実行 → 二重 confetti / 二重 sound のリスク。
+  // → deps を [open, reason] に絞り、summary は ref snapshot 経由で参照。
+  // ref.current は render 中に直接書き換えると React lint (refs-in-render) で叱られるため
+  // 別 useEffect で同期する。
+  const summaryRef = useRef(summary);
+  useEffect(() => {
+    summaryRef.current = summary;
+  }, [summary]);
   useEffect(() => {
     if (!open) return;
     // overtime は祝福不要 (offer のみ) → confetti / sound は省略
     if (reason !== "overtime") {
-      void triggerConfetti(pickIntensity(reason, summary));
+      void triggerConfetti(pickIntensity(reason, summaryRef.current));
       void playFeedback("level-up");
     }
-  }, [open, reason, summary]);
+  }, [open, reason]);
 
   if (!open) return null;
 
@@ -122,7 +132,17 @@ export function SessionCompleteModal(props: Props) {
       data-accuracy={summary.accuracyPercent}
       data-earned-coins={summary.earnedCoins}
       className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
-      onClick={onClose}
+      onClick={(e) => {
+        // W10-T4 fix (M-A3): overtime 提案 modal は「もうすこし やる」「おしまいに する」の
+        // 明示選択を要求 (DEC-024 罰則ゼロ哲学整合)。背景クリックで dismiss されると
+        // overtimeOffered=true のまま modal が消え、二度と提案されない / セッション状態が
+        // 宙ぶらりんになる UX バグになるため、overtime 時は背景 onClick を無効化する。
+        if (reason === "overtime") {
+          e.stopPropagation();
+          return;
+        }
+        onClose?.();
+      }}
     >
       {motionReduced && (
         <div

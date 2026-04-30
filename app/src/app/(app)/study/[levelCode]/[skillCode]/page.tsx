@@ -139,6 +139,17 @@ export default async function StudyPage({
   // メタ情報を avoid bug for null/undefined
   void and; // import 保持
 
+  // W10-T4 fix (M-A1): session-mode 時は key を session-stable にして StudyClient を持続させる
+  // - session-mode (sessionId 付き) では `session:<id>` で固定 → router.refresh() で次問取得しても
+  //   StudyClient が unmount されず、sessionAnswers / sessionStartTime / overtimeOffered などの
+  //   useState が保持される (planSize 到達 / overtime 提案が正しく発火するための前提)
+  // - session-mode 外 (Phase 1 直リンク) は従来通り problem.id 切替で feedback リセット
+  const sessionRawId =
+    typeof sessionRaw === "string" && sessionRaw.length > 0 ? sessionRaw : undefined;
+  const studyClientKey = sessionRawId
+    ? `session:${sessionRawId}`
+    : `problem:${problem.id}`;
+
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
       <header className="mb-6 flex items-center justify-between">
@@ -155,7 +166,7 @@ export default async function StudyPage({
       </header>
 
       <StudyClient
-        key={problem.id}
+        key={studyClientKey}
         learnerId={learner.id}
         problemId={problem.id}
         problemType={isWritingEssay ? "writing_essay" : "mcq"}
@@ -172,11 +183,7 @@ export default async function StudyPage({
               }).planSize
             : undefined
         }
-        sessionId={
-          typeof sessionRaw === "string" && sessionRaw.length > 0
-            ? sessionRaw
-            : undefined
-        }
+        sessionId={sessionRawId}
       />
     </main>
   );
