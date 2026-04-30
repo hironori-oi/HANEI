@@ -1,28 +1,92 @@
 # PRJ-016 意思決定記録（Decisions）
 
-## DEC-058: W10-T4 5-7 分セッション自動設計 dev 実装完遂（レビュー前 / 2026-04-30 / Dev → CEO 提出）
+## DEC-059: W10-T5 過学習防止「もう少しで終わるよ」UX 実装 → レビュー APPROVE → main push（2026-04-30 / CEO 最終決裁）
 
-- **状況**: DEC-057 (W10-T3 main push) 完遂を受け W10-T4 (P0 / 1.5 人日 / `phase2-gamification-implementation-plan.md` §W10-T4) に着手。dev 部門が「純関数 composeStudySession + SessionPicker + SessionCompleteModal」の 3 軸で 1 atomic commit 実装完了 → CEO レビュー / レビュー部門投入 待ち。
-- **採用設計**:
-  1. **純関数 `composeStudySession({learnerId, durationMinutes, now})`**: AI 呼び出しゼロ / DB I/O ゼロ / `(learner, day, duration)` で deterministic な planSize + review:fresh:weakness 構成比を返す。Phase 2 plan §W10-T4 推定問題数表 (5 分 = 5-8 / 7 分 = 8-12 / 10 分 = 12-18) を内部 PLAN_VARIANTS table で展開し、mulberry32 + cyrb53 派生 hash で variant を選ぶ
-  2. **`/study` 新 Server Component + SessionPicker Client Component**: 三層認可 (`requireAuth` → `getFamilyIdForUser` → `requireLearnerOwner`) → `?dur=` / `?session=<uuid>` 付きで `/study/eiken-N/<skill>` に遷移。「いつもの長さでいい」は `useSyncExternalStore` で localStorage 購読 (effect 内 setState 回避 / lint clean)
-  3. **SessionCompleteModal**: `natural` (planSize 到達) / `abort` (「ここまでにする」) / `overtime` (経過時間 >= duration*1.5) の 3 reason で適切な祝福 + サマリ。overtime は **強制終了せず** 「もうすこし やる」/「おしまいに する」両方を提示（DEC-024 罰則ゼロ哲学整合）
-- **同梱 W10-T3 review minor**:
-  - **M-1**: `tests/e2e/quests.spec.ts` test 1 を「signup → /home で既に 3 件 lazy gen 済 / /quests 遷移後も同 id 集合」spec に書き換え (1 line ではなく ケース全体を spec 整合に書き直し)
-  - **M-2**: `drizzle/0013_w10_coin_idempotency_unique.sql` 新設 (DEC-055 補強 / `coin_transactions(learner_id, reason, reference_id) WHERE reference_id IS NOT NULL` partial UNIQUE INDEX)
-  - **M-4**: `/home/page.tsx` の `getOrGenerateTodayQuests` を `.catch(...) → null fallback` でガード + リボン non-render
-- **新設 / 修正ファイル**:
-  - 新規: `drizzle/0013_w10_coin_idempotency_unique.sql`, `src/lib/study/session-composer.ts`, `src/components/study/{SessionPicker,SessionCompleteModal}.tsx`, `src/app/(app)/study/page.tsx`, `tests/unit/study.session-composer.test.ts` (31 件)
-  - 修正: `src/app/(app)/home/page.tsx`, `src/app/(app)/study/[levelCode]/[skillCode]/{page,StudyClient}.tsx`, `tests/e2e/quests.spec.ts`, `tests/e2e/fixtures/db-fixture.ts`
-- **品質ゲート結果（dev 自己検証）**:
-  - `npx tsc --noEmit`: clean
-  - `npm run lint`: clean (warning / error なし)
-  - `npm run test -- --run`: 573 / 573 passed (新規 31 + 既存 542)
-  - `npx playwright test --list`: 62 tests / 10 files
-- **永続化方針 (CEO 判断ポイント)**: `study_sessions` テーブル / migration 0014 は **本コミットには含めず** W10-T5 へ繰越。理由 = (i) atomic commit のスコープ管理 (ii) Phase 1 では URL 伝搬で十分 (iii) Phase 2 後半で「セッション履歴 / 振り返り」と一緒に DB 変更を最小化したい
+- **状況**: DEC-058 (W10-T4 `29ca2e7` push) 完遂を受け W10-T5 (P1 / 1 人日 / `phase2-gamification-implementation-plan.md` §W10-T5) に即着手。CEO ブリーフ「同梱必須 4 点 = study_sessions 0014 / learner_preferences 拡張 / session_cumulative E2E / overtime_cumulative E2E」を厳守。dev 1 セッション完遂 → レビュー部門 **APPROVE**（Critical / Major 指摘ゼロ / Minor 3 件は後続吸収可）→ CEO 判断で main push 実行。W10 過学習防止 UX を Phase 2 完遂の最終層として被せ、W10 全 5 タスク (T1 ハネキン / T2 Shop / T3 Daily Quest / T4 5-7 分セッション / T5 過学習防止) が atomic に揃う。
+- **採用実装（dev done レポート §1-7 全採用）**:
+  1. **`study_sessions` migration 0014**: `(learner_id, client_session_id)` UNIQUE INDEX で `startOrResumeStudySession` 冪等性 / `(learner_id, session_date)` INDEX で当日 SUM 高速化 / `end_reason` 4 種 (`natural` / `abort` / `overtime` / `hard_limit`)。Phase 2 plan §W10-T4 で繰越した永続化を W10-T5 過学習統計と兼ねて投入（DEC-058 の宣言通り）
+  2. **`study-time.ts` 純関数**: `OVERLEARNING_NUDGE_THRESHOLD_SECONDS=30*60` / `OVERLEARNING_HARD_LIMIT_SECONDS=60*60` / `clampHeartbeatDeltaSeconds(0..60)` / `clampSessionCumulativeSeconds(0..14400)` / `describeTodayMinutes(s) → {tone, primary, hint}` (neutral / warm / celebrate)。罰則ゼロ哲学コピーをコード側で機械化
+  3. **`study-sessions.ts` server actions**: 三層認可 (requireAuth → requireLearnerOwner → familyId スコープ) + SQL `MIN(cap, col + delta)` で原子的 heartbeat / `ended_at IS NULL` ガードで二重 close を no-op 化
+  4. **30 分 nudge (client modal)**: 1 秒 tick で `hasReachedOverlearningNudge(seconds)` 検知 → 2 ボタン (「やすむ」 → endStudySession('abort') / 「もうすこし やる」 → 1 度きり dismiss)。**強制ではなく促し** (DEC-024)
+  5. **60 分 hard_limit (server gate)**: `/study/[level]/[skill]/page.tsx` で `getTodayLearningSeconds()` を server で先取り → 60 分以上なら問題 fetch せず gate ページ (`data-testid="overlearning-hard-limit-gate"`) を返す。コピーは「きょうは じゅうぶん がんばったね。あした また あおうね」(祝福調)
+  6. **保護者ダッシュボード「今日の学習時間」 Card**: `data-testid="today-learning-card"` / `getTodayLearningSeconds(learner.id)` で個別集計 / tone 切替で前向きコピー
+  7. **`learner_preferences.preferredSessionMinutes`** 拡張: W10-T4 SessionPicker の「いつもの長さ」を 5/7/10/null で cross-device 永続化 / `setPreferredSessionMinutes` server action 追加
+- **検証結果**:
+  - **unit 603 件 GREEN** (W10-T4 時点 573 件 + W10-T5 で +30 件 / `study-time.ts` 26 + `learner-preferences` 4)
+  - typecheck / lint / build (Turbopack production / 23 routes) 全 clean
+  - **session_cumulative E2E 2/2 PASS** (port 3100 / 24.4s) — M-A1 リグレッションガード + 30 分 nudge modal
+  - **overtime_cumulative E2E 1/1 PASS** (port 3100 / 23.5s) — 60 分 server gate + DEC-024 streak 不変 + 罰語ゼロ assert
+  - drizzle-kit generate clean / E2E fixture migration 0014 適用成功
+- **付随リファクタ（dev 完遂時に発生 / atomic 同梱）**:
+  - **Turbopack 厳格化対応**: `"use server"` ファイル `learner-preferences.ts` から sync 関数 `normalizePreferences` を `src/lib/study/learner-preferences-normalize.ts` へ分離（Next.js 16 Turbopack で「Server Actions must be async functions」がビルドエラー化したため）
+  - **`E2E_PORT` env 対応**: `playwright.config.ts` が `E2E_PORT` で port 切替可能に (dev 占有 3000 と E2E 3100 共存)
+  - **React 19 純度規則対応**: `useRef<number>(0)` lazy init + `showOverlearningHardLimit` を派生値化（state 不要 / `react-hooks/purity` / `set-state-in-effect` 全解消）
+- **レビュー部門判定（review-w10-t5-overlearning-prevention.md）**: **APPROVE / Critical / Major 指摘ゼロ**
+  - **DEC-024 罰則ゼロ準拠**: 罰語 0 hit (OverlearningModal / hard_limit gate / study-time.ts / dashboard 全文検索) + unit/E2E 両方で `not.toContain("だめ"|"やりすぎ"|"ペナルティ")` 機械化済 / streak は `study-sessions.ts` に write 0 hit で **構造的に減算経路ゼロ**
+  - **K-1 / K-2 準拠**: 56px tap area / 平仮名中心 / 半角数字 / aria-label / role="dialog" 完備
+  - **アーキテクチャ整合性**: migration 0014 libSQL 互換 / `MIN(cap, col + delta)` 1-statement 原子性 / 三層認可全 server action 適用 / React 19 純度 OK
+  - **テストカバレッジ**: unit 30 件で境界 + 罰語排除網羅 / E2E が「reload 越え冪等 / 30 分 nudge / 60 分 server-gate / streak 不変」網羅
+  - **既存機能整合性**: W10-T4 sessionStartTime と W10-T5 cumulative tracking は独立 setInterval で衝突なし / 直リンク (sessionId 無し) は legacy 互換 trackingActive=false だが server-side hard_limit gate は全 entry で効く保険設計あり
+- **Minor 指摘 3 件（後続吸収可 / push 阻害なし）**:
+  - **M-1**: Phase 1 直リンクの cumulative tracking 不在を W10 締め DEC で 1 行明記推奨（→ 本 DEC-059 の本セクション「Minor 指摘」記述で吸収済）
+  - **M-2**: heartbeat の `visibilitychange + sendBeacon` 連携を W11 polish or β 直前で追加推奨（実害最大 10 秒 / 30/60 分閾値精度には影響しない）
+  - **M-3**: `getTodayLearningSeconds` の SUM 集計デノーマライズ案を Phase 3 β 拡大時に再検討
+- **CEO 判断**:
+  - **APPROVE 採用 / W10-T5 atomic commit を `29ca2e7..HEAD  main -> main` で push** （commit メッセージは review レポート §推奨アクション 1 案を採用）
+  - **本番 Turso への migration 0014 適用**: W10-T4 で 0013 を適用したのと同手順 (drizzle migrations / 手動でも CREATE TABLE IF NOT EXISTS なので冪等)
+  - **オーナーへの smoke 確認依頼**: 保護者ダッシュボード「今日 X 分」表示の 1 回手元確認（M-1〜M-3 は CEO 受領 / 後続タスクで吸収）
+- **Phase 2 W10 完遂状況**:
+  - W10-T1 ハネキン経済 ✓ (`6dd1f1a` push 済)
+  - W10-T2 Shop UI ✓
+  - W10-T3 Daily Quest ✓ (`8ff21a7` push 済)
+  - W10-T4 5-7 分セッション ✓ (`29ca2e7` push 済)
+  - W10-T5 過学習防止 ✓ (本 DEC-059 で push)
+  - **→ Phase 2 W10 全 5 タスク完遂** = ハネキン経済 (T1) + 蓄積 (T2) + 達成導線 (T3) + 量の可視化 (T4) + やりすぎ抑制 (T5) が atomic に揃い、Phase 2 ゲーミフィケーションが体験として完成。次は Phase 2 W11 (polish / 保護者 weekly digest 等) もしくは Phase 3 (β 公開準備) をオーナー判断に委ねる
+- **関連**: DEC-058 (W10-T4 push), DEC-057 (W10-T3 push), DEC-055 (W10-T1 ハネキン経済), DEC-024 (罰則ゼロ哲学), DEC-006 (Phase 1 完全無料), `phase2-gamification-implementation-plan.md` §W10-T5, `reports/dev-w10-t5-overlearning-prevention-done.md`, `reports/review-w10-t5-overlearning-prevention.md`
+
+---
+
+## DEC-058: W10-T4 5-7 分セッション自動設計 実装 + M-A1 構造バグ即時修正 → main push（2026-04-30 / CEO 最終決裁）
+
+- **状況**: DEC-057 (W10-T3 `8ff21a7` push) 完遂を受け W10-T4 (P0 / 1.5 人日 / `phase2-gamification-implementation-plan.md` §W10-T4) に即着手。dev `ecf92cc` で本体 + W10-T3 review minor (M-1 / M-2 / M-4) 同梱 atomic commit → レビュー部門 **CONDITIONAL APPROVE**（致命的構造バグ M-A1 + 関連 M-A2 / M-A3 を指摘）→ dev `29ca2e7` で M-A1 + M-A2 + M-A3 を 1 atomic commit で同時修正 → 静的検査 / unit 573 件 / E2E port 3100 quests.spec.ts 4/4 PASS で全緑 → CEO 判断で `8ff21a7..29ca2e7  main -> main` push 完遂。W10-T3 push 直後の continuous CEO call で 1 セッションで W10-T4 完遂。
+- **採用設計（dev done レポート §1-3 全採用）**:
+  1. **純関数 `composeStudySession({learnerId, durationMinutes, now})`**: AI 呼び出しゼロ / DB I/O ゼロ / `(learner, day, duration)` で deterministic な planSize + review:fresh:weakness 構成比を返す。Phase 2 plan §W10-T4 推定問題数表 (5 分 = 5-8 / 7 分 = 8-12 / 10 分 = 12-18) を内部 PLAN_VARIANTS table で展開、mulberry32 + cyrb53 派生 hash で variant 選定（W10-T3 と同じ手法 / 再現性 100%）
+  2. **`/study` Server Component + SessionPicker Client**: 三層認可 (`requireAuth` → `getFamilyIdForUser` → `requireLearnerOwner`) → 3 択カード（K-1 56px タップ領域 / Heroicons / ふりがな-ready / Amber Gold）→ `?dur=&session=<uuid>` 付き遷移。「いつもの長さで」は `useSyncExternalStore` で localStorage 購読（effect 内 setState 回避 / hydration mismatch 警告は W11 polish 候補）
+  3. **SessionCompleteModal**: `natural` (planSize 到達) / `abort` (「ここまでにする」) / `overtime` (経過時間 >= duration*1.5) の 3 reason。**overtime は強制終了せず**「もうすこし やる」/「おしまいに する」両提示で明示選択を強制（DEC-024 罰則ゼロ哲学整合 / M-A3 修正で背景クリック skip 不可化）
+  4. **StudyClient session-mode**: planSize 到達 / 「ここまで」/ overtime 5 秒 polling で session modal 起動 / 既存 LessonCompleteModal は `sessionActive` 時のみ抑制 → session-mode 外の Phase 1 直リンク `/study/eiken-5/vocab` は従来通り
+- **同梱した W10-T3 review minor**:
+  - **M-1**: `tests/e2e/quests.spec.ts` test 1 を「signup → /home で既に 3 件 lazy gen 済 → /quests 遷移後も同 id 集合」spec に書き換え（production 不変）
+  - **M-2**: `drizzle/0013_w10_coin_idempotency_unique.sql` で `coin_transactions(learner_id, reason, reference_id) WHERE reference_id IS NOT NULL` partial UNIQUE INDEX 投入。DEC-055 で謳っていた冪等チェックを **DB 層で強制**
+  - **M-4**: `/home/page.tsx` の `getOrGenerateTodayQuests` を `.catch → null` fallback でガード（リボン非表示で /home 全体エラー化を防止）
+- **致命的レビュー指摘 M-A1 と即時修正（commit `29ca2e7`）**:
+  - **M-A1 構造バグ**: `page.tsx:158` の `<StudyClient key={problem.id} ...>` により router.refresh() で次問題遷移時に StudyClient が unmount → remount し、`sessionAnswers` / `sessionEarnedCoins` / `sessionStartTime` / `overtimeOffered` の useState が **毎問初期化** → planSize 到達 natural 完了 modal が**絶対に発火しない** / overtime polling も `sessionStartTime` リセットで事実上発火不能 / 「セッション X / N もん」進捗ライン常に 0/N 表示
+  - **修正**: `key={sessionId ? "session:<sessionId>" : "problem:<id>"}` に切替で session-mode 中は unmount せず、UI state (selected / feedback / essayDraft) だけ render-time prev 比較 + setState で問題切替時にリセット（"Storing previous render information" 公式パターン採用、`react-hooks/set-state-in-effect` lint 警告を回避）
+  - **副次効果**: W8-T2 combo state も session-mode 中 persist するように → むしろ W8-T2 本来意図する UX に近い改善方向（要 session cumulative E2E で W10-T5 内 ガード追加）
+  - **M-A2**: `SessionCompleteModal` useEffect の deps から `summary` (毎 render 新参照) を除去 → confetti 二重発火リスク解消
+  - **M-A3**: `reason === "overtime"` 時の背景 onClick を無効化 → overtime 提案を必ず明示選択させる（DEC-024 整合）
+- **品質ゲート結果**:
+  - typecheck / lint clean
+  - **unit 573 件 GREEN**（既存 542 + W10-T4 新規 31 / W8-T2 combo 21 件 / W8-T3-T4 audio 15 件 全 PASS / regression なし）
+  - E2E discovery 62 tests / 10 files / port 3100 実走 quests.spec.ts 4/4 PASS
+  - レビュー判定: CONDITIONAL APPROVE → M-A1 + M-A2 + M-A3 修正後 即 APPROVE 相当
+- **push 実行**: `8ff21a7..29ca2e7  main -> main` 完遂（HANEI repo `https://github.com/hironori-oi/HANEI.git`）
+- **永続化方針（CEO 確定）**: `study_sessions` テーブル / migration 0014 は **W10-T5 で投入**。理由 = (i) atomic commit スコープ管理 (ii) W10-T5 過学習防止 UX で `actual_duration_seconds` / `outcome` / `problem_count` / `correct_count` を再利用 (iii) Phase 1 では URL 伝搬で十分機能する
+- **W10-T5 着手判断**: **GO**（過学習防止「もう少しで終わるよ」UX / P1 / 1 人日 / `phase2-gamification-implementation-plan.md` §W10-T5）。W10-T5 内で以下を同梱必須:
+  - **session cumulative E2E 1 件**: `signup → /study?dur=5 → 2 問解答 → SessionCompleteModal data-reason="natural"` で M-A1 修正の regression ガード（レビュー §4 不足カバレッジ #1）
+  - **overtime cumulative E2E 1 件**: 5 分選択 → 7.5 分以上滞在 → overtime modal の明示選択動作確認
+  - **`study_sessions` テーブル**: W10-T4 で繰越した永続化を W10-T5 過学習統計と兼ねて投入
+  - **`learner_preferences` 拡張**: 端末跨ぎ「いつもの長さで」永続化
+- **繰越事項**:
+  - **M-N1** (StudyClient session-abort-cta button K-1 タップ領域 56px) → W11 polish
+  - **N-1** (claimQuestReward `not_completed` reward 0 統一) → W11 polish
+  - **`study-smoke.spec.ts:60` baseline 失敗** → 本修正前 `ecf92cc` でも同箇所失敗 = W10-T4 regression ではない / production build + e2e fixture DB 問題で別タスク調査
+  - **SessionPicker SSR/CSR hydration mismatch** (useSyncExternalStore + localStorage) → W11 polish
+- **影響**:
+  - 開発: `src/lib/study/session-composer.ts` (新規 / 純関数 31 unit), `src/components/study/{SessionPicker,SessionCompleteModal}.tsx` (新規), `src/app/(app)/study/{page.tsx,[levelCode]/[skillCode]/{page.tsx,StudyClient.tsx}}` (改修), `drizzle/0013_w10_coin_idempotency_unique.sql` (M-2 / DB 層冪等強制), `tests/e2e/quests.spec.ts` (M-1 修正), `tests/e2e/fixtures/db-fixture.ts` (migration 追加)
+  - 体験: 学習導線が「ホーム → 時間選択 (5/7/10 分) → 自動構成された問題セット → kotodama-tori celebration」で初めて完結。W10-T1 + T2 + T3 と組み合わせて「達成 → 蓄積 → 報酬 → 振り返り」の閉じたループが体験として通る
+  - W10-T5: 過学習防止「もう少しで終わるよ」UX で「やりすぎ抑制」を最終層として被せ、Phase 2 W10 の 5 タスクを完遂する見通し
 - **罰則ゼロ哲学整合**: 0 問完了でも「きょうも きてくれて ありがとう」/ 不正解多くても「ことだまトリも うれしそう」/ overtime も強制終了なし / 否定形コピーなし (unit test で `(ない|だめ|失敗|やめろ)` regex 排除確認)
-- **次アクション**: CEO レビュー → レビュー部門投入 → 結果に応じて main push（dev は **push しない**）
-- **関連**: DEC-057 (W10-T3 push), DEC-055 (W10-T1 ハネキン経済), DEC-024 (罰則ゼロ哲学), DEC-006 (Phase 1 完全無料), `phase2-gamification-implementation-plan.md` §W10-T4, `reports/dev-w10-t4-session-design-done.md`, `reports/review-w10-t3-daily-quest.md` (M-1 / M-2 / M-4 close 元)
+- **関連**: DEC-057 (W10-T3 push), DEC-055 (W10-T1 ハネキン経済), DEC-024 (罰則ゼロ哲学), DEC-006 (Phase 1 完全無料), `phase2-gamification-implementation-plan.md` §W10-T4 / §W10-T5, `reports/dev-w10-t4-session-design-done.md`, `reports/review-w10-t4-session-design.md`, `reports/dev-w10-t4-session-design-fix-done.md`
 
 ---
 

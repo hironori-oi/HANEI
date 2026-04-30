@@ -24,9 +24,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { submitAnswer } from "@/lib/actions/study";
+import {
+  endStudySession,
+  recordStudyHeartbeat,
+} from "@/lib/actions/study-sessions";
 import { KotodamaTori, pickMood } from "@/components/study/kotodama-tori";
 import { LessonCompleteModal } from "@/components/study/lesson-complete-modal";
 import { SessionCompleteModal } from "@/components/study/SessionCompleteModal";
+import { OverlearningModal } from "@/components/study/OverlearningModal";
 import { ComboCounter } from "@/components/study/combo-counter";
 import { isComboTierUpgrade, nextComboCount } from "@/lib/study/combo";
 import { MAX_REPLAY, canReplay, shouldShowAudioUi } from "@/lib/study/audio-gate";
@@ -46,6 +51,12 @@ import {
   summarizeSession,
   type SessionDurationMinutes,
 } from "@/lib/study/session-composer";
+import {
+  HEARTBEAT_MAX_DELTA_SECONDS,
+  hasReachedOverlearningHardLimit,
+  hasReachedOverlearningNudge,
+  todayMinutesFromSeconds,
+} from "@/lib/study/study-time";
 
 interface Choice {
   label: string;
@@ -84,6 +95,18 @@ export function StudyClient(props: {
   sessionPlanSize?: number;
   /** W10-T4: セッション ID (URL から伝搬 / 同一セッション識別用) */
   sessionId?: string;
+  /**
+   * W10-T5: 過学習防止 - 当日累計学習秒数 (server-rendered baseline).
+   * - getTodayLearningSeconds(learnerId) の結果を server から下ろす
+   * - 30 分 / 60 分 閾値判定 / heartbeat の起点として使う
+   */
+  serverTodayCumulativeSeconds?: number;
+  /**
+   * W10-T5: 過学習防止 - study_sessions DB row id.
+   * - startOrResumeStudySession の結果を server から下ろす
+   * - 設定されていない時は heartbeat / hard_limit 終了 server action を呼ばない (Phase 1 互換)
+   */
+  studySessionDbId?: string;
 }) {
   const {
     learnerId,
@@ -98,6 +121,8 @@ export function StudyClient(props: {
     sessionDurationMinutes,
     sessionPlanSize,
     sessionId,
+    serverTodayCumulativeSeconds = 0,
+    studySessionDbId,
   } = props;
   const isWriting = problemType === "writing_essay";
   const router = useRouter();
@@ -149,6 +174,131 @@ export function StudyClient(props: {
     sessionDurationMinutes,
     sessionStartTime,
   ]);
+
+  // ---------------------------------------------------------------------------
+  // W10-T5: 過学習防止 (cumulative tracking + 30/60 分 閾値)
+  // ---------------------------------------------------------------------------
+  // baselineSeconds = server から下ろした「当日累計秒数」
+  // localElapsedSec = この StudyClient mount 後、heartbeat 反映前のローカル経過秒
+  // total = baselineSeconds + localElapsedSec で 30/60 分閾値を判定する.
+  //
+  // React 19 pure-render 整合:
+  //   - hard_limit は w10t5TodaySeconds から純粋に派生 (state なし)
+  //   - nudge は「1 度だけ表示」のため state にするが、setState は setInterval callback 内で行う
+  //   - lastHeartbeatRef は lazy init (effect setup 時に Date.now() を入れる)
+  const trackingActive = Boolean(studySessionDbId);
+  const [w10t5BaselineSeconds, setW10T5BaselineSeconds] = useState<number>(
+    serverTodayCumulativeSeconds,
+  );
+  const [w10t5LocalElapsedSec, setW10T5LocalElapsedSec] = useState<number>(0);
+  const [showOverlearningNudge, setShowOverlearningNudge] = useState(false);
+  const w10t5LastHeartbeatRef = useRef<number>(0);
+  const w10t5HardLimitEndedRef = useRef<boolean>(false);
+  const w10t5NudgeShownRef = useRef<boolean>(false);
+  // baseline + localElapsed の最新値を setInterval callback から読むための ref-mirror
+  const w10t5BaselineRef = useRef<number>(serverTodayCumulativeSeconds);
+  useEffect(() => {
+    w10t5BaselineRef.current = w10t5BaselineSeconds;
+  }, [w10t5BaselineSeconds]);
+
+  const w10t5TodaySeconds = w10t5BaselineSeconds + w10t5LocalElapsedSec;
+  const w10t5TodayMinutes = todayMinutesFromSeconds(w10t5TodaySeconds);
+  // 派生値 (state なし / render 純粋)
+  const showOverlearningHardLimit =
+    trackingActive && hasReachedOverlearningHardLimit(w10t5TodaySeconds);
+
+  // 1 秒 tick: localElapsed をインクリメント + nudge 閾値を setInterval callback 内で検知
+  // (setState は callback 内なら set-state-in-effect 抵触なし)
+  useEffect(() => {
+    if (!trackingActive) return;
+    if (showOverlearningHardLimit) return;
+    // lazy init (render 中の Date.now() を回避)
+    if (w10t5LastHeartbeatRef.current === 0) {
+      w10t5LastHeartbeatRef.current = Date.now();
+    }
+    const id = window.setInterval(() => {
+      setW10T5LocalElapsedSec((s) => {
+        const newLocal = s + 1;
+        // nudge 閾値: ref から最新 baseline を読み出し
+        if (!w10t5NudgeShownRef.current) {
+          const total = w10t5BaselineRef.current + newLocal;
+          if (hasReachedOverlearningNudge(total)) {
+            w10t5NudgeShownRef.current = true;
+            setShowOverlearningNudge(true);
+          }
+        }
+        return newLocal;
+      });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [trackingActive, showOverlearningHardLimit]);
+
+  // ~10 秒ごとに heartbeat を送信し server の cumulative_seconds を進める
+  useEffect(() => {
+    if (!trackingActive || !studySessionDbId) return;
+    if (showOverlearningHardLimit) return;
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      const elapsedSinceHeartbeat = Math.floor(
+        (now - w10t5LastHeartbeatRef.current) / 1000,
+      );
+      if (elapsedSinceHeartbeat <= 0) return;
+      // clamp on client side too (server 側でも clamp 済 / 多重防御)
+      const delta = Math.min(elapsedSinceHeartbeat, HEARTBEAT_MAX_DELTA_SECONDS);
+      w10t5LastHeartbeatRef.current = now;
+      void recordStudyHeartbeat({
+        learnerId,
+        sessionDbId: studySessionDbId,
+        additionalSeconds: delta,
+      })
+        .then((result) => {
+          // server 値で baseline を置き換え、local をリセット (.then = callback / OK)
+          setW10T5BaselineSeconds(result.todayCumulativeSeconds);
+          setW10T5LocalElapsedSec(0);
+        })
+        .catch(() => {
+          // silent fail-safe (network 一時的な失敗は次の heartbeat で再送される)
+        });
+    }, 10_000);
+    return () => window.clearInterval(id);
+  }, [trackingActive, studySessionDbId, showOverlearningHardLimit, learnerId]);
+
+  // hard_limit 検知時の副作用: endStudySession を 1 度だけ呼ぶ (setState なし / OK)
+  useEffect(() => {
+    if (!showOverlearningHardLimit) return;
+    if (!trackingActive || !studySessionDbId) return;
+    if (w10t5HardLimitEndedRef.current) return;
+    w10t5HardLimitEndedRef.current = true;
+    const finalDelta = Math.min(
+      Math.max(
+        0,
+        Math.floor((Date.now() - w10t5LastHeartbeatRef.current) / 1000),
+      ),
+      HEARTBEAT_MAX_DELTA_SECONDS,
+    );
+    // hard_limit reached: streak は守られる (本 action は streak に介入しない / DEC-024)
+    void endStudySession({
+      learnerId,
+      sessionDbId: studySessionDbId,
+      endReason: "hard_limit",
+      finalAdditionalSeconds: finalDelta,
+    }).catch(() => {
+      // silent fail-safe (UI は既に hard_limit modal を表示中)
+    });
+  }, [
+    showOverlearningHardLimit,
+    trackingActive,
+    studySessionDbId,
+    learnerId,
+  ]);
+
+  const handleOverlearningContinue = () => {
+    setShowOverlearningNudge(false);
+  };
+  const handleOverlearningRest = () => {
+    setShowOverlearningNudge(false);
+    router.push("/home");
+  };
 
   // W8-T3 / W8-T4: preferences をモジュール singleton に同期
   useEffect(() => {
@@ -375,6 +525,24 @@ export function StudyClient(props: {
             onClose={() => setShowSessionComplete(false)}
           />
         )}
+
+      {/* W10-T5: 過学習防止 modal (nudge: 30 分到達 / hard_limit: 60 分到達) */}
+      {/* hard_limit が立っている時は nudge を非表示にする (= hard_limit を優先) */}
+      <OverlearningModal
+        open={showOverlearningHardLimit}
+        variant="hard_limit"
+        todayMinutes={w10t5TodayMinutes}
+        onRest={handleOverlearningRest}
+      />
+      {!showOverlearningHardLimit && (
+        <OverlearningModal
+          open={showOverlearningNudge}
+          variant="nudge"
+          todayMinutes={w10t5TodayMinutes}
+          onRest={handleOverlearningRest}
+          onContinueStudy={handleOverlearningContinue}
+        />
+      )}
 
       {/* W10-T4: セッションモード時のみ「ここまでにする」ボタン (任意中断 / 罰則ゼロ) */}
       {sessionActive && !showSessionComplete && (

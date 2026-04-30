@@ -26,6 +26,7 @@ import {
   EnvelopeIcon,
   ExclamationTriangleIcon,
   ChartBarIcon,
+  ClockIcon,
 } from "@heroicons/react/24/outline";
 
 import {
@@ -44,6 +45,8 @@ import {
   getRecentMistakes,
   shouldSendInactivityReminder,
 } from "@/lib/study/aggregations";
+import { getTodayLearningSeconds } from "@/lib/actions/study-sessions";
+import { describeTodayMinutes } from "@/lib/study/study-time";
 import {
   Card,
   CardContent,
@@ -115,12 +118,16 @@ export default async function ParentDashboardPage({
   await requireLearnerOwner(session.userId, learner.id);
 
   // 4. 集計 (並列)
-  const [summary, exam, mistakes, inactivity] = await Promise.all([
-    getWeeklySummary(db, learner.id),
-    getNearestExamCountdown(db, learner.id),
-    getRecentMistakes(db, learner.id, 5),
-    shouldSendInactivityReminder(db, learner.id, 7),
-  ]);
+  const [summary, exam, mistakes, inactivity, todayLearningSeconds] =
+    await Promise.all([
+      getWeeklySummary(db, learner.id),
+      getNearestExamCountdown(db, learner.id),
+      getRecentMistakes(db, learner.id, 5),
+      shouldSendInactivityReminder(db, learner.id, 7),
+      // W10-T5: 「今日 X 分」 (study_sessions の cumulative_seconds を JST 6:00 境界で集計)
+      getTodayLearningSeconds(learner.id),
+    ]);
+  const todayLabel = describeTodayMinutes(todayLearningSeconds);
 
   const accuracyPct =
     summary.weeklyAccuracy === null
@@ -154,6 +161,42 @@ export default async function ParentDashboardPage({
           </Link>
         </div>
       </header>
+
+      {/* W10-T5: 今日の学習時間 (過学習防止 / 30 分 nudge / 60 分 hard_limit のソース) */}
+      <section aria-labelledby="today-learning" className="mb-8">
+        <h2
+          id="today-learning"
+          className="mb-4 flex items-center gap-2 text-xl font-semibold"
+        >
+          <ClockIcon className="h-6 w-6 text-primary" aria-hidden="true" />
+          今日の学習時間
+        </h2>
+        <Card
+          data-testid="today-learning-card"
+          data-today-minutes={todayLabel.minutes}
+          data-today-tone={todayLabel.tone}
+          className={
+            todayLabel.tone === "celebrate"
+              ? "border-2 border-primary bg-primary/5"
+              : todayLabel.tone === "warm"
+                ? "border-warning/40 bg-warning/5"
+                : ""
+          }
+        >
+          <CardHeader>
+            <CardTitle className="text-base">{todayLabel.primary}</CardTitle>
+            <CardDescription>{todayLabel.hint}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-4xl font-bold tabular-nums text-primary">
+              {todayLabel.minutes} <span className="text-xl">ふん</span>
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              30 分で「ひと休み」を提案、60 分で「きょうは じゅうぶん」と区切ります (DEC-024 罰則ゼロ哲学)。
+            </p>
+          </CardContent>
+        </Card>
+      </section>
 
       {/* セクション 1: 今週の学習サマリー */}
       <section aria-labelledby="weekly-summary" className="mb-10">

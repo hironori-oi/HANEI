@@ -140,13 +140,18 @@ export const learnerProfiles = sqliteTable(
      */
     dailyGoalXp: integer("daily_goal_xp").notNull().default(20),
     /**
-     * 学習者プリファレンス JSON (W8-T3 / W8-T4)
+     * 学習者プリファレンス JSON (W8-T3 / W8-T4 / W10-T5)
      * - soundEnabled: 効果音 ON/OFF (default: true)
      * - confettiEnabled: 紙吹雪演出 ON/OFF (default: true)
-     * 保護者が settings 画面から制御する。
+     * - preferredSessionMinutes: 「いつもの長さ」 5/7/10/null (W10-T5 / cross-device 永続化)
+     * 保護者 / 学習者が settings 画面 + SessionPicker から制御する。
      */
     preferences: text("preferences", { mode: "json" })
-      .$type<{ soundEnabled?: boolean; confettiEnabled?: boolean }>()
+      .$type<{
+        soundEnabled?: boolean;
+        confettiEnabled?: boolean;
+        preferredSessionMinutes?: 5 | 7 | 10 | null;
+      }>()
       .notNull()
       .default(sql`('{"soundEnabled":true,"confettiEnabled":true}')`),
     /**
@@ -1064,6 +1069,73 @@ export const dailyQuests = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// study_sessions (W10-T5 / 過学習防止)
+//
+// 1 行 = 「ある学習者が 1 回 /study/[level]/[skill] を開いてから閉じるまでの単位」.
+// W10-T4 の URL session UUID (= clientSessionId) と 1:1 対応する.
+//
+// 用途:
+//   - 「今日 X 分学習」可視化 (保護者ダッシュボード / 学習画面の上部表示).
+//   - 30 分 / 60 分の overlearning 閾値判定 (DB レイヤを真のソース化 / reload 越え対応).
+//   - 親が「今日のがんばり」を見るための一次資料 (DEC-024 罰則ゼロ哲学整合: 表示は祝福のみ).
+//
+// 不変条件:
+//   - cumulative_seconds >= 0
+//   - ended_at IS NULL = アクティブ / NOT NULL = 終了済
+//   - end_reason は 'natural' / 'abort' / 'overtime' / 'hard_limit' のいずれか (終了時のみ)
+//   - session_date は JST 6:00 境界 (DEC-024 / quest 整合) の 'YYYY-MM-DD'
+//   - (learner_id, client_session_id) は UNIQUE (= URL UUID 単位で 1 行のみ)
+//
+// 罰則ゼロ哲学:
+//   - hard_limit (60 分) 終了時も「ごほうび: ハネキン X 枚 / きょうは おつかれさま」と祝福.
+//   - streak はこのテーブルからは減算しない (streak は answer_logs から日次で再計算).
+// ---------------------------------------------------------------------------
+export const studySessions = sqliteTable(
+  "study_sessions",
+  {
+    id: text("id").primaryKey(),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learnerProfiles.id, { onDelete: "cascade" }),
+    /** JST 6:00 境界の 'YYYY-MM-DD' (= 「今日」のキー / sum 集計の検索キー) */
+    sessionDate: text("session_date").notNull(),
+    /** /study URL に乗る session UUID (= W10-T4 で発行された値). 同じ URL を再訪したら同じ行に集約. */
+    clientSessionId: text("client_session_id").notNull(),
+    /** 5 / 7 / 10 (NULL = session-mode 外で開いたケース / Phase 1 直リンク) */
+    durationMinutes: integer("duration_minutes"),
+    /** セッション開始時刻 (= 行 INSERT 瞬間). server time を使用. */
+    startedAt: integer("started_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    /** セッション終了時刻 (NULL = 進行中). endStudySession で UPDATE. */
+    endedAt: integer("ended_at", { mode: "timestamp" }),
+    /** 当該セッションの累計学習秒数 (heartbeat で += clamped delta). */
+    cumulativeSeconds: integer("cumulative_seconds").notNull().default(0),
+    /** 終了理由 (NULL = 進行中). */
+    endReason: text("end_reason", {
+      enum: ["natural", "abort", "overtime", "hard_limit"],
+    }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    /** (学習者, URL session UUID) で 1 行 = startOrResumeStudySession の冪等性担保 */
+    uniqLearnerClientSession: uniqueIndex(
+      "study_sessions_learner_client_session_idx",
+    ).on(t.learnerId, t.clientSessionId),
+    /** 「今日の累計」 SUM 集計用インデックス */
+    learnerDateIdx: index("study_sessions_learner_date_idx").on(
+      t.learnerId,
+      t.sessionDate,
+    ),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Drizzle inferred types
 // ---------------------------------------------------------------------------
 export type User = typeof users.$inferSelect;
@@ -1125,3 +1197,7 @@ export type NewLearnerInventory = typeof learnerInventory.$inferInsert;
 // W10-T3 / Daily Quests
 export type DailyQuest = typeof dailyQuests.$inferSelect;
 export type NewDailyQuest = typeof dailyQuests.$inferInsert;
+
+// W10-T5 / Study Sessions (過学習防止)
+export type StudySession = typeof studySessions.$inferSelect;
+export type NewStudySession = typeof studySessions.$inferInsert;

@@ -26,6 +26,7 @@ import {
 } from "@/lib/auth/guards";
 import { getLearnersForParent } from "@/lib/learner/repository";
 import { resolveActiveLearner } from "@/lib/study/learner-switch";
+import { getLearnerPreferences } from "@/lib/actions/learner-preferences";
 
 export const metadata = {
   title: "がくしゅうを はじめる",
@@ -71,6 +72,10 @@ export default async function StudyIndexPage({
   // 将来 skill picker を入れる場合はここを SessionPicker の props 化 / 別 step に分離
   const studyTargetPath = `/study/eiken-${learner.targetEikenLevel}/vocab`;
 
+  // W10-T5: cross-device 「いつもの長さ」を server から取得 (localStorage より優先)
+  const prefs = await getLearnerPreferences(activeId);
+  const preferredSessionMinutes = prefs.preferredSessionMinutes;
+
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:py-8">
       {/* 戻る + 学習者スイッチャー */}
@@ -109,7 +114,11 @@ export default async function StudyIndexPage({
         </p>
       </header>
 
-      <SessionPicker learnerId={activeId} studyTargetPath={studyTargetPath} />
+      <SessionPicker
+        learnerId={activeId}
+        studyTargetPath={studyTargetPath}
+        initialPreferredMinutes={preferredSessionMinutes}
+      />
     </main>
   );
 }

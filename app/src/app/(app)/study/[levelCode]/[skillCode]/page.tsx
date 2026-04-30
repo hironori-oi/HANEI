@@ -8,7 +8,7 @@
 
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, HomeIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import { requireAuth, getFamilyIdForUser } from "@/lib/auth/guards";
 import { db } from "@/lib/db/client";
 import { eq, and } from "drizzle-orm";
@@ -19,6 +19,15 @@ import {
   isSessionDurationMinutes,
   type SessionDurationMinutes,
 } from "@/lib/study/session-composer";
+import {
+  getTodayLearningSeconds,
+  startOrResumeStudySession,
+} from "@/lib/actions/study-sessions";
+import {
+  hasReachedOverlearningHardLimit,
+  todayMinutesFromSeconds,
+} from "@/lib/study/study-time";
+import { Button } from "@/components/ui/button";
 import { StudyClient } from "./StudyClient";
 
 // /study/eiken-5 → "5", /study/eiken-4 → "4", /study/eiken-3 → "3"
@@ -104,6 +113,59 @@ export default async function StudyPage({
     );
   }
 
+  // W10-T5: 過学習防止 - 当日累計学習秒数 (server-rendered baseline)
+  // 60 分到達済みの場合は問題取得せず hard_limit gate ページを返す (DB 負荷削減 + 入口で止める)
+  const serverTodayCumulativeSeconds = await getTodayLearningSeconds(learner.id);
+
+  if (hasReachedOverlearningHardLimit(serverTodayCumulativeSeconds)) {
+    const todayMinutes = todayMinutesFromSeconds(serverTodayCumulativeSeconds);
+    return (
+      <main
+        className="mx-auto max-w-2xl px-6 py-10"
+        data-testid="overlearning-hard-limit-gate"
+        data-today-minutes={todayMinutes}
+      >
+        <div className="rounded-2xl border border-primary/30 bg-card p-8 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <SparklesIcon
+              className="h-7 w-7 text-primary"
+              aria-hidden="true"
+            />
+            <h1 className="text-2xl font-bold text-primary">
+              きょうは じゅうぶん
+            </h1>
+          </div>
+          <p className="mb-6 text-base leading-relaxed">
+            きょうは {todayMinutes} ふん がんばったね。あした また あおうね。
+          </p>
+          <Button asChild size="lg" className="min-h-tap-cta w-full">
+            <Link href="/home">
+              <HomeIcon className="mr-1 h-5 w-5" aria-hidden="true" />
+              ホームへ もどる
+            </Link>
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
+  // W10-T5: session-mode の時のみ study_sessions 行を server で確保 (sessionDbId を確定させる)
+  // - Phase 1 直リンク (sessionId なし) では cumulative tracking は無効化 (legacy 互換)
+  let studySessionDbId: string | undefined = undefined;
+  if (sessionRaw && typeof sessionRaw === "string") {
+    try {
+      const startResult = await startOrResumeStudySession({
+        learnerId: learner.id,
+        clientSessionId: sessionRaw,
+        durationMinutes: sessionDurationMinutes,
+      });
+      studySessionDbId = startResult.sessionDbId;
+    } catch {
+      // silent fail-safe (study_sessions 不在環境を想定 / legacy 互換)
+      studySessionDbId = undefined;
+    }
+  }
+
   const problem = await getNextProblem(learner.id, level, skill);
 
   if (!problem) {
@@ -184,6 +246,8 @@ export default async function StudyPage({
             : undefined
         }
         sessionId={sessionRawId}
+        serverTodayCumulativeSeconds={serverTodayCumulativeSeconds}
+        studySessionDbId={studySessionDbId}
       />
     </main>
   );

@@ -33,11 +33,19 @@ import {
   isSessionDurationMinutes,
   writeLastSessionDurationToStorage,
 } from "@/lib/study/session-composer";
+import { setPreferredSessionMinutes } from "@/lib/actions/learner-preferences";
 
 interface SessionPickerProps {
   learnerId: string;
   /** 開始 URL (例: "/study/eiken-5/vocab"). 既存 page と互換 */
   studyTargetPath: string;
+  /**
+   * W10-T5: cross-device「いつもの長さ」 (server-rendered).
+   * - learner_preferences.preferences.preferredSessionMinutes から下ろす
+   * - null = 未設定 (この場合は localStorage の値にフォールバック)
+   * - 5/7/10 が来た場合は localStorage より優先される (cross-device 一貫性)
+   */
+  initialPreferredMinutes?: 5 | 7 | 10 | null;
 }
 
 function generateSessionId(): string {
@@ -81,27 +89,35 @@ function getLastSessionDurationSnapshot(): SessionDurationMinutes | null {
 }
 
 export function SessionPicker(props: SessionPickerProps) {
-  const { learnerId, studyTargetPath } = props;
+  const { learnerId, studyTargetPath, initialPreferredMinutes = null } = props;
   const router = useRouter();
 
   // useSyncExternalStore で localStorage を購読 (storage event で他タブ反映 / SSR null fallback)
   // → effect 内の setState 回避 (react-hooks/set-state-in-effect 整合)
-  const lastDuration = React.useSyncExternalStore(
+  const localLastDuration = React.useSyncExternalStore(
     subscribeToLastSessionStorage,
     getLastSessionDurationSnapshot,
     () => null,
   );
+
+  // W10-T5: server からの preferredSessionMinutes (cross-device) を localStorage より優先
+  // - server に値があれば server 値 (cross-device 一貫性 / 別端末でも同じ既定)
+  // - server が null の場合は localStorage fallback (legacy 互換)
+  const lastDuration: SessionDurationMinutes | null =
+    initialPreferredMinutes ?? localLastDuration;
 
   const start = React.useCallback(
     (duration: SessionDurationMinutes) => {
       if (typeof window !== "undefined") {
         writeLastSessionDurationToStorage(window.localStorage, duration);
       }
+      // W10-T5: server にも cross-device 永続化 (silent fail-safe / UX を阻害しない)
+      void setPreferredSessionMinutes(learnerId, duration).catch(() => {});
       const sessionId = generateSessionId();
       const target = `${studyTargetPath}?dur=${duration}&session=${encodeURIComponent(sessionId)}`;
       router.push(target);
     },
-    [router, studyTargetPath],
+    [router, studyTargetPath, learnerId],
   );
 
   return (

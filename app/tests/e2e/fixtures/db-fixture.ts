@@ -65,6 +65,8 @@ export async function applyMigrations(client: Client): Promise<void> {
     "0012_w10_daily_quests.sql",
     // W10-T4: coin_transactions 冪等チェック partial UNIQUE INDEX (DEC-055 補強)
     "0013_w10_coin_idempotency_unique.sql",
+    // W10-T5: study_sessions テーブル新設 (過学習防止 / 「今日 X 分」可視化)
+    "0014_w10_study_sessions.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);
@@ -125,6 +127,8 @@ export async function seedFixture(client: Client): Promise<{
 
   // 既存 seed を全削除 (冪等)
   for (const tbl of [
+    // W10-T5: study_sessions も flush (signup 起点の E2E は learner_id 別なので必須ではないが安全側)
+    "study_sessions",
     // W10-T3: Daily Quest 行も flush (signup 起点の E2E は learner_id 別なので必須ではないが安全側)
     "daily_quests",
     "user_badges",

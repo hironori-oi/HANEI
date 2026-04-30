@@ -23,10 +23,27 @@ import {
   isValidDailyGoalXp,
   type DailyGoalXp,
 } from "@/lib/study/daily-goal";
+import {
+  normalizePreferences,
+  type NormalizedLearnerPreferences,
+} from "@/lib/study/learner-preferences-normalize";
 
+/**
+ * preferences JSON のスキーマ (W8 + W10-T5 拡張).
+ * - soundEnabled / confettiEnabled: 既存 (W8-T3 / W8-T4)
+ * - preferredSessionMinutes: W10-T5 「いつもの長さ」 cross-device 永続化
+ *   5 / 7 / 10 / null のみ許容 (それ以外は zod が reject)
+ *
+ * NOTE (Turbopack 制約):
+ *   "use server" ファイルから sync 関数 / 型を `export` することは不可なので、
+ *   normalizePreferences / NormalizedLearnerPreferences は @/lib/study/learner-preferences-normalize に切り出す。
+ */
 const PreferencesSchema = z.object({
   soundEnabled: z.boolean().optional(),
   confettiEnabled: z.boolean().optional(),
+  preferredSessionMinutes: z
+    .union([z.literal(5), z.literal(7), z.literal(10), z.null()])
+    .optional(),
 });
 
 const DailyGoalSchema = z.object({
@@ -38,34 +55,7 @@ const DailyGoalSchema = z.object({
     }),
 });
 
-export type LearnerPreferences = z.infer<typeof PreferencesSchema>;
-
-const DEFAULT_PREFS: Required<LearnerPreferences> = {
-  soundEnabled: true,
-  confettiEnabled: true,
-};
-
-/**
- * preferences JSON を normalize する純関数 (テスト容易)。
- * - undefined / null / 不正型は default に倒す
- * - 余計なキーは捨てる
- */
-export function normalizePreferences(
-  raw: unknown,
-): Required<LearnerPreferences> {
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_PREFS };
-  const obj = raw as Record<string, unknown>;
-  return {
-    soundEnabled:
-      typeof obj.soundEnabled === "boolean"
-        ? obj.soundEnabled
-        : DEFAULT_PREFS.soundEnabled,
-    confettiEnabled:
-      typeof obj.confettiEnabled === "boolean"
-        ? obj.confettiEnabled
-        : DEFAULT_PREFS.confettiEnabled,
-  };
-}
+type LearnerPreferences = z.infer<typeof PreferencesSchema>;
 
 /**
  * 学習者の preferences を取得する。
@@ -73,7 +63,7 @@ export function normalizePreferences(
  */
 export async function getLearnerPreferences(
   learnerId: string,
-): Promise<Required<LearnerPreferences>> {
+): Promise<NormalizedLearnerPreferences> {
   const session = await requireAuth();
   const { familyId } = await requireLearnerOwner(session.userId, learnerId);
 
@@ -96,19 +86,27 @@ export async function getLearnerPreferences(
 /**
  * 学習者の preferences を部分更新する (merge)。
  * 認可: 保護者本人が learner の owner であること。
+ *
+ * preferredSessionMinutes (W10-T5):
+ *   - undefined を渡された場合は現状値を維持 (no-op)
+ *   - null を渡された場合は明示的に未設定にリセット
  */
 export async function updateLearnerPreferences(
   learnerId: string,
   patch: LearnerPreferences,
-): Promise<Required<LearnerPreferences>> {
+): Promise<NormalizedLearnerPreferences> {
   const parsed = PreferencesSchema.parse(patch);
   const session = await requireAuth();
   const { familyId } = await requireLearnerOwner(session.userId, learnerId);
 
   const current = await getLearnerPreferences(learnerId);
-  const merged: Required<LearnerPreferences> = {
+  const merged: NormalizedLearnerPreferences = {
     soundEnabled: parsed.soundEnabled ?? current.soundEnabled,
     confettiEnabled: parsed.confettiEnabled ?? current.confettiEnabled,
+    preferredSessionMinutes:
+      parsed.preferredSessionMinutes !== undefined
+        ? (parsed.preferredSessionMinutes as 5 | 7 | 10 | null)
+        : current.preferredSessionMinutes,
   };
 
   await db
@@ -122,6 +120,25 @@ export async function updateLearnerPreferences(
     );
 
   return merged;
+}
+
+/**
+ * 「いつもの長さ」を学習者本人 (= sign-in 中の自分自身が learner かつ family の parent) で
+ * 永続化するための専用 action.
+ *
+ * 既存 updateLearnerPreferences は parent ロール経由を前提としているが、本 action は
+ * /study Picker (子どもが触る画面) からも 1 click で呼べるように切り出している.
+ *
+ * 認可は requireLearnerOwner (= 親が自分の家族の learner を更新する) の枠内.
+ * - Phase 1 では同一アカウントが parent + learner を兼ねるシナリオなので OK.
+ */
+export async function setPreferredSessionMinutes(
+  learnerId: string,
+  minutes: 5 | 7 | 10 | null,
+): Promise<NormalizedLearnerPreferences> {
+  return updateLearnerPreferences(learnerId, {
+    preferredSessionMinutes: minutes,
+  });
 }
 
 /**

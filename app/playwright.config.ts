@@ -13,6 +13,12 @@ import { defineConfig, devices } from "@playwright/test";
 const E2E_DB_PATH =
   process.env.TURSO_DATABASE_URL_E2E ?? "file:./tests/e2e/.tmp/e2e.db";
 
+// W10-T5: dev で port 3000 が占有されている場合に env で切替できるように。
+// 既存挙動 (PORT 未指定) は 3000 を維持。
+const E2E_PORT = Number(process.env.E2E_PORT ?? "3000");
+const E2E_BASE_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? `http://localhost:${E2E_PORT}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   testIgnore: ["**/fixtures/**"],
@@ -23,7 +29,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? "github" : "html",
   use: {
-    baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    baseURL: E2E_BASE_URL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
@@ -45,7 +51,7 @@ export default defineConfig({
     // → build 開始前に .tmp ディレクトリと空 DB ファイルを保証する。
     command:
       "node -e \"const fs=require('fs');fs.mkdirSync('tests/e2e/.tmp',{recursive:true});if(!fs.existsSync('tests/e2e/.tmp/e2e.db'))fs.closeSync(fs.openSync('tests/e2e/.tmp/e2e.db','a'));\" && npm run build && npm run start",
-    url: "http://localhost:3000",
+    url: E2E_BASE_URL,
     // W7 / B-8: 常時 false。dev (`next dev` / `local.db`) が port 3000 を
     // 占有していた場合、Playwright がそれを再利用して E2E が誤った DB を見にいき
     // silent skip / silent fail する事故 (DEC-040 W7 申し送り B-8) を構造的に防ぐ。
@@ -57,6 +63,8 @@ export default defineConfig({
       // path。`:memory:` だと子プロセス間で隔離されるため file: モードで共有する。
       TURSO_DATABASE_URL: E2E_DB_PATH,
       NODE_ENV: "production",
+      // W10-T5: PORT を Next.js `start` に渡すことで E2E_PORT (default 3000) を実際に listen させる。
+      PORT: String(E2E_PORT),
     },
   },
 });
