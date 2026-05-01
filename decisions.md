@@ -1,5 +1,44 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-061: Phase 2 W11 第 2 atomic = W11-T3 Family Leaderboard 先行 GO 判定（2026-05-02 / CEO 着手判断）
+
+- **状況**: DEC-060 で W11-T1 Family Streak 完遂 / commit `15f3b92` (origin/main) push / 本番 Turso に migration 0015 適用済（オーナー報告 2026-05-02）。レビュー APPROVE / Critical/Major 0 / Minor 4（後続吸収可）。オーナー「続きの実装を進めてください」継続マンデート受領。W11 残タスク: T2 親→子応援メッセージ (P0 / 2 人日)、T3 Family Leaderboard (P1 / 1.5 人日)、T4 Daily Push 通知 (P0 / 1.5 人日)、T5 Weekly Digest 強化 (P1 / 0.5 人日)。
+- **判断**: **W11-T3 Family Leaderboard (P1 / 1.5 人日) を W11 第 2 atomic として先行着手 GO**（P0 の T2 を先送り、T4 は外部依存待機）。
+- **採択理由**:
+  1. **W11-T1 知見の最大活用**: T1 で構築した「family_id スコープ + Server Component 直 import + DEC-024 前向きコピー」のパターンを read-only 拡張するだけで完成可能。`getFamilyStreak` の隣に `getFamilyWeeklyLeaderboard(familyId)` を並べる構造的連続性。
+  2. **study-smoke preexisting regression を回避**: T1 着手時に発見した c337bf9 baseline の study UI 経由 click → submitAnswer → study-feedback 表示リグレッションは W11-T2 (kotodama-tori 代読 modal = study UI 拡張) と W11-T4 (Daily Push 通知 = client subscription 経路) には影響するが、**T3 は親 dashboard read path のみで study UI 一切触らない** = regression に独立。
+  3. **Atomic スコープ最小・write path ゼロ**: 既存 `xp_logs` (W7/W8/W10) を週間集計するだけ。新規テーブル不要。SQL は family_id 単一スコープの SELECT のみ。三層認可の 3 層目が SQL レベルで自動成立 = 副作用ゼロ。
+  4. **CEO Trust-but-Verify が容易**: read-only かつ family_id スコープ済 = E2E は DB 直セット → 親 dashboard 表示の確認のみで完結（W11-T1 で確立した E2E 戦略の再利用）。
+  5. **W11-T2 着手前のブロッカー解除に必要な時間を確保**: T2 着手前には study-smoke regression 修復が必須（kotodama-tori 代読 modal は submitAnswer 経路に乗る）。T3 完遂中に並行で study-smoke の影響範囲を把握できる。
+  6. **P0/P1 の判断**: T2 (P0) は 2 人日 + moderation pipeline (LLM or 辞書) + family_messages テーブル新設 + kotodama-tori 代読 modal で重い / 外部依存ありでブロッカー多。T3 (P1) は 1.5 人日 + 既存テーブル read-only で軽量・無依存。**P1 でも atomic として先に取った方が組織全体のスループット最大化**（軽量タスク先行で knowledge 蓄積 + 重量タスクの設計時間を稼ぐ）。
+  7. **HANEI USP 補強**: 「家族内健全競争」(兄が 1 位 / 妹が 2 位 / お母さんが 3 位) は T1 (兄弟救済) と対をなす HANEI 差別化軸の補完ピース。Family Streak (協調) + Family Leaderboard (健全競争) の二項対立で家庭内学習文化を構造化する。
+- **dev へのブリーフ要点（同梱必須）**:
+  1. **`getFamilyWeeklyLeaderboard(familyId, now?)` server function**: 直近 7 日 (JST 6:00 境界) の family 内 learner ごとの XP 合計を集計、降順ソート。SQL は `xp_logs.family_id = ? AND xp_logs.created_at >= ?` を必須 (3 層認可の 3 層目)。返却は `[{learnerId, nickname, weeklyXp, rank, kotodamaToriStage}]`。
+  2. **保護者 dashboard `/parent/dashboard` に Family Leaderboard セクション追加**: T1 Family Streak Card の隣 or 下に `data-testid="family-leaderboard-card"` セクション。同 family 内 learner を XP 降順で `<ol>` 表示。各 row は `data-leaderboard-rank="N"` / `data-learner-id="..."` / `data-weekly-xp="..."` 属性を持つ。
+  3. **DEC-024 罰則ゼロコピー**: 「みんなで がんばってるね」(全体ヘッダ) / 「N 位: {nickname} - {xp} XP」(各 row) / 全員 XP 0 の場合 「今週はまだ。今日 はじめよう」/ 単独 learner の家庭では「今週も {N} XP がんばってるね」と単独表示で「最下位」など罰語を絶対に出さない。
+  4. **順位表示は SVG / Heroicons (`TrophyIcon`) のみ**: 絵文字 (🥇🥈🥉) 一切禁止 (CLAUDE.md 横断ルール)。順位は数字のみ + Heroicons の冠アイコン (1 位のみ表示) で表現。
+  5. **COPPA 準拠**: family_id WHERE が SQL 必須 (グローバル leaderboard を構造的に作れない実装)。家族設定 ON/OFF は P1 として Phase 2 完遂後の polish に回す（最小 atomic を保つ）。
+  6. **kotodama-tori stage 連動**: 各 learner の現在の kotodama-tori stage 情報も結合表示 (T1 で導入した HeartIcon の隣に kotodama-tori stage アイコンを並べる構成)。
+  7. **unit test 追加**: 純関数 `computeWeeklyXpRanking(rows)` を 5+ ケース網羅 (同 XP 同順位 / 0 XP 全員 / 単独 learner / 大量 row / 不正 input 防御)。`src/lib/study/family-leaderboard-ranking.ts` 等に切り出し (W11-T1 で確立した Turbopack `"use server"` 制約対応パターン)。
+  8. **E2E 1 件**: `family-leaderboard.spec.ts` = DB 直接 xp_logs を 2 learner 分セット → 親 dashboard で順位表示・XP 表示・DEC-024 罰語不在を assert (W11-T1 と同パターン)。
+- **受入基準**:
+  - vitest 全件 PASS（W11-T1 時点 619 + 新規 unit test）
+  - typecheck **0 errors** / lint **0 errors / 0 warnings** / next build ✓ (23 routes)
+  - family-leaderboard E2E green
+  - 保護者ダッシュボード `data-testid="family-leaderboard-card"` で正しく表示
+  - DEC-024 / DEC-006 / DEC-003 厳守、family_id スコープが SQL レベルで強制
+  - 既存 learner 個人 streak / family streak ロジックを破壊しない (W7 + W11-T1 不変)
+  - 絵文字一切なし (CLAUDE.md 横断ルール)
+- **報告先**: `projects/PRJ-016/reports/dev-w11-t3-family-leaderboard-done.md`、レビュー部門呼び出しは CEO（次に呼ぶ）
+- **優先度**: P1 (W11 atomic 第 2 弾 / 軽量先行)
+- **次の atomic 候補**: W11-T3 完遂後 →
+  - **A 案**: study-smoke preexisting regression 修復 → W11-T2 着手 (P0 大物 / 2 人日)
+  - **B 案**: W11-T5 Weekly Digest 強化 (P1 / 0.5 人日 / 最軽量) を先に挟んで Phase 2 全進捗 push
+  - W11-T4 Daily Push 通知 (P0 / 1.5 人日) は VAPID 鍵 / Service Worker のオーナー設定待ち = DEC-029 系手動セットアップ枠で後段
+  - CEO は T3 完遂後に再判定。**現時点では A 案優先** (preexisting regression が積み上がるリスク回避)。
+
+---
+
 ## DEC-060: Phase 2 W11-T1 Family 内 Streak 着手 GO 判定（2026-05-01 / CEO 着手判断）
 
 - **状況**: DEC-059 で Phase 2 W10 全 5 タスク (T1-T5) atomic 採用 / `c337bf9` main push 完遂直後、オーナー「phase2 続きの実装を進めてください」継続マンデート受領。`phase2-gamification-implementation-plan.md` §W11 (lines 228-267) は「保護者連動・家族化（7 人日）」で 5 タスク（W11-T1 Family Streak P0 / W11-T2 親→子応援メッセージ P0 / W11-T3 Family Leaderboard P1 / W11-T4 Daily Push 通知 P0 / W11-T5 Weekly Digest 強化 P1）。

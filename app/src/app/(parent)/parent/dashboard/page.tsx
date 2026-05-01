@@ -28,6 +28,7 @@ import {
   ChartBarIcon,
   ClockIcon,
   HeartIcon,
+  TrophyIcon,
 } from "@heroicons/react/24/outline";
 
 import {
@@ -49,6 +50,9 @@ import {
 import { getTodayLearningSeconds } from "@/lib/actions/study-sessions";
 import { describeTodayMinutes } from "@/lib/study/study-time";
 import { getFamilyStreak } from "@/lib/study/family-streak";
+import { getFamilyWeeklyLeaderboard } from "@/lib/study/family-leaderboard";
+import { isAllZeroXp } from "@/lib/study/family-leaderboard-ranking";
+import { getKotodamaStageLabel } from "@/lib/study/kotodama-tori-stage";
 import {
   Card,
   CardContent,
@@ -120,17 +124,30 @@ export default async function ParentDashboardPage({
   await requireLearnerOwner(session.userId, learner.id);
 
   // 4. 集計 (並列)
-  const [summary, exam, mistakes, inactivity, todayLearningSeconds, familyStreak] =
-    await Promise.all([
-      getWeeklySummary(db, learner.id),
-      getNearestExamCountdown(db, learner.id),
-      getRecentMistakes(db, learner.id, 5),
-      shouldSendInactivityReminder(db, learner.id, 7),
-      // W10-T5: 「今日 X 分」 (study_sessions の cumulative_seconds を JST 6:00 境界で集計)
-      getTodayLearningSeconds(learner.id),
-      // W11-T1: 家族のれんぞく X 日 (1 人でも当日学習すれば family streak 維持 / 兄弟救済)
-      getFamilyStreak(familyId),
-    ]);
+  const [
+    summary,
+    exam,
+    mistakes,
+    inactivity,
+    todayLearningSeconds,
+    familyStreak,
+    leaderboard,
+  ] = await Promise.all([
+    getWeeklySummary(db, learner.id),
+    getNearestExamCountdown(db, learner.id),
+    getRecentMistakes(db, learner.id, 5),
+    shouldSendInactivityReminder(db, learner.id, 7),
+    // W10-T5: 「今日 X 分」 (study_sessions の cumulative_seconds を JST 6:00 境界で集計)
+    getTodayLearningSeconds(learner.id),
+    // W11-T1: 家族のれんぞく X 日 (1 人でも当日学習すれば family streak 維持 / 兄弟救済)
+    getFamilyStreak(familyId),
+    // W11-T3: 家族内ランキング (直近 7 日 / 同 family 内のみ可視 / COPPA 準拠 / DEC-024 罰則ゼロ)
+    getFamilyWeeklyLeaderboard(familyId),
+  ]);
+
+  // W11-T3: 全員 0 XP 判定 + 単独 learner 判定 (UI コピー切替に使用 / 罰語ゼロ保証)
+  const leaderboardAllZero = isAllZeroXp(leaderboard);
+  const leaderboardSolo = leaderboard.length === 1;
   const todayLabel = describeTodayMinutes(todayLearningSeconds);
 
   // W11-T1: 家族 streak の表示コピーを罰則ゼロ哲学 (DEC-024) で組み立てる
@@ -248,6 +265,93 @@ export default async function ParentDashboardPage({
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
               ひとりでも 学習したら 家族の れんぞくが つながります (兄弟救済 / DEC-024 罰則ゼロ)。
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* W11-T3: 家族内ランキング (直近 7 日 / 同 family 内のみ可視 / COPPA 準拠 / DEC-024 罰則ゼロ)
+          - 単独 learner: 「今週も N XP がんばってるね」(「最下位」を構造的に出さない)
+          - 全員 0 XP: 「今週はまだ。今日 はじめよう」(前向きコピー)
+          - 通常: 「みんなで がんばってるね」+ 1 位は TrophyIcon, 2 位以下は数字のみ */}
+      <section aria-labelledby="family-leaderboard" className="mb-8">
+        <h2
+          id="family-leaderboard"
+          className="mb-4 flex items-center gap-2 text-xl font-semibold"
+        >
+          <TrophyIcon className="h-6 w-6 text-primary" aria-hidden="true" />
+          みんなで がんばってるね
+        </h2>
+        <Card data-testid="family-leaderboard-card">
+          <CardHeader>
+            <CardTitle className="text-base">
+              {leaderboardSolo
+                ? `今週も ${leaderboard[0]?.weeklyXp ?? 0} XP がんばってるね`
+                : leaderboardAllZero
+                  ? "今週はまだ。今日 はじめよう"
+                  : "直近 7 日の 家族の がんばり"}
+            </CardTitle>
+            <CardDescription>
+              家族の中で みんなが それぞれ つみあげた XP を しょうかいします (COPPA 準拠 / 家族内のみ)。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {leaderboard.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                家族の メンバーが まだ 登録されていません。
+              </p>
+            ) : (
+              <ol className="space-y-2" aria-label="家族の 週間 XP ランキング">
+                {leaderboard.map((row) => {
+                  const stageLabel = row.kotodamaToriStage
+                    ? getKotodamaStageLabel(row.kotodamaToriStage)
+                    : null;
+                  // 全員 0 XP のときは 1 位の冠を出さない (= 健全な前向き表示)
+                  const isFirst = row.rank === 1 && !leaderboardAllZero;
+                  return (
+                    <li
+                      key={row.learnerId}
+                      data-leaderboard-rank={row.rank}
+                      data-learner-id={row.learnerId}
+                      data-weekly-xp={row.weeklyXp}
+                      data-kotodama-stage={row.kotodamaToriStage ?? ""}
+                      aria-label={`${row.rank} 位: ${row.nickname}、今週 ${row.weeklyXp} XP`}
+                      className={
+                        isFirst
+                          ? "flex min-h-tap-cta items-center gap-3 rounded-md border-2 border-primary bg-primary/5 px-4 py-3"
+                          : "flex min-h-tap-cta items-center gap-3 rounded-md border bg-card px-4 py-3"
+                      }
+                    >
+                      <span className="inline-flex h-6 w-8 items-center justify-center text-sm font-bold tabular-nums text-primary">
+                        {row.rank}
+                      </span>
+                      {isFirst ? (
+                        <TrophyIcon
+                          className="h-5 w-5 text-primary"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                      <span className="flex-1 text-sm font-medium">
+                        {row.nickname}
+                      </span>
+                      {stageLabel ? (
+                        <span
+                          className="text-xs text-muted-foreground"
+                          aria-label={`ことだまトリ: ${stageLabel}`}
+                        >
+                          {stageLabel}
+                        </span>
+                      ) : null}
+                      <span className="text-sm font-bold tabular-nums text-primary">
+                        {row.weeklyXp} XP
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+            <p className="mt-3 text-xs text-muted-foreground">
+              直近 7 日の 正解数を 集計しています。みんなで つみあげていきましょう (DEC-024 罰則ゼロ)。
             </p>
           </CardContent>
         </Card>
