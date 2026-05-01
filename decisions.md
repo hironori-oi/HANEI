@@ -1,5 +1,35 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-063: Phase 2 W11 第 4 atomic = W11-T5 Weekly Digest 強化（保護者ダッシュボード Card 版 / read-only / 既存基盤流用）GO 判定（2026-05-02 / CEO 着手判断）
+
+- **状況**: DEC-062 で W11-T2 親→子応援メッセージ完遂 / commit `12d93cf` (origin/main) push / dashboard `cc410ed` push / レビュー APPROVE / Critical/Major 0 / Minor 4（W12 polish 吸収可）/ vitest 49 files / 683 passed / E2E family-message 4/4 + family-leaderboard 6/6 + family-streak 6/6 = 16/16 green。オーナー「推奨通り進めてください」継続マンデート受領（A 案 W11-T5 採用指示 / 保護者ダッシュボードに週次サマリ Card / 家族 streak / 各子 XP / トップ 3 単元 / 来週の励ましコピー / read-only / 既存 `getFamilyWeeklyLeaderboard` 流用可 / DEC-024 罰則ゼロ厳守）。W11 残タスク: T4 Daily Push 通知（P0 / 1.5 人日 / VAPID 鍵 + Service Worker 必要 = オーナー外部設定ブロッカー / 即着手不可）と T5 Weekly Digest 強化（P1 / 0.5 人日 / 即着手可）。
+- **判定**: **GO**（A 案 W11-T5 Weekly Digest 強化、最小 atomic / 0.5 人日 / 既存基盤 read-only 流用 / 新規テーブル無し / 新規 server action 無し / DEC-024 厳守）。
+- **判断根拠**:
+  1. **オーナー指示**: A 案を明示採用、トップ 3 単元 + 来週の励ましコピーを Card 化。
+  2. **W11 完遂率最大化**: T1 ✓ / T3 ✓ / T2 ✓ / T5 完遂で W11 進捗 75% → 100%（4/5、T4 のみオーナー設定待ち）。
+  3. **既存基盤 70% 流用可**: `getFamilyStreak`（W11-T1）+ `getFamilyWeeklyLeaderboard`（W11-T3）+ `answer_logs × problems × skills` JOIN（既存 schema）= 新規 SQL は「家族全体でのトップ 3 単元」1 系統のみ。
+  4. **読み取り専用 / 副作用ゼロ**: write は一切無し、cron も使わない（=`weekly-digest.ts` email service とは別軸 in-app dashboard Card 拡張）。リグレッション影響面が最小。
+  5. **DEC-024 罰則ゼロ哲学の構造的保証**: 全員 0 XP / streak 0 日 / 解答 0 問でも前向きコピーで完結する pure function を切り出し、コピー catalog を pre-curated（罰語混入を構造で封鎖）。
+- **スコープ（atomic 完遂単位）**:
+  1. **`src/lib/study/family-weekly-digest-summary.ts`（純関数 / DB I/O 0）**: `composeWeeklyDigestView(input)` + `pickEncouragementCopy(seed)` + `selectTopSkills(skillCounts, limit=3)` を切り出し（Turbopack `"use server"` sync export ban 対応の 5 度目再適用パターン）。励ましコピー catalog 8 件キュレーション（罰語ゼロ）+ deterministic seed（week-of-year + familyId hash）= 同一週は安定して同じコピー。0 件・1 件・3 件超 skill 全分岐網羅。
+  2. **`src/lib/study/family-weekly-digest.ts`（server-only helper / 副作用無し）**: `getFamilyWeeklyDigest(familyId, now?)` を新設。内部で (a) 既存 `getFamilyStreak(familyId)` (b) 既存 `getFamilyWeeklyLeaderboard(familyId, now)` (c) 新規 SQL (`answer_logs × problems × skills` family-scoped 7 日 JOIN GROUP BY skills.id ORDER BY count DESC LIMIT 3) を `Promise.all` で並列取得 → 純関数 `composeWeeklyDigestView` に渡して view-model を返す。SQL は `eq(learnerProfiles.familyId, familyId)` 必須化で COPPA 準拠の構造的保証（W11-T3 と同パターン）。
+  3. **`/parent/dashboard` (`page.tsx`) に Family Weekly Digest Card 統合**: 家族内ランキング（W11-T3）と「今週の学習サマリー」の間に section 追加。`data-testid="family-weekly-digest-card"` + `data-week-encouragement-key`（コピー key）+ `data-top-skills-count`（top 3 件数）属性 / 4 ピース表示（家族 streak 集約コピー / 各子今週 XP ミニリスト / トップ 3 単元 / 来週の励ましコピー）/ Heroicons (`SparklesIcon` / `BookOpenIcon`) のみ / 罰語ゼロコピー（「家族みんなで よく やった 単元」「来週も みんなで がんばろうね」など）。
+  4. **Unit テスト（≥ 15 ケース）**: `tests/unit/study.family-weekly-digest-summary.test.ts` で `composeWeeklyDigestView` / `pickEncouragementCopy` / `selectTopSkills` 全分岐（0 件 / 1 件 / 2 件 / 3 件 / 4 件以上 / 同数タイ → 安定 ID 順 / null streak / 全員 0 XP / 単独 learner / family メンバー 0 / catalog 完全列挙 / seed 決定論性 / 罰語不在 assert）。
+  5. **E2E 1 件**: `tests/e2e/family-weekly-digest.spec.ts` = 親ログイン → `/parent/dashboard` 訪問 → `data-testid="family-weekly-digest-card"` 可視 + 罰語不在 assert + 来週の励ましコピーが pre-curated catalog のいずれかに含まれる assert（family-leaderboard.spec.ts と同 SQLITE_BUSY mitigation = `test.describe.configure({ mode: "serial" })` + `execWithRetry` + `client.batch` 流用）。
+- **同梱しない（明示的 out-of-scope）**:
+  - 既存 email weekly-digest 拡張（W11-T5 原案 §260-262 はメール HTML 強化だが、オーナー指示は in-app Card 化に明確シフト）→ 別 chunk 化（DEC-064 候補）。
+  - Daily Push 通知（W11-T4 / VAPID 鍵 + Service Worker / オーナー設定待ち）。
+  - 統計の precise XP（既存 leaderboard 同様 answer_logs 近似値 = 「直近 7 日の正解数」を使う / DEC-061 §選択肢 A 流用）。
+- **受入基準**:
+  - typecheck / lint pass（warning 0）
+  - vitest 全 PASS（W11-T2 baseline 683 + 新規 ≥ 15 = ≥ 698）
+  - next build 23 routes（新規ルート無し）
+  - E2E `family-weekly-digest` 2 シナリオ × 2 project = 4 PASS + 既存 family-leaderboard 6 + family-streak 6 + family-message 4 = 16 既存 → **計 ≥ 20 PASS**、リグレッション 0
+  - DEC-024 / DEC-006 / DEC-003 / DEC-055 / DEC-061 / DEC-062 厳守
+- **次の atomic 候補**: W11-T5 完遂後 → **A 案**: study-smoke / study-writing-smoke E2E preexisting `test.describe()` parser エラー修復（task output で観測 / regression / W11-T2 起因ではない既知問題 / 0.5〜1 人日）= W11 完遂後の安定化に着手 / **B 案**: W11-T4 Daily Push 通知（P0 / 1.5 人日）はオーナーの VAPID 鍵 + Service Worker 設定待ち / **C 案**: W12 KPI ダッシュボード（次 milestone 着手）= W11 polish chunk と並走可能 / CEO は W11-T5 完遂後に再判定。**現時点では A 案優先**（W11 完遂直後の安定化）。
+
+---
+
 ## DEC-062: Phase 2 W11 第 3 atomic = W11-T2 親→子の応援メッセージ (kotodama-tori 代読 modal) GO 判定（2026-05-02 / CEO 着手判断・実態スコープ訂正版）
 
 - **状況**: DEC-061 で W11-T3 Family Leaderboard 完遂 / commit `e201de2` (origin/main) push / dashboard `ebe7b29` push / レビュー APPROVE / Critical/Major 0 / Minor 4（後続吸収可）/ vitest 633/633 PASS / E2E family-leaderboard 6/6 green。オーナー「続きの実装を進めてください」継続マンデート受領。W11 残タスク: T2 親→子応援メッセージ (kotodama-tori 代読)、T4 Daily Push 通知 (P0 / 1.5 人日 / VAPID 鍵 + Service Worker 必要 = 外部依存ブロッカー)、T5 Weekly Digest 強化 (P1 / 0.5 人日)。

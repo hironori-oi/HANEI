@@ -21,6 +21,7 @@
 import Link from "next/link";
 import {
   AcademicCapIcon,
+  BookOpenIcon,
   CalendarDaysIcon,
   FireIcon,
   EnvelopeIcon,
@@ -28,6 +29,7 @@ import {
   ChartBarIcon,
   ClockIcon,
   HeartIcon,
+  SparklesIcon,
   TrophyIcon,
 } from "@heroicons/react/24/outline";
 
@@ -52,6 +54,7 @@ import { describeTodayMinutes } from "@/lib/study/study-time";
 import { getFamilyStreak } from "@/lib/study/family-streak";
 import { getFamilyWeeklyLeaderboard } from "@/lib/study/family-leaderboard";
 import { isAllZeroXp } from "@/lib/study/family-leaderboard-ranking";
+import { getFamilyWeeklyDigest } from "@/lib/study/family-weekly-digest";
 import { getKotodamaStageLabel } from "@/lib/study/kotodama-tori-stage";
 import {
   Card,
@@ -132,6 +135,7 @@ export default async function ParentDashboardPage({
     todayLearningSeconds,
     familyStreak,
     leaderboard,
+    weeklyDigest,
   ] = await Promise.all([
     getWeeklySummary(db, learner.id),
     getNearestExamCountdown(db, learner.id),
@@ -143,6 +147,8 @@ export default async function ParentDashboardPage({
     getFamilyStreak(familyId),
     // W11-T3: 家族内ランキング (直近 7 日 / 同 family 内のみ可視 / COPPA 準拠 / DEC-024 罰則ゼロ)
     getFamilyWeeklyLeaderboard(familyId),
+    // W11-T5: 今週のハイライト Weekly Digest (家族 streak 集約 + 各子今週 XP + Top 3 単元 + 励ましコピー)
+    getFamilyWeeklyDigest(familyId),
   ]);
 
   // W11-T3: 全員 0 XP 判定 + 単独 learner 判定 (UI コピー切替に使用 / 罰語ゼロ保証)
@@ -352,6 +358,123 @@ export default async function ParentDashboardPage({
             )}
             <p className="mt-3 text-xs text-muted-foreground">
               直近 7 日の 正解数を 集計しています。みんなで つみあげていきましょう (DEC-024 罰則ゼロ)。
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* W11-T5: 今週の ハイライト (Weekly Digest Card / DEC-063 / DEC-024 罰則ゼロ)
+          - 家族 streak 集約コピー
+          - 各子の今週 XP (leaderboard rank 順)
+          - Top 3 単元 (家族全体の直近 7 日 / answer_logs × problems × skills)
+          - 来週の励ましコピー (pre-curated catalog 8 件 / week-of-year + familyId で deterministic) */}
+      <section aria-labelledby="family-weekly-digest" className="mb-8">
+        <h2
+          id="family-weekly-digest"
+          className="mb-4 flex items-center gap-2 text-xl font-semibold"
+        >
+          <SparklesIcon className="h-6 w-6 text-primary" aria-hidden="true" />
+          今週の ハイライト
+        </h2>
+        <Card
+          data-testid="family-weekly-digest-card"
+          data-week-encouragement-key={weeklyDigest.encouragement.key}
+          data-top-skills-count={weeklyDigest.topSkills.length}
+          data-family-streak-days={weeklyDigest.familyStreakDays}
+        >
+          <CardHeader>
+            <CardTitle className="text-base">
+              {weeklyDigest.familyStreakHeadline}
+            </CardTitle>
+            <CardDescription>
+              直近 7 日の 家族の つみあげを まとめました (家族内のみ / COPPA 準拠)。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* ピース 2: 各子の今週 XP ミニリスト (leaderboard の rank 順を維持) */}
+            <div>
+              <p className="mb-2 text-sm font-medium">
+                家族の 今週の つみあげ
+              </p>
+              {weeklyDigest.perLearnerXp.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  家族メンバーが まだ 登録されていません
+                </p>
+              ) : (
+                <ul
+                  className="space-y-1"
+                  aria-label="家族の 今週の XP ミニリスト"
+                >
+                  {weeklyDigest.perLearnerXp.map((row) => (
+                    <li
+                      key={row.learnerId}
+                      data-digest-learner-id={row.learnerId}
+                      data-digest-weekly-xp={row.weeklyXp}
+                      className="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium">{row.nickname}</span>
+                      <span className="font-bold tabular-nums text-primary">
+                        {row.weeklyXp} XP
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* ピース 3: Top 3 単元 (家族全体 / answer_logs × problems × skills) */}
+            <div>
+              <p className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <BookOpenIcon
+                  className="h-4 w-4 text-primary"
+                  aria-hidden="true"
+                />
+                よく とりくんだ 単元 トップ 3
+              </p>
+              {weeklyDigest.topSkills.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  来週から 単元別の つみあげが 集まっていきます
+                </p>
+              ) : (
+                <ol
+                  className="space-y-1"
+                  aria-label="家族の 今週 トップ 3 単元"
+                >
+                  {weeklyDigest.topSkills.map((s, idx) => (
+                    <li
+                      key={s.skillId}
+                      data-digest-top-skill-id={s.skillId}
+                      data-digest-top-skill-rank={idx + 1}
+                      data-digest-top-skill-count={s.answerCount}
+                      className="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-sm"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="inline-flex h-5 w-5 items-center justify-center text-xs font-bold tabular-nums text-primary">
+                          {idx + 1}
+                        </span>
+                        <span className="font-medium">{s.displayName}</span>
+                      </span>
+                      <span className="font-bold tabular-nums text-primary">
+                        {s.answerCount} 問
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+
+            {/* ピース 4: 来週の励ましコピー (pre-curated catalog / 罰語ゼロ) */}
+            <div className="rounded-md border-2 border-primary/40 bg-primary/5 px-4 py-3">
+              <p
+                data-digest-encouragement-copy
+                className="text-sm font-medium text-primary"
+              >
+                {weeklyDigest.encouragement.copy}
+              </p>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              励まし コピーは 同じ 週は 安定して 同じ 文を 出します (DEC-024 罰則ゼロ)。
             </p>
           </CardContent>
         </Card>
