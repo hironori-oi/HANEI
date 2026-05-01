@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * HANEI - Parent Messages Server Actions (W9-T5)
+ * HANEI - Parent Messages Server Actions (W9-T5 / W11-T2)
  *
  * 親→子応援メッセージの送信 / 取得 / 既読更新。
  *
@@ -13,13 +13,19 @@
  *   - 第三層: 全 INSERT / SELECT / UPDATE は family_id + learner_id の
  *            二重スコープ条件で WHERE 絞り込み
  *
- * 既読更新は学習者側からの操作だが、Phase 1 では学習者ログイン経路を
- * 持たないため「保護者が代理で既読を打つ (家族内)」のみ許可する。
- * (W11 で学習者直アクセスを解禁する際に再評価)
+ * W11-T2 で /home 代読 modal の「ありがとう」 button 経由から markMessageRead が
+ * 呼び出される。学習者直ログイン経路解禁は引き続き Phase 3 で再評価。
+ * (Phase 1-2 は parent session 経由の learner /home 動作で既存 requireParent +
+ *  family scope が正しく通る設計)
+ *
+ * W11-T2 / DEC-062 追加:
+ *   - sendCustomMessage / sendMessageFromTemplate (customBody 経路) に
+ *     validateParentMessageBody (純関数 / 罵倒系・否定系・強制系・PII 辞書) を統合
+ *   - 連投スパム防止 (5 分 5 件以上の同 from→to はリジェクト = "rate_limited")
  */
 
 import { z } from "zod";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db/client";
 import {
@@ -39,6 +45,7 @@ import {
   type MessageCategory,
 } from "@/lib/messages/template-catalog";
 import { resolvePlaceholders } from "@/lib/messages/resolve-placeholders";
+import { validateParentMessageBody } from "@/lib/messages/moderation";
 
 const BODY_MAX = 200;
 const BODY_MIN = 1;
@@ -69,7 +76,11 @@ export type SendMessageResult =
         | "unknown_template"
         | "learner_not_owned"
         | "body_too_long"
-        | "body_too_short";
+        | "body_too_short"
+        // W11-T2 / DEC-062: moderation pipeline
+        | "blocked_word"
+        | "rate_limited";
+      matchedWord?: string;
     };
 
 export type MarkReadResult =
@@ -118,8 +129,9 @@ export async function sendMessageFromTemplate(params: {
 
   // 3. body 確定 (customBody 優先 / なければ placeholder 解決)
   let body: string;
-  if (parsed.data.customBody !== undefined) {
-    body = parsed.data.customBody;
+  const isCustom = parsed.data.customBody !== undefined;
+  if (isCustom) {
+    body = parsed.data.customBody!;
   } else {
     const ctx = await loadPlaceholderContext(parsed.data.toLearnerId, familyId);
     body = resolvePlaceholders(tpl.body, ctx);
@@ -129,7 +141,32 @@ export async function sendMessageFromTemplate(params: {
   if (body.length > BODY_MAX) return { ok: false, reason: "body_too_long" };
   if (body.length < BODY_MIN) return { ok: false, reason: "body_too_short" };
 
-  // 5. INSERT (family_id 必須 + learner is owned)
+  // 5. W11-T2 / DEC-062: moderation pipeline
+  //    customBody 経路のみ moderation を通す (定型 30 種は事前審査済).
+  //    placeholder 解決後の最終 body に対して辞書ベース検証.
+  if (isCustom) {
+    const mod = validateParentMessageBody(body);
+    if (!mod.ok) {
+      if (mod.reason === "too_long")
+        return { ok: false, reason: "body_too_long" };
+      if (mod.reason === "too_short")
+        return { ok: false, reason: "body_too_short" };
+      if (mod.reason === "invalid_type")
+        return { ok: false, reason: "invalid_input" };
+      return {
+        ok: false,
+        reason: "blocked_word",
+        matchedWord: mod.matchedWord,
+      };
+    }
+  }
+
+  // 6. W11-T2 / DEC-062: 連投スパム防止 (同 from→to / 5 分 5 件以上 reject)
+  if (await isRateLimited(session.userId, parsed.data.toLearnerId)) {
+    return { ok: false, reason: "rate_limited" };
+  }
+
+  // 7. INSERT (family_id 必須 + learner is owned)
   const id = `pm_${randomUUID()}`;
   await db.insert(parentMessages).values({
     id,
@@ -173,6 +210,25 @@ export async function sendCustomMessage(params: {
 
   if (body.length > BODY_MAX) return { ok: false, reason: "body_too_long" };
   if (body.length < BODY_MIN) return { ok: false, reason: "body_too_short" };
+
+  // W11-T2 / DEC-062: moderation pipeline (placeholder 解決後の body に対して)
+  const mod = validateParentMessageBody(body);
+  if (!mod.ok) {
+    if (mod.reason === "too_long") return { ok: false, reason: "body_too_long" };
+    if (mod.reason === "too_short") return { ok: false, reason: "body_too_short" };
+    if (mod.reason === "invalid_type")
+      return { ok: false, reason: "invalid_input" };
+    return {
+      ok: false,
+      reason: "blocked_word",
+      matchedWord: mod.matchedWord,
+    };
+  }
+
+  // W11-T2 / DEC-062: 連投スパム防止 (同 from→to / 5 分 5 件以上 reject)
+  if (await isRateLimited(session.userId, parsed.data.toLearnerId)) {
+    return { ok: false, reason: "rate_limited" };
+  }
 
   const id = `pm_${randomUUID()}`;
   await db.insert(parentMessages).values({
@@ -287,6 +343,41 @@ export async function markMessageRead(messageId: string): Promise<MarkReadResult
     );
 
   return { ok: true, readAt: now };
+}
+
+// ---------------------------------------------------------------------------
+// W11-T2 / DEC-062: 連投スパム防止 (5 分 5 件以上 = rate_limited)
+// ---------------------------------------------------------------------------
+const RATE_LIMIT_WINDOW_SECONDS = 300; // 5 分
+const RATE_LIMIT_MAX_MESSAGES = 5;
+
+/**
+ * 同一 from_user_id → 同一 to_learner_id に直近 5 分で
+ * RATE_LIMIT_MAX_MESSAGES 件以上が既に存在するか判定する.
+ *
+ * 引数 fromUserId / toLearnerId は呼び出し側で session + 認可済を前提とする.
+ *
+ * 同 from→to の組合せでのみカウントするため、別 learner / 別親へのメッセージは
+ * 互いに干渉しない.
+ */
+async function isRateLimited(
+  fromUserId: string,
+  toLearnerId: string,
+): Promise<boolean> {
+  const cutoff = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000);
+  // eslint-disable-next-line no-restricted-syntax -- from_user_id + to_learner_id 二重スコープ済
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(parentMessages)
+    .where(
+      and(
+        eq(parentMessages.fromUserId, fromUserId),
+        eq(parentMessages.toLearnerId, toLearnerId),
+        gte(parentMessages.createdAt, cutoff),
+      ),
+    );
+  const count = Number(rows[0]?.count ?? 0);
+  return count >= RATE_LIMIT_MAX_MESSAGES;
 }
 
 // ---------------------------------------------------------------------------

@@ -36,6 +36,7 @@ import { resolveActiveLearner } from "@/lib/study/learner-switch";
 import {
   sendMessageFromTemplate,
   sendCustomMessage,
+  type SendMessageResult,
 } from "@/lib/actions/parent-messages";
 
 export const metadata = {
@@ -79,25 +80,31 @@ export default async function ParentNewMessagePage({
   await requireLearnerOwner(session.userId, learner.id);
 
   // 3. Server Actions: closure-bound (URL 改ざん不可)
-  async function sendTemplateAction(formData: FormData): Promise<void> {
+  //    W11-T2 / DEC-062: SendMessageResult を返して TemplatePicker 側で
+  //    moderation エラー (blocked_word / rate_limited 等) を前向きコピーで表示する.
+  async function sendTemplateAction(
+    formData: FormData,
+  ): Promise<SendMessageResult> {
     "use server";
     const templateCode = formData.get("templateCode");
     const toLearnerId = formData.get("toLearnerId");
     if (typeof templateCode !== "string" || typeof toLearnerId !== "string") {
-      return;
+      return { ok: false, reason: "invalid_input" };
     }
     // 内部で requireAuth + requireParent + requireLearnerOwner を再実行する
-    await sendMessageFromTemplate({ templateCode, toLearnerId });
+    return sendMessageFromTemplate({ templateCode, toLearnerId });
   }
 
-  async function sendCustomAction(formData: FormData): Promise<void> {
+  async function sendCustomAction(
+    formData: FormData,
+  ): Promise<SendMessageResult> {
     "use server";
     const body = formData.get("body");
     const toLearnerId = formData.get("toLearnerId");
     if (typeof body !== "string" || typeof toLearnerId !== "string") {
-      return;
+      return { ok: false, reason: "invalid_input" };
     }
-    await sendCustomMessage({ body, toLearnerId });
+    return sendCustomMessage({ body, toLearnerId });
   }
 
   return (

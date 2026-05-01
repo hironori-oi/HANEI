@@ -71,7 +71,15 @@ import {
   type CountdownVariant,
 } from "@/lib/study/countdown-variant";
 import { loadAccessoriesPageData } from "@/lib/actions/accessories";
-import { getMessagesForLearner } from "@/lib/actions/parent-messages";
+import {
+  getMessagesForLearner,
+  markMessageRead,
+} from "@/lib/actions/parent-messages";
+import {
+  findOldestUnreadMessage,
+  getMessageSenderName,
+} from "@/lib/messages/parent-messages-server";
+import { KotodamaToriModal } from "@/components/messages/kotodama-tori-modal";
 import { getOrGenerateTodayQuests } from "@/lib/actions/quests";
 import { DailyQuestSummaryRibbon } from "@/components/quest/DailyQuestSummaryRibbon";
 import { cn } from "@/lib/utils";
@@ -317,6 +325,25 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   // 表示用残日数 (after の場合は |days|)
   const displayDays =
     daysUntilExam === null ? null : Math.max(0, daysUntilExam);
+
+  // W11-T2 / DEC-062: 最古の未読 1 件を pick → kotodama-tori 代読 modal で push.
+  // messages は desc (新着が先頭) で返るため、findOldestUnreadMessage で末尾から走査.
+  const oldestUnread = findOldestUnreadMessage(messages);
+  let modalSenderName: string | null = null;
+  if (oldestUnread) {
+    modalSenderName = await getMessageSenderName(oldestUnread.id, familyId);
+  }
+
+  // /home から呼ぶ既読更新 server-bound action (formData -> messageId).
+  // 認可は markMessageRead 内部で SQL レベル再確認 (DEC-003 三層認可).
+  async function homeMarkReadAction(formData: FormData): Promise<void> {
+    "use server";
+    const messageId = formData.get("messageId");
+    if (typeof messageId !== "string" || messageId.length === 0) {
+      return;
+    }
+    await markMessageRead(messageId);
+  }
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
@@ -629,6 +656,19 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </CardContent>
         </Card>
       </section>
+
+      {/* W11-T2 / DEC-062: 親→子 応援メッセージ kotodama-tori 代読 modal
+          最古の未読 1 件があれば push 表示. ありがとう click で markMessageRead → close.
+          学習者が未読のまま離脱した場合も、次回 /home 訪問でまた表示される (read_at IS NULL の間). */}
+      {oldestUnread && modalSenderName ? (
+        <KotodamaToriModal
+          messageId={oldestUnread.id}
+          body={oldestUnread.body}
+          learnerNickname={learner.nickname}
+          fromName={modalSenderName}
+          markReadAction={homeMarkReadAction}
+        />
+      ) : null}
 
       <section className="mt-10 rounded-md border bg-muted/30 p-6 text-center">
         <p className="mb-4 text-sm text-muted-foreground">

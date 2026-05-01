@@ -1,5 +1,54 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-062: Phase 2 W11 第 3 atomic = W11-T2 親→子の応援メッセージ (kotodama-tori 代読 modal) GO 判定（2026-05-02 / CEO 着手判断・実態スコープ訂正版）
+
+- **状況**: DEC-061 で W11-T3 Family Leaderboard 完遂 / commit `e201de2` (origin/main) push / dashboard `ebe7b29` push / レビュー APPROVE / Critical/Major 0 / Minor 4（後続吸収可）/ vitest 633/633 PASS / E2E family-leaderboard 6/6 green。オーナー「続きの実装を進めてください」継続マンデート受領。W11 残タスク: T2 親→子応援メッセージ (kotodama-tori 代読)、T4 Daily Push 通知 (P0 / 1.5 人日 / VAPID 鍵 + Service Worker 必要 = 外部依存ブロッカー)、T5 Weekly Digest 強化 (P1 / 0.5 人日)。
+- **重要訂正（CEO 着手前 trust-but-verify）**: 当初 DEC-062 草案は「`family_messages` テーブル新規 + `sendFamilyMessage` server action 新規 + `getUndeliveredFamilyMessage` 新規 + `/parent/messages/new` 拡張」を要件にしていたが、再調査の結果 **W9-D commit `c85d7df`（2026-04-29）で親→子メッセージ基盤は既に完成済**。具体的には:
+  - `parent_messages` テーブル（migration 0008 / `family_id` + `from_user_id` + `to_learner_id` + `template_code` + `body` 200 char + `read_at` + `created_at` / index 2 種）が運用中
+  - `sendMessageFromTemplate` / `sendCustomMessage` server action が三層認可（`requireAuth` → `requireParent` → `requireFamilyMember` → `requireLearnerOwner`）+ zod (1-200 char) + placeholder 解決込みで存在
+  - `getMessagesForLearner` / `getLatestMessageForLearner` / `markMessageRead` 既存
+  - `/parent/messages/new` page が 30 テンプレ × 5 カテゴリ + 200 char textarea + 送信ボタンで完成
+  - `/messages` 学習者受信箱 Server Component 完成、`/home` には「おうえん メッセージ」ボタン（未読バッジ付）既存
+  - `/parent/dashboard` ヘッダーに「メッセージを 送る」CTA 既存
+- **判断**: **W11-T2 = 既存基盤に「kotodama-tori 代読 modal」と「DEC-024 moderation pipeline」の 2 ピースを追加する atomic / 1 人日相当（当初 2 人日見積から半減）として着手 GO**。
+- **採択理由**:
+  1. **既存基盤の最大活用**: W9-D で 7 ファイル / 754 lines のメッセージ送受信 UI が完成済。W11-T2 で kotodama-tori 代読 modal （子側 push 型 UX）と DEC-024 moderation （親側 入力ガード）を追加するだけで HANEI 親子つながり USP が完成。新規テーブル / 新規 server action は不要。
+  2. **W11-T1 / W11-T3 で蓄積した family scope パターンの 4 度目の再利用**: 純関数を server-only ファイル外に隔離（Turbopack 制約）/ DEC-024 前向きコピー / E2E は DB 直 INSERT + /home 訪問 + modal assert に集中。
+  3. **moderation pipeline の最小実装**: 自由記述メッセージの DEC-024 罰則ゼロ強制は、辞書ベース禁止語フィルタで十分（罵倒系 / 否定系 / 強制系）。LLM moderation は Phase 3 で導入。Phase 2 では「定型 30 種 + 辞書フィルタ通過の自由記述 200 char」で atomic 内に収める。
+  4. **CEO 前回懸念の再評価**: T2 の代読 modal は **学習画面の submitAnswer 経路を改変するものではなく、`/home` 訪問時に最古の未読 1 件があれば push 表示する独立 modal**。study UI の click → submitAnswer flow には乗らない。preexisting study-smoke regression からの独立性が確保される。
+  5. **W11-T4 (Daily Push 通知) は VAPID 鍵 / Service Worker のオーナー設定待ち**: T2 → T5 →（オーナー設定後）T4 の順序が安全。
+- **dev へのブリーフ要点（同梱必須 / 既存基盤を破壊しない atomic）**:
+  1. **新規ファイル `src/lib/messages/moderation.ts`（Turbopack 制約対応の純関数）**: `validateParentMessageBody(body: unknown): { ok: true; body: string } | { ok: false; reason: "too_short" | "too_long" | "blocked_word" | "invalid_type"; matchedWord?: string }` を export。文字数: `1 ≤ length ≤ 200`（既存 zod 上限維持 / `parent-messages.ts` の `BODY_MAX=200` と一致）。禁止語辞書は **罵倒系**（「ばか」「あほ」「だめ」「ぐず」）+ **否定系**（「やりすぎ」「サボるな」「ペナルティ」「最下位」）+ **強制系**（「やれ」「やりなさい」※「がんばろう」「がんばれ」は OK / 文脈区別はしない最小ルール）+ **個人情報簡易検出**（電話番号 `\d{2,4}-\d{2,4}-\d{4}` / メール / 住所キーワード「県/市/区」+ 数字 3 桁以上）を最小限実装。pure function / DB I/O 0 / unit test で網羅。
+  2. **既存 server action `sendMessageFromTemplate` / `sendCustomMessage`（`src/lib/actions/parent-messages.ts`）に moderation 統合**: zod 検証 + placeholder 解決後の最終 body に対して `validateParentMessageBody(body)` を呼び、`{ ok: false }` なら reason を `SendMessageResult` に追加（既存 reason union に `"blocked_word"` / `"rate_limited"` を追加）。テンプレ定型単独経路（`customBody` 未指定の `sendMessageFromTemplate`）は moderation skip（カタログは事前審査済）→ customBody 経路と sendCustomMessage のみ通す。
+  3. **連投スパム防止（同 server action 内）**: 同一 `from_user_id` → 同一 `to_learner_id` に 5 分以内 5 件以上が存在する場合は reject。`SELECT COUNT(*) FROM parent_messages WHERE from_user_id = ? AND to_learner_id = ? AND created_at > ?(now - 300s)` を使う。reason として `"rate_limited"` を `SendMessageResult` に追加。
+  4. **新規 client コンポーネント `src/components/messages/kotodama-tori-modal.tsx`**: props = `{ messageId, body, learnerNickname, fromName }`。`useState(open=true)` で初期表示、kotodama-tori 既存 SVG（or `CharacterWithAccessories` 小サイズ）+ 「{learnerNickname}さんに、{fromName} から メッセージだよ」+ 親の文言（既存改行 / placeholder 既解決済 / `<p whitespace-pre-line>`）+ 「ありがとう」ボタンで `markMessageRead(messageId)` server action 呼び出し → close。背景クリックで誤閉じ抑制（W10-T5 / W11-T1 同パターン / `e.target === e.currentTarget` 抑制）。`data-testid="family-message-modal"` + `data-message-id` 属性。K-1 56px tap area / role="dialog" / aria-labelledby / 平仮名中心。閉じた後の再表示は次回 /home 訪問でも未読が残っていればまた表示（learner が「ありがとう」を押すまで毎回 push）。
+  5. **`/home` Server Component に modal 統合**: 既存 `getMessagesForLearner(learner.id)` の結果から `messages.find(m => m.readAt === null)` で **最古の未読** を 1 件取り出し（既存配列は新着順 desc なので「最古の未読」は `[...messages].reverse().find(...)` または別途 SELECT）、存在すれば KotodamaToriModal を render。`fromName` は `parent_messages.from_user_id` から `users.display_name` を取得（必要なら `getMessageSenderName(messageId)` helper を `src/lib/messages/parent-messages-server.ts` に追加 / `requireFamilyMember` で family scope 担保）。複数親アカウントのケースで誰のメッセージか分かるようにする。
+  6. **既存 `markMessageRead` server action の docstring 更新**: 既存ファイル `src/lib/actions/parent-messages.ts` の冒頭 docstring（line 16-19）「Phase 1 では学習者ログイン経路を持たないため」コメントを「W11-T2 で /home 代読 modal の「ありがとう」 button 経由から呼び出される。学習者直ログイン経路解禁は引き続き Phase 3 で再評価」に書き換え。実装変更は不要（既存 `requireAuth` + `requireParent` + family scope は parent session 経由の learner /home 動作で正しく通る）。
+  7. **絵文字一切禁止（CLAUDE.md 横断ルール）**: kotodama-tori アイコンは既存 SVG / `CharacterWithAccessories`。Heroicons（`HeartIcon` / `EnvelopeOpenIcon` / `SparklesIcon` 等）のみ使用。定型文も「お疲れさま」「ファイト」「うれしいね」など自然な日本語のみ。
+  8. **DEC-024 罰則ゼロ厳守（親側 UI）**: 親が moderation で blocked_word を含むメッセージを送ろうとすると `/parent/messages/new` UI に「やさしい ことばで おくろう」と前向き案内（赤エラー警告ではなく案内 tone）。具体的禁止語をユーザに見せず、「このメッセージは おくれないかも。ことばを やわらかく してみよう」程度に留める（DEC-024 / 子供を傷つけない親への教育）。
+  9. **Unit test 追加**: 純関数 `validateParentMessageBody` 12+ ケース（空文字列 / 1 文字 / 200 文字 / 201 文字 / 罵倒系各種 / 否定系各種 / 強制系 / 電話番号 / メール / 住所 / null / undefined / 非文字列 / 「がんばろう」OK 確認 / 連続空白のみ）+ moderation 統合済み `sendCustomMessage` のリジェクト確認 unit test 数件。
+  10. **E2E 1 件**: `tests/e2e/family-message.spec.ts` = ① DB に `parent_messages` 直接 INSERT で未読メッセージ 1 件作成 → 親 session で /home 訪問 → modal 表示 assert（`data-testid="family-message-modal"` 可視 + body テキスト含有 + 罰語不在 assert）→ 「ありがとう」click → DB の `read_at` IS NOT NULL を assert → reload で modal 非表示。② 親 /parent/messages/new で「だめ」を含む custom メッセージ送信試行 → エラーメッセージ表示 assert → 通常文（「がんばろう」）で送信成功 assert。study-smoke 経路を一切踏まないため preexisting regression 影響なし。SQLITE_BUSY 対策に W11-T3 で確立した `test.describe.configure({ mode: "serial" })` + `execWithRetry` + `client.batch` パターンを再利用。
+- **受入基準**:
+  - vitest 全件 PASS（W11-T3 時点 633 + 新規 12+ 件 ≥ 645 件）
+  - typecheck **0 errors** / lint **0 errors / 0 warnings** / next build ✓（既存 23 routes / 新規ルート無し）
+  - 新規マイグレーション無し（既存 `parent_messages` 流用）
+  - family-message E2E green / 代読 modal 表示 + 「ありがとう」 click で `read_at` セット + moderation reject 確認
+  - DEC-024 罰則ゼロ哲学厳守（UI コピー + moderation 双方で構造的保証 / 罰語 0 hit）
+  - DEC-003 三層認可（既存 server action 流用 / SQL レベル family_id 必須維持）
+  - DEC-006 完全無料（課金導線ゼロ）
+  - DEC-055 idempotency（既存 `markMessageRead` の `already_read` reason で同一 messageId 複数 click が安全）
+  - 既存 W9-D / W11-T1 / W11-T3 機能を破壊しない（regression check）
+  - 絵文字一切なし
+- **報告先**: `projects/PRJ-016/reports/dev-w11-t2-family-message-done.md`、レビュー部門呼び出しは CEO（次に呼ぶ）
+- **優先度**: P0（W11 atomic 第 3 弾 / HANEI 親子つながり差別化軸完成）/ 1 人日相当
+- **次の atomic 候補**: W11-T2 完遂後 →
+  - **A 案**: W11-T5 Weekly Digest 強化（P1 / 0.5 人日 / 最軽量）で Phase 2 W11 を 4/5 まで完遂
+  - **B 案**: study-smoke preexisting regression 修復（溜まる前に解消）
+  - W11-T4 Daily Push 通知（P0 / 1.5 人日）は VAPID 鍵 / Service Worker のオーナー設定待ち
+  - CEO は T2 完遂後に再判定。**現時点では A 案優先**（W11 完遂率を最大化）。
+
+---
+
 ## DEC-061: Phase 2 W11 第 2 atomic = W11-T3 Family Leaderboard 先行 GO 判定（2026-05-02 / CEO 着手判断）
 
 - **状況**: DEC-060 で W11-T1 Family Streak 完遂 / commit `15f3b92` (origin/main) push / 本番 Turso に migration 0015 適用済（オーナー報告 2026-05-02）。レビュー APPROVE / Critical/Major 0 / Minor 4（後続吸収可）。オーナー「続きの実装を進めてください」継続マンデート受領。W11 残タスク: T2 親→子応援メッセージ (P0 / 2 人日)、T3 Family Leaderboard (P1 / 1.5 人日)、T4 Daily Push 通知 (P0 / 1.5 人日)、T5 Weekly Digest 強化 (P1 / 0.5 人日)。

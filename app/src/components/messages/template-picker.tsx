@@ -17,6 +17,7 @@
 
 import { useState, useTransition } from "react";
 import {
+  ExclamationTriangleIcon,
   HeartIcon,
   PaperAirplaneIcon,
   PencilSquareIcon,
@@ -32,16 +33,49 @@ import {
   type MessageCategory,
   type MessageTemplateDef,
 } from "@/lib/messages/template-catalog";
+import { describeModerationReason } from "@/lib/messages/moderation";
+
+/** SendMessageResult の最小構造 (server action と一致 / W11-T2) */
+type SendErrorReason =
+  | "invalid_input"
+  | "unknown_template"
+  | "learner_not_owned"
+  | "body_too_long"
+  | "body_too_short"
+  | "blocked_word"
+  | "rate_limited";
+
+type SendResultLike = { ok: true } | { ok: false; reason: SendErrorReason };
 
 interface Props {
   /** 送信先 learner ID (closure-bound action 側で再検証される) */
   toLearnerId: string;
-  /** Server Action: { templateCode, toLearnerId } を取って送信 */
-  sendTemplateAction: (formData: FormData) => Promise<void>;
-  /** Server Action: { body, toLearnerId } を取って送信 (custom) */
-  sendCustomAction: (formData: FormData) => Promise<void>;
+  /** Server Action: { templateCode, toLearnerId } を取って送信 / 結果を返す */
+  sendTemplateAction: (formData: FormData) => Promise<SendResultLike | void>;
+  /** Server Action: { body, toLearnerId } を取って送信 (custom) / 結果を返す */
+  sendCustomAction: (formData: FormData) => Promise<SendResultLike | void>;
   /** body 最大長 (BODY_MAX = 200) */
   bodyMax?: number;
+}
+
+function reasonToUserMessage(reason: SendErrorReason): string {
+  switch (reason) {
+    case "blocked_word":
+      return describeModerationReason("blocked_word");
+    case "rate_limited":
+      return describeModerationReason("rate_limited");
+    case "body_too_long":
+      return describeModerationReason("too_long");
+    case "body_too_short":
+      return describeModerationReason("too_short");
+    case "learner_not_owned":
+      return "この おこさま に メッセージを おくれません。";
+    case "unknown_template":
+      return "テンプレートが みつかりません。";
+    case "invalid_input":
+    default:
+      return describeModerationReason("invalid_type");
+  }
 }
 
 export function TemplatePicker({
@@ -56,6 +90,9 @@ export function TemplatePicker({
   const [customBody, setCustomBody] = useState<string>("");
   const [isCustom, setIsCustom] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // W11-T2 / DEC-062: moderation エラー (blocked_word / rate_limited 等) の前向き案内
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [okMessage, setOkMessage] = useState<string | null>(null);
 
   const templatesInCategory: ReadonlyArray<MessageTemplateDef> =
     MESSAGE_TEMPLATES.filter((t) => t.category === activeCategory);
@@ -192,8 +229,16 @@ export function TemplatePicker({
             {!isCustom ? (
               <form
                 action={(fd) => {
-                  startTransition(() => {
-                    sendTemplateAction(fd);
+                  setErrorMessage(null);
+                  setOkMessage(null);
+                  startTransition(async () => {
+                    const r = await sendTemplateAction(fd);
+                    if (!r) return;
+                    if (r.ok === false) {
+                      setErrorMessage(reasonToUserMessage(r.reason));
+                    } else {
+                      setOkMessage("おくりました。とどくのを たのしみに してね。");
+                    }
                   });
                 }}
               >
@@ -225,8 +270,16 @@ export function TemplatePicker({
             ) : (
               <form
                 action={(fd) => {
-                  startTransition(() => {
-                    sendCustomAction(fd);
+                  setErrorMessage(null);
+                  setOkMessage(null);
+                  startTransition(async () => {
+                    const r = await sendCustomAction(fd);
+                    if (!r) return;
+                    if (r.ok === false) {
+                      setErrorMessage(reasonToUserMessage(r.reason));
+                    } else {
+                      setOkMessage("おくりました。とどくのを たのしみに してね。");
+                    }
                   });
                 }}
               >
@@ -254,6 +307,32 @@ export function TemplatePicker({
               </form>
             )}
           </div>
+
+          {/* W11-T2 / DEC-062: moderation エラー表示 (前向き案内 / 罰語ゼロ) */}
+          {errorMessage ? (
+            <div
+              role="alert"
+              data-testid="moderation-error"
+              className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100"
+              aria-live="polite"
+            >
+              <ExclamationTriangleIcon
+                className="mt-0.5 h-5 w-5 shrink-0"
+                aria-hidden="true"
+              />
+              <p className="leading-relaxed">{errorMessage}</p>
+            </div>
+          ) : null}
+          {okMessage ? (
+            <p
+              role="status"
+              data-testid="send-success"
+              className="text-sm font-bold text-primary"
+              aria-live="polite"
+            >
+              {okMessage}
+            </p>
+          ) : null}
         </Card>
       ) : (
         <p className="text-sm text-muted-foreground" aria-live="polite">
