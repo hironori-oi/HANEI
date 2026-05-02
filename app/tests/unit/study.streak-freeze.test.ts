@@ -18,6 +18,7 @@ import {
   isFirstDayOfMonthJst,
   isExamDateBonusDay,
   grantFreezeTicket,
+  grantFreezeTicketsN,
   applyStreakFreeze,
 } from "@/lib/study/streak-freeze";
 import { applyLearnDayUpdate } from "@/lib/study/streak";
@@ -90,6 +91,63 @@ describe("grantFreezeTicket", () => {
     expect(grantFreezeTicket(99)).toEqual({
       newCount: FREEZE_MAX_TICKETS,
       granted: false,
+    });
+  });
+});
+
+describe("grantFreezeTicketsN (W12-T2.5 / DEC-067)", () => {
+  it("0 + n=1 -> +1 枚 (granted=1)", () => {
+    expect(grantFreezeTicketsN(0, 1)).toEqual({ newCount: 1, grantedCount: 1 });
+  });
+
+  it("0 + n=2 -> +2 枚 (granted=2 / 上限 2)", () => {
+    expect(grantFreezeTicketsN(0, 2)).toEqual({ newCount: 2, grantedCount: 2 });
+  });
+
+  it("1 + n=2 -> +1 枚で early break (上限到達 / granted=1)", () => {
+    expect(grantFreezeTicketsN(1, 2)).toEqual({ newCount: 2, grantedCount: 1 });
+  });
+
+  it("2 + n=2 -> 既に上限 (granted=0 / no-op)", () => {
+    expect(grantFreezeTicketsN(2, 2)).toEqual({ newCount: 2, grantedCount: 0 });
+  });
+
+  it("0 + n=0 -> no-op (防御)", () => {
+    expect(grantFreezeTicketsN(0, 0)).toEqual({ newCount: 0, grantedCount: 0 });
+  });
+
+  it("0 + n=-5 -> no-op (負値防御)", () => {
+    expect(grantFreezeTicketsN(0, -5)).toEqual({
+      newCount: 0,
+      grantedCount: 0,
+    });
+  });
+
+  it("0 + n=NaN -> no-op (NaN 防御)", () => {
+    expect(grantFreezeTicketsN(0, Number.NaN)).toEqual({
+      newCount: 0,
+      grantedCount: 0,
+    });
+  });
+
+  it("0 + n=1.7 -> Math.floor で 1 として扱う (granted=1)", () => {
+    expect(grantFreezeTicketsN(0, 1.7)).toEqual({
+      newCount: 1,
+      grantedCount: 1,
+    });
+  });
+
+  it("0 + n=100 -> 上限尊重 (granted=2 / 構造的 max=2)", () => {
+    expect(grantFreezeTicketsN(0, 100)).toEqual({
+      newCount: 2,
+      grantedCount: 2,
+    });
+  });
+
+  it("0 + n=Infinity -> no-op (Infinity 防御)", () => {
+    expect(grantFreezeTicketsN(0, Number.POSITIVE_INFINITY)).toEqual({
+      newCount: 0,
+      grantedCount: 0,
     });
   });
 });

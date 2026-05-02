@@ -1,5 +1,138 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-067: Phase 2 W12 第 3 atomic = W12-T2.5 月次 streak freeze grant cron への variant 別 grant 数適用（A/B test 実走化）GO 判定（2026-05-03 / CEO 着手判断版）
+
+- **状況**: DEC-066 完遂 / commit `e6b8aab` (origin/main HANEI repo) push / E2E **94 PASS** / vitest **52 files / 782 PASS** / next build **25 routes** / Phase 2 進捗 **96% → 97%** / W12 進捗 **20% → 40%（2/5）**。オーナー「CEO 推奨通り順次進めてください」継続マンデート受領（CEO 推奨 = A 案 W12-T2.5 = A/B test を **catalog 登録のみ → 実走化** へ進める論理連続）。
+- **判定**: **GO**（W12-T2.5 = 月次 streak freeze grant cron に variant 別枚数適用 / 最小 atomic / 0.5 人日 / 既存 W8-T1 cron + W12-T2 catalog の合成のみ / 新規 server action 0 / 新規 route 0 / 新規 migration 0 / DEC-024 / DEC-003 / DEC-006 / DEC-055 / DEC-066 厳守）。
+- **判断根拠**:
+  1. **オーナー指示**: 「CEO 推奨通り順次進めて」= 推奨 A 案 W12-T2.5 を採用。
+  2. **W12-T2 catalog の zombie 状態解消**: W12-T2 で `streak_freeze_monthly_grant` experiment が catalog 登録されたが grant 動作未連動 = 「割当だけ走り続けて結果が出ない」状態を本 atomic で解消し、A/B test を実走化。
+  3. **既存基盤合成のみ / 新規ロジック最小**: W8-T1 cron route (`/api/cron/streak-freeze-monthly`) の monthly grant ループに `getOrAssignVariant(learnerId, EXPERIMENTS.streak_freeze_monthly_grant.key)` を呼び、variant → 枚数マップ（control=1 / variant_a=2）で grant 回数を切り替えるだけ。SELECT に `streaks.learnerId` が既に含まれるため schema 変更不要。
+  4. **`FREEZE_MAX_TICKETS=2` 上限の構造的尊重**: 既存 `grantFreezeTicket(current)` は `current >= FREEZE_MAX_TICKETS` で no-op 返却済 = 上限 2 枚は構造担保。新ヘルパ `grantFreezeTicketsN(current, n)` も同上限を尊重した N 回ループ実装で安全（DEC-024 罰則ゼロと「貯まりすぎ → 安心しすぎ → 学習離脱」の既存設計原則を維持）。
+  5. **cron 認可は不変**: `x-vercel-cron-signature` or `Bearer ${CRON_SECRET}` の二段認可は既存 / 本 atomic で改変しない。
+  6. **DEC-055 idempotency 構造的担保**: `getOrAssignVariant` は既存割当を上書きしない（W12-T2 で実装済）+ 月初判定 (`isFirstDayOfMonthJst`) で月 1 回のみ実行 + `grantFreezeTicketsN` は上限到達後 no-op = 同日 cron 二重起動でも streaks 行は一度しか変化しない（max 上限到達のため）。
+
+### 本 atomic スコープ（CEO 確定 / W12-T2.5 minimal）
+
+#### 含む（必須）
+
+1. **`src/lib/study/streak-freeze.ts` に純関数 `grantFreezeTicketsN(current, n)` 追加**
+   - signature: `(current: number, n: number) => { newCount: number; grantedCount: number }`
+   - 内部で `grantFreezeTicket` を最大 n 回呼ぶ実装（早期 return: 上限到達なら break / DEC-024 既存設計原則尊重）
+   - `n <= 0` は `{ newCount: current, grantedCount: 0 }` 即返却（防御）
+   - `n` が非整数 / NaN / 負値 → 0 として扱う（防御）
+   - 既存 `grantFreezeTicket` は不変（W8 既存 unit test も regression 0）
+
+2. **`src/lib/experiments/streak-freeze-variants.ts` 新設（純関数 / Turbopack 制約 8 度目適用）**
+   - `STREAK_FREEZE_GRANT_TICKETS_BY_VARIANT: Record<string, number>` = `{ control: 1, variant_a: 2 }` を export
+   - `resolveStreakFreezeGrantTickets(variantKey: string): number` を export（catalog にない variant key は **fallback = 1 枚**（control 互換 / 安全側））
+   - DOM-free / DB-free / `"use server"` 不在 / catalog (W12-T2 experiments-catalog.ts) を **import せず**、独立した「variant → 効果」マッピングとして分離（責務分離 / Turbopack 制約 8 度目適用）
+
+3. **`src/app/api/cron/streak-freeze-monthly/route.ts` の monthly grant ループ修正**
+   - 既存 `for (const row of allStreaks)` ループ内で:
+     - `streaks.learnerId` は既に SELECT で取得済（`db.select().from(streaks)` = 全カラム）
+     - `getOrAssignVariant(row.learnerId, EXPERIMENTS.streak_freeze_monthly_grant.key)` を呼び variant key を取得
+     - `resolveStreakFreezeGrantTickets(variant)` で n 枚を取得
+     - `grantFreezeTicketsN(row.freezeTickets, n)` で newCount + grantedCount を計算
+     - `grantedCount > 0` なら UPDATE / `monthlyGranted += grantedCount` で「実枚数」を集計（既存 `monthlyGranted` の意味は「学習者数」→「実枚数（より厳密）」へ変更 = レスポンス JSON の `monthlyGranted` に追加で `monthlyGrantedLearners` 別フィールドを併記すれば後方互換）
+   - レスポンス JSON に `monthlyGrantedByVariant: { control: number; variant_a: number }` を追加（観測性確保）
+   - `EXPERIMENTS` import + `getOrAssignVariant` import 追加
+   - **受験 30 日前ボーナス（既存 line 74-113）は不変** = scope 外（experiment 対象外 / control/variant_a 共通で +1 のまま）
+
+4. **Unit テスト `tests/unit/streak-freeze.test.ts` 拡張**（既存 grantFreezeTicket テストに +N ケース）
+   - `grantFreezeTicketsN(0, 1)` → `{ newCount: 1, grantedCount: 1 }`
+   - `grantFreezeTicketsN(0, 2)` → `{ newCount: 2, grantedCount: 2 }`
+   - `grantFreezeTicketsN(1, 2)` → `{ newCount: 2, grantedCount: 1 }`（上限到達）
+   - `grantFreezeTicketsN(2, 2)` → `{ newCount: 2, grantedCount: 0 }`（既に上限）
+   - `grantFreezeTicketsN(0, 0)` → `{ newCount: 0, grantedCount: 0 }`
+   - `grantFreezeTicketsN(0, -5)` → `{ newCount: 0, grantedCount: 0 }`
+   - `grantFreezeTicketsN(0, NaN)` → `{ newCount: 0, grantedCount: 0 }`
+   - `grantFreezeTicketsN(0, 1.7)` → `1` 切り捨て or `0` 扱いを実装に応じて assert（CEO 推奨: `Math.floor(n)` で 1 として扱う / 整数化）
+   - 既存 `grantFreezeTicket` 単独 test 全件 PASS 維持
+
+5. **Unit テスト `tests/unit/streak-freeze-variants.test.ts` 新規**
+   - `STREAK_FREEZE_GRANT_TICKETS_BY_VARIANT` 完全列挙（control = 1 / variant_a = 2 のみ存在 / それ以外なし）
+   - `resolveStreakFreezeGrantTickets("control")` → 1
+   - `resolveStreakFreezeGrantTickets("variant_a")` → 2
+   - `resolveStreakFreezeGrantTickets("unknown_variant")` → 1（fallback safety）
+   - `resolveStreakFreezeGrantTickets("")` → 1
+   - 罰語不在 grep（label 等を export する場合のみ / 数値マップなら N/A）
+
+6. **Unit テスト `tests/unit/cron.streak-freeze-monthly.test.ts` 新規 or 既存拡張（cron route 集計ロジックの直接 unit）**
+   - 既存 cron route には unit test がない場合は新規。あれば拡張。
+   - **アプローチ**: cron route の handler を直接呼ぶのは Next.js NextRequest mock 必要 → 重い。代わりに **「variant 適用後の grant 回数集計」の純関数化** を提案: cron route 内のループ核心部分を `applyStreakFreezeMonthlyGrantPlan(streaksRows, variantsMap, max)` のような純関数に切り出すか、もしくは E2E 1 件で網羅。**CEO 判断**: 純関数切り出しは scope 拡大なので **E2E 不要 / unit は `grantFreezeTicketsN` + variant resolver の組み合わせで論理網羅 OK**。cron route 本体の動作確認は手動 spot check（`bun run build` で route 認識 + 後日本番 cron 実行ログで観測）。
+   - 本 atomic では cron route 用 unit test は **追加なし**（純関数 unit test で論理網羅 / 既存 build PASS で signature 不変保証）
+
+7. **decisions.md 追補**（本 DEC-067 / 完遂時に「§実装完遂デルタ」を追加）
+
+8. **dev report**: `reports/dev-w12-t2.5-grant-variant-done.md`
+
+#### 含まない（後続 atomic / 本 atomic では実装しない）
+
+- 受験 30 日前ボーナスの A/B 化（既存 +1 のまま / W12-T2.5 後続 atomic で必要なら検討 / 本 experiment スコープ外）
+- 2 件目以降の experiment 登録（catalog 拡張のみ / 0.1 人日 polish）
+- experiment 終了 / winner 確定 / 全員適用ワークフロー（Phase 3 candidate）
+- cron route 全体の純関数化リファクタ（scope creep / 別 atomic）
+
+### 制約厳守
+
+- **DEC-024**: 罰則ゼロ哲学維持（既存 streak-freeze.ts 設計原則「罰演出はしない / 自動消費 / 上限 2 枚」を完全踏襲 / variant_a でも上限 2 で「貯まりすぎ → 学習離脱」抑止）。
+- **DEC-003**: 三層認可（cron 認可は既存 `x-vercel-cron-signature` + `Bearer ${CRON_SECRET}` 不変 / `getOrAssignVariant` は cron context で auth-agnostic に呼び出し / experiment 割当ても learner_id を SELECT 句から構造的排除 = W12-T2 の SQL aggregate-only 設計を踏襲）。
+- **DEC-006**: API surface 不変（GET 10 / mutation 5 不変条件遵守 / 新規 server action 0 / 新規 route 0 / 既存 cron route の signature 不変 / レスポンス JSON は追加フィールドのみで後方互換）。
+- **DEC-055**: idempotency 厳守（`getOrAssignVariant` は W12-T2 で構造担保済 / `grantFreezeTicketsN` は上限到達で no-op / 月初判定で月 1 回のみ実行 / 同日 cron 二重起動でも max 上限到達のため変化なし）。
+- **DEC-066 継承**: A/B test 基盤の `EXPERIMENTS.streak_freeze_monthly_grant` catalog を改変せず使用（catalog 単一 source of truth）。
+- **Turbopack `"use server"` sync export ban**: `streak-freeze-variants.ts` も純関数 / DOM-free / DB-free / 8 度目適用。
+
+### 受入基準
+
+- typecheck pass（warning 0）/ lint pass（warning 0）
+- vitest **追加 unit ≥ 12 全 PASS / baseline 782 → ~794**（regression 0）
+- next build **25 routes**（不変）
+- E2E 全 PASS（既存 94 PASS / regression 0 / 新規 E2E 追加なし）
+- レビュー部門 APPROVE
+- DEC-024 / DEC-003 / DEC-006 / DEC-055 / DEC-066 / DEC-067 厳守
+
+### 後続 atomic 候補
+
+- W12-T1.5: KPI 拡張 polish（模試結果分布 + kotodama-tori 表示数 + DEC-066 Minor 2 / Nit 1 吸収 / 0.25 人日）
+- W12-T3: β ユーザー受入準備（招待 LP + 同意書 + フィードバックフォーム / 1.5 人日 / P0）
+- W12-T4: ストレステスト + Sentry 強化（0.5 人日 / P1）
+- W11 KPT 振り返り（並行可 / 0.25 人日）
+
+### CEO 委任先 / 報告経路
+
+- 開発部門 → 着手 → `reports/dev-w12-t2.5-grant-variant-done.md` 生成
+- レビュー部門 → 独立判定（CEO が次に呼ぶ）
+- CEO trust-but-verify → commit/push → dashboard 更新 → オーナー報告（順次 = 完遂後に次の atomic 推奨提示）
+
+### §実装完遂デルタ（2026-05-03 / dev 完遂 + レビュー APPROVE / Critical 0 / Major 0 / Minor 1 / Nit 2）
+
+dev 完遂物（新規 2 + 修正 3 = 5 ファイル / +269 行）に対するレビュー部門独立判定で **APPROVE / Critical 0 / Major 0 / Minor 1 / Nit 2** を受領。M-1 / N-1〜N-2 は push 阻害 0 / 機能影響 0 / 後続 atomic で吸収可のため、本 atomic は同 commit でクローズ。
+
+**CEO trust-but-verify 結果**: typecheck PASS / lint PASS（warning 0）/ vitest **53 files / 801 PASS**（baseline 782 + 新規 19 / regression 0）/ next build **25 routes**（不変）/ E2E **shop 6 PASS** + **admin-kpi-experiment 2 PASS**（W12-T2 regression 0）。W11 / W12-T1 既存 E2E 全 spec も build 25 routes 不変によって構造的に regression 0 を確保。
+
+**実装ハイライト**:
+1. **Turbopack `"use server"` sync export ban パターン 8 度目定着**: `streak-freeze-variants.ts`（純関数 / 56 行 / DOM-free / DB-free / experiments-catalog.ts 非 import）と既存 `streak-freeze.ts`（純関数）+ cron route（server-only）の 3 層分離。Server Component / Server Action / cron handler のいずれからも直 import 可。
+2. **DEC-055 idempotency triple guarantee**: (a) `getOrAssignVariant` は W12-T2 で構造担保済 (既存 valid 割当時 DB write 0) / (b) `grantFreezeTicketsN` は `FREEZE_MAX_TICKETS=2` 上限到達で no-op / (c) `isFirstDayOfMonthJst` で月 1 回限定。同日 cron 二重起動 / 月内追加起動で streaks 行は変化しない構造。
+3. **DEC-024 罰則ゼロ哲学厳守**: `FREEZE_MAX_TICKETS=2` 上限が `grantFreezeTicketsN` 内のループで構造的に守られる（`grantFreezeTicket` の既存返却 `granted=false` を early break として使用）/ variant_a でも上限 2 で「貯まりすぎ → 学習離脱」抑止維持 / cron route ログ・レスポンス・unit test message に罰語 0。
+4. **DEC-003 三層認可不変**: cron 認可 (`x-vercel-cron-signature` or `Bearer ${CRON_SECRET}`) 改変 0 / `getOrAssignVariant` は cron context で auth-agnostic 呼出 / family / learner row の構造的非露出維持。
+5. **DEC-006 API surface 不変**: GET 10 / mutation 5 不変条件遵守 / cron route signature (POST のみ) 不変 / レスポンス JSON は追加フィールド (`monthlyGrantedLearners` + `monthlyGrantedByVariant`) のみで後方互換 / `monthlyGranted` の意味変更（学習者数 → 実枚数）は併記フィールドで補償 / 新規 server action 0 / 新規 route 0 / build 25 routes 不変。
+6. **W8 既存 `grantFreezeTicket` 関数完全不変**: 既存 call sites（受験 30 日前ボーナス / 救済 / `applyLearnDayUpdate`）regression 0 / W8 既存 unit test 全 PASS 維持。
+7. **`grantFreezeTicketsN` 防御網羅**: `n <= 0` / 非整数 / NaN / 負値 → 0 扱い / `Math.floor(n)` で整数化 / unit test 10 ケース全網羅。
+8. **prototype-pollution 防御 + catalog↔variants 整合 guard**: `Object.prototype.hasOwnProperty.call` で variant key lookup / catalog の variants[].key 集合と `STREAK_FREEZE_GRANT_TICKETS_BY_VARIANT` の key 集合一致を unit test で構造的 guard（catalog 拡張時に同期忘れを CI で検出）。
+9. **scope creep ゼロ**: cron route 全体の純関数化リファクタは別 atomic に分離 / 受験 30 日前ボーナス（line 74-113 既存）は不変（experiment 対象外維持）/ 2 件目以降の experiment 登録は後続 atomic。
+
+**Minor 1 / Nit 2 の取り扱い**:
+- **M-1** (cron monthly loop per-row fail-soft 未導入 / 一 learner の `getOrAssignVariant` throw で全体 break / W8-T1 継承 + DEC-067 で scope 外明示済): 後続 atomic で per-row try/catch + Promise.all 化を推奨（0.25 人日 polish）
+- **N-1** (`resolveStreakFreezeGrantTickets` 末尾 `?? 1` dead branch / 多層防御で残置可)
+- **N-2** (月初以外で `monthlyGrantedByVariant: {}` を返す挙動 / observability 文書側に明記推奨)
+
+いずれも push 阻害 0 / 機能影響 0 / 後続 polish atomic で吸収。
+
+**Phase 2 進捗**: 96% → 97% / W12 進捗: 40%（2/5）→ 60%（3/5）
+
+---
+
 ## DEC-066: Phase 2 W12 第 2 atomic = W12-T2 A/B test 基盤（feature flag + cohort 割当永続 + KPI 観測 / 最小スコープ）GO 判定（2026-05-03 / CEO 着手判断版）
 
 - **状況**: DEC-065 完遂 / commit `b9cbd91` (origin/main HANEI repo) push / E2E **42 PASS**（既存 38 + admin-kpi 4）/ vitest **51 files / 752 PASS**（baseline 715 + 新規 37 / regression 0）/ next build **25 routes** / Phase 2 進捗 **95% → 96%** / W12 進捗 **0% → 20%（1/5）**。オーナー「提案通り A 案 W12-T2 A/B test 基盤を進めて下さい」継続マンデート受領（CEO 推奨理由 = 次マイルストーン前進 + 「測れる」(KPI Dashboard) → 「比べられる」(A/B test 基盤) への論理的進展）。

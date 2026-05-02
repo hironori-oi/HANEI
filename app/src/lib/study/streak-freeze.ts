@@ -85,6 +85,42 @@ export function grantFreezeTicket(
   return { newCount: current + 1, granted: true };
 }
 
+/**
+ * freeze ticket を最大 n 枚追加 (W12-T2.5 / DEC-067).
+ *
+ * W8 設計原則 (`grantFreezeTicket` の上限 `FREEZE_MAX_TICKETS=2`) を踏襲:
+ *   - 内部で `grantFreezeTicket` を最大 n 回呼ぶ実装 (early break / 上限到達で no-op).
+ *   - 「貯まりすぎ → 安心しすぎ → 学習離脱」を防ぐ既存上限を構造的に尊重.
+ *   - DEC-024 罰則ゼロ哲学維持 (variant_a でも上限 2 で打ち止め).
+ *
+ * 防御:
+ *   - n が NaN / Infinity → 0 として扱う.
+ *   - n が非整数 → `Math.floor` で整数化 (1.7 → 1).
+ *   - n <= 0 → 即返却 (DB write 0).
+ *
+ * @param current - 現在の freezeTickets 値
+ * @param n - 付与希望枚数 (整数化される / 上限 FREEZE_MAX_TICKETS で打ち止め)
+ * @returns newCount = 上限を超えない新しい枚数 / grantedCount = 実際に granted した回数 (0..n)
+ */
+export function grantFreezeTicketsN(
+  current: number,
+  n: number,
+): { newCount: number; grantedCount: number } {
+  const safeN = Number.isFinite(n) ? Math.floor(n) : 0;
+  if (safeN <= 0) {
+    return { newCount: current, grantedCount: 0 };
+  }
+  let newCount = current;
+  let grantedCount = 0;
+  for (let i = 0; i < safeN; i += 1) {
+    const step = grantFreezeTicket(newCount);
+    if (!step.granted) break; // 上限到達 → early break
+    newCount = step.newCount;
+    grantedCount += 1;
+  }
+  return { newCount, grantedCount };
+}
+
 export interface StreakFreezeInput {
   lastActiveDate: string | null;
   todayIso: string;

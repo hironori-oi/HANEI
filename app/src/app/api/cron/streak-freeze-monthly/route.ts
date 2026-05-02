@@ -20,9 +20,13 @@ import {
   FREEZE_MAX_TICKETS,
   formatIsoDate,
   grantFreezeTicket,
+  grantFreezeTicketsN,
   isFirstDayOfMonthJst,
   isExamDateBonusDay,
 } from "@/lib/study/streak-freeze";
+import { getOrAssignVariant } from "@/lib/experiments/assignment";
+import { EXPERIMENTS } from "@/lib/experiments/experiments-catalog";
+import { resolveStreakFreezeGrantTickets } from "@/lib/experiments/streak-freeze-variants";
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -48,7 +52,12 @@ export async function GET(request: NextRequest) {
   const todayIsoJst = formatIsoDate(jstNow);
   const monthlyGrant = isFirstDayOfMonthJst(jstNow);
 
+  // W12-T2.5 (DEC-067): monthlyGranted の意味は「学習者数」→「実際に grant された枚数」へ変更.
+  //  - control = 1 枚 / variant_a = 2 枚 を variant 別に grant するため枚数集計が必要.
+  //  - 学習者数は monthlyGrantedLearners 別フィールドで併記 (後方互換 + 観測性確保).
   let monthlyGranted = 0;
+  let monthlyGrantedLearners = 0;
+  const monthlyGrantedByVariant: Record<string, number> = {};
   let examBonusGranted = 0;
   let scanned = 0;
   const errors: string[] = [];
@@ -60,13 +69,27 @@ export async function GET(request: NextRequest) {
       const allStreaks = await db.select().from(streaks);
       scanned = allStreaks.length;
       for (const row of allStreaks) {
-        const { newCount, granted } = grantFreezeTicket(row.freezeTickets);
-        if (granted) {
+        // W12-T2.5 (DEC-067): A/B test variant 別 grant 数を適用.
+        //  - control: 1 枚 / variant_a: 2 枚 (FREEZE_MAX_TICKETS=2 上限尊重)
+        //  - getOrAssignVariant は idempotent UPSERT (DEC-055 / W12-T2 構造担保)
+        const variantKey = await getOrAssignVariant(
+          row.learnerId,
+          EXPERIMENTS.streak_freeze_monthly_grant.key,
+        );
+        const grantTickets = resolveStreakFreezeGrantTickets(variantKey);
+        const { newCount, grantedCount } = grantFreezeTicketsN(
+          row.freezeTickets,
+          grantTickets,
+        );
+        if (grantedCount > 0) {
           await db
             .update(streaks)
             .set({ freezeTickets: newCount, updatedAt: new Date() })
             .where(eq(streaks.id, row.id));
-          monthlyGranted += 1;
+          monthlyGranted += grantedCount; // 実枚数集計 (旧: 学習者数)
+          monthlyGrantedLearners += 1;
+          monthlyGrantedByVariant[variantKey] =
+            (monthlyGrantedByVariant[variantKey] ?? 0) + grantedCount;
         }
       }
     }
@@ -120,7 +143,12 @@ export async function GET(request: NextRequest) {
     elapsedMs: Date.now() - startedAt,
     todayIsoJst,
     monthlyGrant,
+    // W12-T2.5 (DEC-067): monthlyGranted の意味は「実際に grant された枚数」.
     monthlyGranted,
+    // W12-T2.5 (DEC-067): grant を受けた学習者数 (旧 monthlyGranted の意味 / 後方互換用).
+    monthlyGrantedLearners,
+    // W12-T2.5 (DEC-067): variant 別 grant 枚数集計 (観測性確保).
+    monthlyGrantedByVariant,
     examBonusGranted,
     scanned,
     maxTickets: FREEZE_MAX_TICKETS,
