@@ -1,5 +1,94 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-065: Phase 2 W12 第 1 atomic = W12-T1 KPI ダッシュボード（admin 専用 read-only） GO 判定（2026-05-03 / CEO 着手判断版）
+
+- **状況**: DEC-064 完遂 / commit `67dd31d` (origin/main HANEI repo) push / E2E 38/38 PASS / vitest 715 PASS / Phase 2 W11 完全閉じ（5/5 atomic / T4 のみオーナー VAPID + SW 設定待ち外部依存ブロッカー）/ Phase 2 全体進捗 95%。オーナー「推奨通り A 案 W12 KPI ダッシュボード着手」継続マンデート受領。
+- **判定**: **GO**（W12-T1 KPI ダッシュボード単独 atomic / 1.5 人日 / read-only / 既存 aggregation 関数最大流用 / 新規 server action 0 / DEC-024 / DEC-003 / DEC-006 / DEC-055 厳守）。
+- **判断根拠**:
+  1. **オーナー指示**: A 案明示採用、W11 完遂後の次マイルストーン前進が最優先。
+  2. **W12 計画書 (`reports/phase2-gamification-implementation-plan.md` §W12) と一致**: T1 が **P0 / 1.5 人日 / `/admin/kpi` ページ新設 / role=admin** で定義済 / T2/T3/T4 は本 atomic 外（後続 atomic で消化）。
+  3. **既存基盤の最大流用が可能**: `getFamilyStreak` / `getFamilyWeeklyLeaderboard` / `getFamilyWeeklyDigest` / `getXpSummary` / `aggregations.ts` を read-only で組み合わせ + 必要な新規 SQL は限定（retention / セッション時間平均 / バッジ獲得分布 / 模試結果分布）= W11-T1/T3/T5 で確立した「既存基盤 read-only 組み合わせ → 純関数 view-model」パターンを再適用（5 度目 → 6 度目）。
+  4. **schema は既に admin role を持つ**: `users.role` enum = `parent | learner | admin` 既設 (`schema.ts:35`)、`auth/guards.ts` の `getSession()` も `role: "admin"` を返す。新規ロール導入は不要。`requireAdmin()` ヘルパーを 1 関数追加するだけで第二層認可成立。
+  5. **DEC-003 三層認可の構造的担保**: `/admin/kpi` ルートは admin 以外を `redirect("/home")` で弾く + 全データ取得は family-scoped でなく **集約値 (count / median / 分布)** のみ表示 → 個別 family の特定不可能 → COPPA 配慮 OK。
+
+### 本 atomic スコープ（CEO 確定 / W12-T1 minimal）
+
+#### 含む（必須）
+
+1. **`/admin/kpi` route 新設**（`src/app/(admin)/admin/kpi/page.tsx` + `src/app/(admin)/layout.tsx`）
+   - admin 以外は `redirect("/home")`（middleware 連携不要、page.tsx 冒頭で `requireAuth()` + `if (session.role !== "admin") redirect("/home")`）
+   - Server Component / `async page()` で集計を並列取得して view へ pass
+2. **`requireAdmin()` 関数を `auth/guards.ts` に追加**（最小実装）
+   - `getSession()` を呼び role !== "admin" なら `redirect("/home")`
+   - throw でなく redirect の理由: middleware 風の UX を保ち error boundary を汚さない
+3. **`src/lib/admin/kpi.ts` 新設**（純関数 + server-only helper の分離 = Turbopack `"use server"` sync export ban パターン 6 度目適用）
+   - `composeKpiDashboardView(rawCounters): KpiDashboardView`（純関数 / view-model 計算 / 罰語不在の励ましコピー catalog 流用は不要 = admin 向けで OK）
+   - `getKpiDashboard(now?: Date): Promise<KpiDashboardView>`（server-only helper / `Promise.all` 並列取得）
+   - 集計は SQL レベル aggregate（`COUNT` / `AVG` / `GROUP BY`）= 個別 family / learner の row は返さない
+4. **計測指標 (W12-T1 minimal)**: 以下の 6 項目に絞る（残 3 項目は W12-T1 follow-up atomic に分割可）
+   - **(a) Day-1 / Day-7 / Day-30 retention**（`auth_users.created_at` + `answer_logs.created_at` から cohort 計算 / 新規 SQL）
+   - **(b) 平均セッション時間（直近 7 日）**（`study_sessions.startedAt / endedAt` または `answer_logs` の連続性から推定 / 新規 SQL）
+   - **(c) Streak 中央値 / Streak Freeze 使用率**（`streaks.currentDays` 中央値 + `streak_freezes.usedAt` 使用率 / 新規 SQL）
+   - **(d) Daily Quest 完了率（直近 7 日）**（`quest_progress.completedAt` 集計 / 新規 SQL）
+   - **(e) バッジ獲得分布**（`badge_unlocks` GROUP BY badgeId / 新規 SQL）
+   - **(f) 親→子メッセージ送信頻度（直近 7 日）**（`family_messages.createdAt` 集計 = W11-T2 で導入済テーブル / 新規 SQL）
+5. **UI**（admin 向け / 飾らない / Heroicons のみ / 罰語回避）
+   - 6 つのカードを縦スクロール / 各カードに `<ChartBarIcon>` 等 + 数値 + 期間ラベル
+   - `data-testid="admin-kpi-dashboard"` + 各 card に `data-kpi-id="retention-day-7"` 等
+6. **Unit テスト**: `composeKpiDashboardView` 全分岐網羅（0 件 / 1 件 / 多数件 / NaN ガード / 中央値の偶奇 / デバイス別 split は本 atomic スコープ外）= 12-20 ケース
+7. **E2E 1〜2 ケース**: `tests/e2e/admin-kpi.spec.ts` × chromium + mobile-chrome = 2-4 ケース
+   - admin login → `/admin/kpi` → `data-testid="admin-kpi-dashboard"` 可視 + 6 つの KPI card 全件可視 + 罰語不在 assert
+   - parent login → `/admin/kpi` → `redirect("/home")` で home に redirect される
+   - admin user 用 fixture 1 件追加（既存 `db-fixture.ts` の `users` 配列に `role: "admin"` 1 件追加）
+8. **decisions.md 追補**（本ファイル / 完遂時に「§実装完遂デルタ」を追加）
+9. **dev report**: `reports/dev-w12-t1-kpi-dashboard-done.md`
+
+#### 含まない（後続 atomic / 本 atomic では実装しない）
+
+- 模試結果分布（`mock_exam_results` の集計 / W12-T1.5 で吸収）
+- kotodama-tori メッセージ表示数（既存ログ機構なし / W12-T1.5 で吸収 or 計測 → W13）
+- Real-time auto-refresh（本 atomic は SSR / static で OK / W12-T2 後で追加検討）
+- A/B test cohort 別 KPI（W12-T2 A/B test 基盤完成後）
+- 通知系統（CEO 宛週次サマリメールは W12-T3 / Resend 連携）
+
+### 制約厳守
+
+- **DEC-024**: 罰語不在（admin 向けでも「最下位」「サボ」「失敗」等は不使用 / 数値は中立トーン）。
+- **DEC-003**: 三層認可（middleware → `requireAdmin()` → SQL 集約のみで個別 family 露出ゼロ）。
+- **DEC-006**: API surface 不変（GET 10 / mutation 5 / 新規 server action 0 / 新規 route 1 但し read-only RSC で count に算入対象外、ただし安全側で「内部 admin route」として明示）。
+- **DEC-055**: idempotency 厳守（mutation なしのため自動 OK）。
+- **Turbopack `"use server"` sync export ban**: 純関数を `"use server"` ファイル外に置く 6 度目適用。
+
+### 受入基準
+
+- typecheck pass（warning 0）/ lint pass（warning 0）
+- vitest **追加 unit 全 PASS / baseline 715 → ~735 程度**（regression 0）
+- next build 完遂（**24 routes** = 既存 23 + admin/kpi 1）
+- E2E 全 PASS（既存 38 + 新規 admin-kpi 4 = 42 / regression 0）
+- レビュー部門 APPROVE
+- DEC-024 / DEC-003 / DEC-006 / DEC-055 / DEC-065 厳守
+
+### 後続 atomic 候補
+
+- W12-T1.5: 模試結果分布 + kotodama-tori 表示数 KPI 追加（0.25 人日）
+- W12-T2: A/B test 基盤（feature flag system / 1.5 人日 / P0）
+- W12-T3: β ユーザー受入準備（招待 LP + 同意書 + フィードバックフォーム / 1.5 人日 / P0）
+- W12-T4: ストレステスト + Sentry 強化（0.5 人日 / P1）
+- W11 KPT 振り返り（並行可 / 0.25 人日）
+
+### §実装完遂デルタ（2026-05-03 / dev 完遂 + レビュー APPROVE_WITH_CONDITIONS + CEO follow-up）
+
+dev 完遂後のレビュー部門独立判定で **APPROVE_WITH_CONDITIONS / Critical 0 / Major 1 / Minor 4 / Nit 2** を受領。Major M-1（`/admin/*` の middleware 第一層 + `metadata.robots = noindex` 不在 = 三層認可 defense-in-depth + SEO 観点）を CEO が同 atomic 内で follow-up 適用し条件解消（30 分 / 2 ファイル）:
+
+1. **`src/proxy.ts` の `PROTECTED_PREFIXES` に `/admin` 追加**: 第一層 middleware で `/admin/*` 配下のセッション cookie 存在を強制 → 第二層 `requireAdmin()` (auth/guards.ts) で role 検証 → 第三層 SQL aggregate-only (kpi.ts) で個人特定不能を構造担保 = 三層認可の防衛思想を構造的に完成。
+2. **`src/app/(admin)/layout.tsx` に `metadata.robots = noindex` 追加**: `index: false / follow: false / nocache: true / googleBot.noimageindex: true` で `/admin/*` 配下を検索エンジン索引から構造的に除外（root layout の `robots: { index: true }` を本 layout で上書き / admin route group 全体に適用）。
+
+**M-1 follow-up 後の trust-but-verify**: typecheck PASS / lint PASS（warning 0）/ vitest 752 PASS（regression 0）/ next build **25 routes**（既存 23 + `/admin/kpi` 1 + 既存 `/api/cron/weekly-digest` 等）完遂 / E2E admin-kpi **4/4 PASS** (chromium 2 + mobile-chrome 2 / middleware `/admin` 追加でも admin login → `/admin/kpi` 通過 + parent login → `/home` redirect が機能している = 二段防御の正常動作確認)。
+
+**Minor 4 / Nit 2 の取り扱い**: M-2 (drizzle helper 一貫性) / M-3 (badge tie-break SQL レベル) / M-4 (streaks 全行 SELECT の中規模スケーラビリティ) / M-5 (`safeAggregate` Sentry capture 経路) / N-1 (role narrowing 型) / N-2 (コメント) は W12-T2 着手前の 0.25 人日整理 or 任意リファクタ atomic で吸収（push 阻害なし / 機能影響なし）。
+
+---
+
 ## DEC-064: Phase 2 W11 第 5 atomic = study-smoke / study-writing-smoke E2E regression 修復（Server Action auto-revalidation 起源の StudyClient unmount 抑止）GO 判定（2026-05-02 / CEO 着手判断・実態スコープ訂正版）
 
 - **状況**: DEC-063 で W11-T5 Weekly Digest Card 完遂 / commit `33ddb80` (origin/main) push / dashboard `f6a21f0` push / vitest 715 PASS / E2E 20/20 green / Phase 2 W11 進捗 75% → 100%（4/5、T4 のみオーナー設定待ち）。オーナー「推奨通り A 案 study-smoke / study-writing-smoke E2E preexisting regression 修復に着手」マンデート受領。task output で観測されていた「`test.describe()` parser エラー（"Playwright Test did not expect test.describe() to be called here"）」を CEO trust-but-verify で**実態調査**した結果、parser エラーは既に解消済 / **真の症状は別**であることが判明（重要訂正 §下記）。

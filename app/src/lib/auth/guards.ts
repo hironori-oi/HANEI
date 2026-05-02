@@ -71,6 +71,26 @@ export async function requireVerifiedEmail(): Promise<AuthSession> {
 }
 
 /**
+ * 管理者ロール必須 (W12-T1 / DEC-065).
+ *
+ *  - 第一層 (middleware) でセッション cookie の存在を担保する.
+ *  - 第二層 = ここ. role !== "admin" の場合は /home へ redirect (throw ではなく redirect で
+ *    error boundary を汚さず middleware 風 UX を保つ / DEC-065 §判断根拠 4-5).
+ *  - 第三層 (scopedQueries / SQL aggregate) は呼び出し元で担う. KPI ダッシュボードは
+ *    family-scoped でなく集約値のみを表示するため, 個別 family / learner row は構造的に
+ *    flow しない (COPPA / DEC-003).
+ *
+ * 戻り値は AuthSession (role: "admin" 確定).
+ */
+export async function requireAdmin(): Promise<AuthSession> {
+  const session = await requireAuth();
+  if (session.role !== "admin") {
+    redirect("/home");
+  }
+  return session;
+}
+
+/**
  * 認証済みかつ family_members.role = 'parent' であることを確認。
  */
 export async function requireParent(userId: string): Promise<{ familyId: string }> {

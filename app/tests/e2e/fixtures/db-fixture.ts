@@ -179,6 +179,20 @@ export async function seedFixture(client: Client): Promise<{
     args: [parentUserId, parentEmail, 1, "E2E 保護者", "parent"],
   });
 
+  // users (admin / W12-T1 / DEC-065)
+  // admin 専用 KPI ダッシュボード `/admin/kpi` テスト用 fixture.
+  // 認可 (requireAdmin) のみ確認するため family_members には所属させない.
+  await client.execute({
+    sql: `INSERT INTO users (id, email, email_verified, name, role) VALUES (?, ?, ?, ?, ?)`,
+    args: [
+      "usr_e2e_admin_001",
+      "admin-e2e@example.com",
+      1,
+      "E2E 管理者",
+      "admin",
+    ],
+  });
+
   // family_members
   await client.execute({
     sql: `INSERT INTO family_members (id, family_id, user_id, role) VALUES (?, ?, ?, ?)`,

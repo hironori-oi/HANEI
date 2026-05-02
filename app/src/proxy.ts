@@ -17,6 +17,10 @@ const PROTECTED_PREFIXES = [
   "/learner",
   "/coach",
   "/study",
+  // W12-T1 / DEC-065: 第一層 (middleware) で /admin/* のセッション存在を強制.
+  // 第二層 = `requireAdmin()` (auth/guards.ts) で role 検証 / 第三層 = SQL aggregate-only
+  // (kpi.ts) で個人特定不能を構造的に担保 (DEC-003 三層認可).
+  "/admin",
 ];
 
 export async function proxy(request: NextRequest) {
