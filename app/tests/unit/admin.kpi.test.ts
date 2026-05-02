@@ -54,6 +54,7 @@ function buildRaw(
     dailyQuestCompletion: undefined,
     badgeDistribution: undefined,
     familyMessageFrequency: undefined,
+    experimentCohort: undefined,
     generatedAt: FIXED_NOW,
     ...overrides,
   };
@@ -157,9 +158,9 @@ describe("formatCount + formatMinutes", () => {
 // composeKpiDashboardView - 全 fallback (= 全 raw undefined)
 // ---------------------------------------------------------------------------
 describe("composeKpiDashboardView (全 fallback)", () => {
-  it("全 raw undefined でも 9 枚 card を返す + 罰語不在", () => {
+  it("全 raw undefined でも 10 枚 card を返す + 罰語不在", () => {
     const view = composeKpiDashboardView(buildRaw());
-    expect(view.cards.length).toBe(9);
+    expect(view.cards.length).toBe(10);
     const ids = view.cards.map((c) => c.kpiId);
     expect(ids).toEqual([
       "retention-day-1",
@@ -171,6 +172,7 @@ describe("composeKpiDashboardView (全 fallback)", () => {
       "daily-quest-completion-rate",
       "badge-distribution",
       "family-message-frequency",
+      "experiment-streak-freeze-cohort",
     ]);
     for (const c of view.cards) {
       expectNoPunishmentWords(c.title);

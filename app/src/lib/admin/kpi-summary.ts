@@ -74,6 +74,28 @@ export interface FamilyMessageFrequencyRaw {
   totalMessagesLast7Days: number;
 }
 
+/**
+ * Experiment cohort 集計 (W12-T2 / DEC-066) の入力 row.
+ *
+ *  - distribution: variant 別 cohort サイズ (= 割当済 learner 数 / aggregate-only)
+ *  - streakAvg: 同 variant 別の current_streak 平均 (= 効果指標 / aggregate-only)
+ *  - 全て SQL レベル aggregate のみで learner_id / family_id は flow しない (DEC-003).
+ */
+export interface ExperimentCohortRaw {
+  /** experiment 識別子 (例: "streak_freeze_monthly_grant") */
+  experimentKey: string;
+  /** 内部運営向け説明 (中立トーン / catalog から転記) */
+  description: string;
+  /** variant 別 cohort 数 */
+  distribution: ReadonlyArray<{ variantKey: string; count: number }>;
+  /** variant 別 current_streak 平均 (n は streaks JOIN 後の母数) */
+  streakAvg: ReadonlyArray<{
+    variantKey: string;
+    avgStreak: number;
+    n: number;
+  }>;
+}
+
 /** view-model に渡る完成済 raw 構造体 */
 export interface KpiDashboardRaw {
   retentionDay1: RetentionRaw | undefined;
@@ -84,6 +106,8 @@ export interface KpiDashboardRaw {
   dailyQuestCompletion: DailyQuestCompletionRaw | undefined;
   badgeDistribution: ReadonlyArray<BadgeDistributionRaw> | undefined;
   familyMessageFrequency: FamilyMessageFrequencyRaw | undefined;
+  /** W12-T2 (DEC-066): A/B test cohort raw (1 experiment = 1 raw / 拡張時は配列化検討) */
+  experimentCohort: ExperimentCohortRaw | undefined;
   /** 計算基準時刻 (server now / unit テストで固定) */
   generatedAt: Date;
 }
@@ -106,7 +130,8 @@ export interface KpiCardView {
     | "TrophyIcon"
     | "SparklesIcon"
     | "ChatBubbleLeftEllipsisIcon"
-    | "ClockIcon";
+    | "ClockIcon"
+    | "BeakerIcon";
   /** バッジ分布など補助 row 表示が必要な card 用 (= バッジ KPI のみ非空) */
   rows?: ReadonlyArray<{ id: string; label: string; value: string }>;
 }
@@ -363,6 +388,110 @@ function buildBadgeDistributionCard(
   };
 }
 
+/**
+ * A/B test cohort 分布 (W12-T2 / DEC-066) の card builder.
+ *
+ *  - experiment 1 件 (= streak_freeze_monthly_grant) を 1 card に集約.
+ *  - rows = variant 別「cohort 数 + 平均 streak」の文字列 (1 行 1 variant).
+ *  - 同 variant 内 distribution / streakAvg のキー突合は variantKey で merge.
+ *  - 0 件 / undefined / 全 variant 未割当 は中立 fallback (罰語ゼロ).
+ *  - primaryValue = 全 variant 合計 cohort 数 (= 割当済 learner 総数).
+ *  - secondaryLabel = description (catalog の中立コピー).
+ */
+export function buildExperimentCohortCard(
+  raw: ExperimentCohortRaw | undefined,
+): KpiCardView {
+  if (!raw || typeof raw !== "object") {
+    return {
+      kpiId: "experiment-streak-freeze-cohort",
+      title: "A/B test cohort 分布",
+      primaryValue: "——",
+      secondaryLabel: "実験データ未取得 (前向き fallback)",
+      iconName: "BeakerIcon",
+      rows: [],
+    };
+  }
+
+  const description =
+    typeof raw.description === "string" && raw.description.length > 0
+      ? raw.description
+      : "実験 cohort 集計";
+
+  const safeDistribution = Array.isArray(raw.distribution)
+    ? raw.distribution.filter(
+        (d) =>
+          d &&
+          typeof d.variantKey === "string" &&
+          d.variantKey.length > 0,
+      )
+    : [];
+  const safeStreakAvg = Array.isArray(raw.streakAvg)
+    ? raw.streakAvg.filter(
+        (s) =>
+          s &&
+          typeof s.variantKey === "string" &&
+          s.variantKey.length > 0,
+      )
+    : [];
+
+  const totalCohort = safeDistribution.reduce(
+    (acc, d) => acc + safeNonNegInt(d.count),
+    0,
+  );
+
+  if (safeDistribution.length === 0 || totalCohort === 0) {
+    return {
+      kpiId: "experiment-streak-freeze-cohort",
+      title: "A/B test cohort 分布",
+      primaryValue: "——",
+      secondaryLabel: `${description} / 割当 0 名 (まだ cohort なし)`,
+      iconName: "BeakerIcon",
+      rows: [],
+    };
+  }
+
+  // variantKey で merge: cohort 数 + 平均 streak (n).
+  const streakByVariant = new Map<
+    string,
+    { avgStreak: number; n: number }
+  >();
+  for (const s of safeStreakAvg) {
+    streakByVariant.set(s.variantKey, {
+      avgStreak: safeFiniteNumber(s.avgStreak),
+      n: safeNonNegInt(s.n),
+    });
+  }
+
+  // variant 行は variantKey 昇順で安定 (e.g. "control" < "variant_a")
+  const sorted = [...safeDistribution].sort((a, b) =>
+    a.variantKey.localeCompare(b.variantKey),
+  );
+
+  const rows = sorted.map((d) => {
+    const variantKey = d.variantKey;
+    const cohort = safeNonNegInt(d.count);
+    const streak = streakByVariant.get(variantKey);
+    const avgPart =
+      streak && streak.n > 0
+        ? `平均 streak ${streak.avgStreak.toFixed(1)} 日 (n=${formatCount(streak.n)})`
+        : "平均 streak 集計待ち";
+    return {
+      id: variantKey,
+      label: variantKey,
+      value: `cohort ${formatCount(cohort)} 名 / ${avgPart}`,
+    };
+  });
+
+  return {
+    kpiId: "experiment-streak-freeze-cohort",
+    title: "A/B test cohort 分布",
+    primaryValue: formatCount(totalCohort),
+    secondaryLabel: description,
+    iconName: "BeakerIcon",
+    rows,
+  };
+}
+
 function buildFamilyMessageFrequencyCard(
   raw: FamilyMessageFrequencyRaw | undefined,
 ): KpiCardView {
@@ -429,6 +558,9 @@ export function composeKpiDashboardView(
     buildDailyQuestCompletionCard(raw.dailyQuestCompletion),
     buildBadgeDistributionCard(raw.badgeDistribution),
     buildFamilyMessageFrequencyCard(raw.familyMessageFrequency),
+    // W12-T2 (DEC-066): A/B test cohort 分布 を fixed-order 末尾に追加
+    // (既存 9 card の順序は不変 / E2E が data-kpi-id で stable に当てる)
+    buildExperimentCohortCard(raw.experimentCohort),
   ];
 
   return {

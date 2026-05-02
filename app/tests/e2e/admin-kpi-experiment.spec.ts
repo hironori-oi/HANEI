@@ -1,20 +1,15 @@
 /**
- * E2E: admin-kpi (W12-T1 / DEC-065 / KPI ダッシュボード admin 専用 read-only)
+ * E2E: admin-kpi-experiment (W12-T2 / DEC-066 / A/B test cohort 分布カード)
  *
- * 検証スコープ (read path / 認可レイヤ / DEC-024 罰則ゼロ / DEC-065):
+ * 検証スコープ:
  *   ① admin login → /admin/kpi
- *      → data-testid="admin-kpi-dashboard" 可視
- *      → 6 カテゴリ全 9 card (3 retention + 4 KPI + バッジ + メッセージ) が data-kpi-id で見える
- *        (W12-T2 / DEC-066 で 10 枚目 A/B test cohort が追加されたが、本 spec は 9 card 可視のみ確認.
- *         10 枚目の検証は admin-kpi-experiment.spec.ts に分離.)
- *      → 罰語が一切含まれない
- *   ② parent login → /admin/kpi
- *      → /home に redirect (admin 以外を構造的に弾く / 第二層認可)
+ *      → 10 枚目の card (data-kpi-id="experiment-streak-freeze-cohort") が見える
+ *      → 既存 9 枚 + 10 枚目で計 10 card 可視
+ *      → 罰語が含まれない (DEC-024 構造的担保)
  *
  * 戦略:
- *   - 既存 family-* / signup と同じ「signup → onboarding → ログイン状態の cookie を確保」パターンを踏襲.
- *   - admin user は signup 後に DB 直接 UPDATE で role='admin' に上げる (better-auth の signup は parent 既定).
- *   - DB 直接アクセスは family-weekly-digest.spec.ts と同じ execWithRetry + createClient ヘルパで行う.
+ *   - 既存 admin-kpi.spec.ts と同パターン (signup → promoteToAdmin → clearCookies + 再ログイン).
+ *   - cohort 分布は seed データに依存しない (= まだ割当 0 名でも fallback 表示で card は存在する).
  *   - serial mode で SQLITE_BUSY を回避.
  */
 
@@ -32,10 +27,10 @@ function buildSignupCredentials(
 } {
   const stamp = `${Date.now()}_${workerIndex}_${suffix}`;
   return {
-    email: `admin_kpi_${stamp}@hanei.test`,
-    password: "test-password-admin-kpi",
-    parentName: `KPI親${workerIndex}`,
-    nickname: `KPI子${workerIndex}_${suffix}`,
+    email: `admin_kpi_exp_${stamp}@hanei.test`,
+    password: "test-password-admin-kpi-exp",
+    parentName: `KPI実験親${workerIndex}`,
+    nickname: `KPI実験子${workerIndex}_${suffix}`,
   };
 }
 
@@ -72,10 +67,6 @@ async function execWithRetry<T>(fn: () => Promise<T>, maxAttempts = 16): Promise
   throw lastErr;
 }
 
-/**
- * email から user を取得し role='admin' に UPDATE.
- * better-auth の signup は role='parent' を default 投入するため、admin のみ事後 promote する.
- */
 async function promoteToAdmin(email: string): Promise<void> {
   const client = createClient({ url: dbUrl() });
   try {
@@ -90,14 +81,6 @@ async function promoteToAdmin(email: string): Promise<void> {
   }
 }
 
-/**
- * signup → onboarding → /home まで到達して active session cookie を確保する.
- * (family-weekly-digest.spec.ts の signupAndOnboard と同等)
- *
- * `password` も返すのは, admin promote 後に「cookie cache を bust するため
- * cookie を全消し → /login で再ログイン」する必要があるため (better-auth の
- * cookieCache.maxAge=5min で role が古い値で固着するのを構造的に解消する).
- */
 async function signupAndOnboard(
   page: import("@playwright/test").Page,
   workerIndex: number,
@@ -134,11 +117,6 @@ async function signupAndOnboard(
   return { email, password };
 }
 
-/**
- * cookie を全消し → /login で再ログイン. better-auth の cookieCache (maxAge 5min) は
- * role 等の user 情報を cookie 値そのものに焼き込むため、DB の role を UPDATE しても
- * 既存 cookie には反映されない. promote 後に新規ログインで cookie を作り直す.
- */
 async function clearCookiesAndReLogin(
   page: import("@playwright/test").Page,
   email: string,
@@ -181,25 +159,20 @@ const REQUIRED_KPI_IDS = [
   "daily-quest-completion-rate",
   "badge-distribution",
   "family-message-frequency",
+  "experiment-streak-freeze-cohort",
 ] as const;
 
-// fullyParallel=true で同一 file: SQLite に複数 worker から書き込むと SQLITE_BUSY が発生する.
-// W11-T3 / W11-T5 と同様 serial 化.
 test.describe.configure({ mode: "serial" });
 
-test.describe("admin-kpi (W12-T1 / DEC-065 / admin 専用 read-only)", () => {
-  test("admin login → /admin/kpi → 全 9 card 可視 + 罰語不在", async ({
+test.describe("admin-kpi-experiment (W12-T2 / DEC-066 / A/B test cohort)", () => {
+  test("admin login → /admin/kpi → 10 枚目に A/B test cohort card 可視 + 罰語不在", async ({
     page,
   }, testInfo) => {
     const { email, password } = await signupAndOnboard(
       page,
       testInfo.workerIndex,
-      "admin_ok",
+      "experiment_ok",
     );
-    // signup 後に role='admin' に promote.
-    // better-auth は cookieCache (maxAge 5min) で role 値を cookie 自体に焼き込むため、
-    // DB UPDATE しただけでは既存 session の role は "parent" のまま固着する.
-    // → cookie を全消し → /login で再ログインして fresh な admin cookie を作り直す.
     await promoteToAdmin(email);
     await clearCookiesAndReLogin(page, email, password);
 
@@ -207,7 +180,7 @@ test.describe("admin-kpi (W12-T1 / DEC-065 / admin 専用 read-only)", () => {
     const dashboard = page.locator('[data-testid="admin-kpi-dashboard"]');
     await expect(dashboard).toBeVisible({ timeout: 15000 });
 
-    // 9 KPI card 全件可視
+    // 10 KPI card 全件可視 (新規 experiment card 含む)
     for (const kpiId of REQUIRED_KPI_IDS) {
       const card = page.locator(`[data-kpi-id="${kpiId}"]`);
       await expect(
@@ -216,23 +189,18 @@ test.describe("admin-kpi (W12-T1 / DEC-065 / admin 専用 read-only)", () => {
       ).toBeVisible({ timeout: 10000 });
     }
 
-    // 罰語不在 (DEC-024)
+    // 10 枚目 (A/B test cohort) の中身を確認
+    const expCard = page.locator(
+      '[data-kpi-id="experiment-streak-freeze-cohort"]',
+    );
+    await expect(expCard).toBeVisible();
+    const expText = (await expCard.textContent()) ?? "";
+    // title or description のいずれかに「cohort」「streak freeze」相当の文字が露出する
+    expect(expText.length).toBeGreaterThan(0);
+    expectNoPunishmentWords(expText);
+
+    // dashboard 全体の罰語不在 (DEC-024)
     const dashboardText = (await dashboard.textContent()) ?? "";
     expectNoPunishmentWords(dashboardText);
-  });
-
-  test("parent login → /admin/kpi → /home に redirect", async ({
-    page,
-  }, testInfo) => {
-    // role='parent' のままにしておく (= signup 直後の default)
-    await signupAndOnboard(page, testInfo.workerIndex, "parent_block");
-
-    await page.goto("/admin/kpi");
-    // requireAdmin → redirect("/home") で home に着地する.
-    await expect(page).toHaveURL(/\/home(\?|$)/, { timeout: 15000 });
-    // KPI dashboard は描画されない.
-    await expect(
-      page.locator('[data-testid="admin-kpi-dashboard"]'),
-    ).toHaveCount(0);
   });
 });

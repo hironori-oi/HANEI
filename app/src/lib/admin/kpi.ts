@@ -39,12 +39,18 @@ import {
   type AvgSessionMinutesRaw,
   type BadgeDistributionRaw,
   type DailyQuestCompletionRaw,
+  type ExperimentCohortRaw,
   type FamilyMessageFrequencyRaw,
   type KpiDashboardRaw,
   type KpiDashboardView,
   type RetentionRaw,
   type StreakStatsRaw,
 } from "@/lib/admin/kpi-summary";
+import {
+  EXPERIMENTS,
+  getCohortDistribution,
+  getCohortStreakAvg,
+} from "@/lib/experiments/assignment";
 
 // ---------------------------------------------------------------------------
 // 内部ユーティリティ
@@ -268,6 +274,30 @@ async function getBadgeDistributionTop5(): Promise<
   }));
 }
 
+/**
+ * A/B test cohort 集計 (W12-T2 / DEC-066) を catalog 1 件 (= streak_freeze_monthly_grant)
+ * 分だけまとめて返す server-only helper.
+ *
+ *  - 内部で `getCohortDistribution` + `getCohortStreakAvg` を `Promise.all` で並列取得.
+ *  - 1 関数 1 raw に集約し、kpi-summary.ts の `ExperimentCohortRaw` に直接マップする.
+ *  - SQL レベル aggregate のみ (= learner_id / family_id を構造的に flow させない / DEC-003).
+ *  - DEC-066 §4 の指示通り、catalog の experimentKey を catalog 経由で参照する
+ *    (= magic string ハードコードしない / 拡張時に catalog 追加だけで済む構造).
+ */
+async function getExperimentCohortRaw(): Promise<ExperimentCohortRaw> {
+  const def = EXPERIMENTS.streak_freeze_monthly_grant;
+  const [distribution, streakAvg] = await Promise.all([
+    getCohortDistribution(def.key),
+    getCohortStreakAvg(def.key),
+  ]);
+  return {
+    experimentKey: def.key,
+    description: def.description,
+    distribution,
+    streakAvg,
+  };
+}
+
 /** 親→子メッセージ送信頻度 (直近 7 日 / aggregate のみ). */
 async function getFamilyMessageFrequencyLast7Days(
   now: Date,
@@ -311,6 +341,7 @@ export async function getKpiDashboard(now?: Date): Promise<KpiDashboardView> {
     dailyQuestCompletion,
     badgeDistribution,
     familyMessageFrequency,
+    experimentCohort,
   ] = await Promise.all([
     safeAggregate("retentionDay1", () => getRetentionDayN(1, generatedAt)),
     safeAggregate("retentionDay7", () => getRetentionDayN(7, generatedAt)),
@@ -326,6 +357,8 @@ export async function getKpiDashboard(now?: Date): Promise<KpiDashboardView> {
     safeAggregate("familyMessageFrequency", () =>
       getFamilyMessageFrequencyLast7Days(generatedAt),
     ),
+    // W12-T2 (DEC-066): A/B test cohort 9 並列目 (内部で 2 SQL を Promise.all で並列取得)
+    safeAggregate("experimentCohort", () => getExperimentCohortRaw()),
   ]);
 
   const raw: KpiDashboardRaw = {
@@ -337,6 +370,7 @@ export async function getKpiDashboard(now?: Date): Promise<KpiDashboardView> {
     dailyQuestCompletion,
     badgeDistribution,
     familyMessageFrequency,
+    experimentCohort,
     generatedAt,
   };
 

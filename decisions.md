@@ -1,5 +1,147 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-066: Phase 2 W12 第 2 atomic = W12-T2 A/B test 基盤（feature flag + cohort 割当永続 + KPI 観測 / 最小スコープ）GO 判定（2026-05-03 / CEO 着手判断版）
+
+- **状況**: DEC-065 完遂 / commit `b9cbd91` (origin/main HANEI repo) push / E2E **42 PASS**（既存 38 + admin-kpi 4）/ vitest **51 files / 752 PASS**（baseline 715 + 新規 37 / regression 0）/ next build **25 routes** / Phase 2 進捗 **95% → 96%** / W12 進捗 **0% → 20%（1/5）**。オーナー「提案通り A 案 W12-T2 A/B test 基盤を進めて下さい」継続マンデート受領（CEO 推奨理由 = 次マイルストーン前進 + 「測れる」(KPI Dashboard) → 「比べられる」(A/B test 基盤) への論理的進展）。
+- **判定**: **GO**（W12-T2 A/B test 基盤の最小 atomic / 1.0〜1.2 人日 / 割当ロジック + 永続化 + cohort KPI 観測のみ / 既存 admin/kpi 拡張で表示完結 / 新規 server action 0 / 新規 mutation 0 (`getOrAssignVariant` は idempotent UPSERT / DEC-006 mutation 5 不変条件遵守) / DEC-024 / DEC-003 / DEC-006 / DEC-055 厳守）。
+- **判断根拠**:
+  1. **オーナー指示**: A 案明示採用、W12-T1 直後の論理連続。
+  2. **W12 計画書 (`reports/phase2-gamification-implementation-plan.md` §287-291) と一致**: T2 が **P0 / 1.5 人日 / 簡易 feature flag システム / `learner_profiles.experiments` JSON カラム / 50/50 ランダム割当 / cohort 別 KPI 比較** で定義済 / 初回テスト候補 = Streak Freeze 月 1 枚 vs 2 枚 は catalog 登録のみ（grant logic 適用は後続 W12-T2.5 atomic で分割 = scope creep 抑止）。
+  3. **既存基盤の最大流用**: W12-T1 で確立した「純関数 + server-only helper の分離 / Promise.all 並列 + per-task try/catch fail-soft / SQL aggregate-only / pure compose で fixed-order card」を experiment cohort KPI 集計に再適用（**Turbopack `"use server"` sync export ban パターン 6 → 7 度目** / **Promise.all + per-task fail-soft 4 → 5 度目** / **SQL aggregate-only 構造的 COPPA 担保 W11-T3/T5 + W12-T1 と同パターン**）。
+  4. **DEC-003 三層認可の構造的担保**: 第一層 middleware (proxy.ts `/admin` 既導入) → 第二層 `requireAdmin()` (W12-T1 既導入) → 第三層 SQL aggregate-only で family / learner row が flow しない構造（experiment 割当ても learner_id を SELECT 句から構造的に排除 / cohort 別の COUNT / AVG のみ表示）。
+  5. **DEC-055 idempotency 構造的担保**: `getOrAssignVariant(learnerId, experimentKey)` は (a) 既に割当済なら DB UPDATE せず即返却、(b) 未割当なら deterministic hash で variant 決定 + UPDATE 1 回のみ、を JSON merge UPSERT で実現 → 同一 learner × 同一 experiment への複数 call が安全（DB write 0 回 or 1 回 / variant flip しない）。
+  6. **Migration 1 本のみ / 副作用最小**: `learner_profiles.experiments` JSON column 追加（default `'{}'`）= 既存行は空 JSON で初期化 / 既存 read path は影響なし / 既存 write path も無関係。
+
+### 本 atomic スコープ（CEO 確定 / W12-T2 minimal）
+
+#### 含む（必須）
+
+1. **migration 0016 `learner_profiles.experiments` JSON column 追加**（`drizzle/0016_w12_experiments.sql` 新規 + `src/lib/db/schema.ts` の `learnerProfiles` に `experiments: text("experiments", { mode: "json" }).$type<Record<string, string>>().notNull().default(sql\`('{}')\`)` を追加）
+   - JSON shape: `{ [experimentKey: string]: variantKey: string }` (例: `{ "streak_freeze_monthly_grant": "variant_a" }`)
+   - 既存行への影響ゼロ（default `'{}'` / NOT NULL 制約は default 経由で安全）
+
+2. **`src/lib/experiments/experiments-catalog.ts`（純関数 / DB I/O 0 / 7 度目 Turbopack 制約適用）**
+   - `EXPERIMENTS` catalog 定数（Record<string, ExperimentDef>）:
+     - 初回登録: `streak_freeze_monthly_grant` = `{ key: "streak_freeze_monthly_grant", description: "月次 streak freeze 自動付与の枚数", variants: [{ key: "control", weight: 50, label: "1 枚（control）" }, { key: "variant_a", weight: 50, label: "2 枚" }], default: "control" }` （catalog 登録のみ / grant logic は W12-T2.5）
+   - `assignVariant(seed: string, variants: VariantDef[]): string`:
+     - deterministic hash（`crypto.subtle` 不使用 / `Buffer` で djb2 hash or `createHash('sha256')` を node-only ファイルでは使う）の **simple 32-bit FNV-1a** を採用（依存最小 / Edge runtime 互換）
+     - hash 結果 % 100 を変位とし、累積 weight に対してマップ → 50/50 で variant 決定
+     - 同一 seed → 同一 variant が返ることを unit test で網羅
+   - `validateExperimentsJson(raw: unknown): Record<string, string>`:
+     - 不正 JSON / 不正 type を空オブジェクトに正規化（防御的 / DB UPSERT で UPDATE skip 判定に使用）
+   - `isKnownExperiment(key: string): boolean` / `getExperimentDef(key): ExperimentDef | undefined`
+   - **NO `"use server"` directive** / **DOM-free / DB-free** / Vitest で全分岐網羅
+
+3. **`src/lib/experiments/assignment.ts`（server-only helper / 副作用 = idempotent UPSERT）**
+   - `getOrAssignVariant(learnerId: string, experimentKey: string): Promise<string>`:
+     - `SELECT experiments FROM learner_profiles WHERE id = ?` で現在値読込
+     - `validateExperimentsJson` で正規化
+     - 既に key が存在 + variant が catalog の variants[].key にマッチすれば即返却（DB write 0 / DEC-055 idempotency）
+     - 未割当 / 不正 variant なら `assignVariant("${learnerId}:${experimentKey}", catalog.variants)` で決定 → `UPDATE learner_profiles SET experiments = json_set(experiments, ?, ?), updated_at = unixepoch() WHERE id = ?` で UPSERT（同一 row 1 回 UPDATE）
+     - `requireLearnerOwner(learnerId)` 済前提で呼ぶ（呼び出し元責任 / 認可は本関数の責務外 = W12-T2 内では呼び出し元なし = catalog 登録のみで grant logic 適用は W12-T2.5）
+   - `getCohortDistribution(experimentKey: string): Promise<{ variantKey: string; count: number }[]>`:
+     - **aggregate-only**: `SELECT json_extract(experiments, '$.{key}') AS variant, COUNT(*) AS count FROM learner_profiles WHERE json_extract(experiments, '$.{key}') IS NOT NULL GROUP BY variant`
+     - learner_id / family_id 流出 0 / variant 名と count のみ返す
+   - `getCohortStreakAvg(experimentKey: string): Promise<{ variantKey: string; avgStreak: number; n: number }[]>`:
+     - **aggregate-only**: `SELECT json_extract(lp.experiments, '$.{key}') AS variant, AVG(s.current_streak) AS avg_streak, COUNT(*) AS n FROM learner_profiles lp JOIN streaks s ON s.learner_id = lp.id WHERE json_extract(lp.experiments, '$.{key}') IS NOT NULL GROUP BY variant`
+     - learner_id 流出 0 / variant ごとに集計値のみ
+   - **NO `"use server"` directive**（kpi.ts と同形式 / Server Component / admin/kpi/page.tsx から直接 import）
+   - 全 read-only / `getOrAssignVariant` の write も「未割当 → 割当」の単一 UPDATE / mutation count に算入対象外（既存 server action とは別系統）
+
+4. **`src/lib/admin/kpi.ts` に experiment cohort 集計 helper 追加**
+   - `getExperimentCohortRaw(now?: Date): Promise<ExperimentCohortRaw | undefined>` を `Promise.all` 8 並列に追加（9 並列に拡張）
+   - 内部で `getCohortDistribution(EXPERIMENTS.streak_freeze_monthly_grant.key)` + `getCohortStreakAvg(...)` を `Promise.all` で並列取得 → cohort 別の `{ control: { count, avgStreak }, variant_a: { count, avgStreak } }` 構造に整形
+   - `safeAggregate<T>` ラッパで失敗を黙殺（W12-T1 と同パターン）
+
+5. **`src/lib/admin/kpi-summary.ts` に Experiment Cohort Card composer 追加**
+   - `buildExperimentCohortCard(raw: ExperimentCohortRaw | undefined): KpiCard` を pure compose で実装
+   - raw undefined → 「実験 cohort: 集計データ未取得」 fallback card（DEC-024 前向き）
+   - raw 存在 → cohort 別 (control / variant_a) で `{label, count, avgStreak}` の 2 行を rows 配列で返す
+   - `iconName: "BeakerIcon"` を返す（admin/kpi/page.tsx 側の ICON_BY_NAME に Heroicons `BeakerIcon` を追加 / 絵文字 0）
+   - `composeKpiDashboardView` で 9 → 10 カードへ拡張（fixed-order の末尾に追加 / 既存 9 カードの順序は不変 / regression risk 0）
+   - 罰語ゼロ catalog（「実験」「比較」「観測」など中立トーン / 「失敗」「劣位」等は不使用）
+
+6. **`src/app/(admin)/admin/kpi/page.tsx` に Experiment Cohort Card 統合**
+   - 既存 9 カードのループに 10 カード目として表示（コード変更は kpi-summary.ts 側で完結すれば最小）
+   - `data-kpi-id="experiment-streak-freeze-cohort"` 追加
+   - Heroicons `BeakerIcon` import 追加
+
+7. **Unit テスト**: `tests/unit/experiments.test.ts` 新規（≥ 20 ケース）
+   - `assignVariant`: 同一 seed → 同一 variant / 異なる seed → 分布が概ね 50/50（10000 サンプルで 45-55% 範囲 assert）/ 不正 weight throw / 空 variants throw
+   - `validateExperimentsJson`: null / undefined / 文字列 / 不正 type / 正常 JSON 全網羅
+   - `isKnownExperiment` / `getExperimentDef` 既知 / 未知両分岐
+   - `buildExperimentCohortCard`: raw undefined / 0 cohort / 1 cohort / 2 cohort / 罰語不在 grep
+   - 既存 admin.kpi.test.ts 37 ケースは regression 0 維持
+
+8. **E2E 1 件**: `tests/e2e/admin-kpi-experiment.spec.ts` 新規（chromium + mobile-chrome = 2 ケース）
+   - admin login + cohort card 可視 + `data-kpi-id="experiment-streak-freeze-cohort"` 存在 + 罰語不在 grep
+   - `serial mode` + `execWithRetry` SQLITE_BUSY 対策（W12-T1 と同パターン）
+   - 既存 admin-kpi.spec.ts 4 件は regression 0 維持（10 カード描画になるが既存 assert は 9 カード以上で通る前提を確認）
+   - parent login → `/admin/kpi` → `/home` redirect は既存 admin-kpi.spec.ts で網羅済 / 本 spec では admin 経路のみ検証
+
+9. **decisions.md 追補**（本 DEC-066 / 完遂時に「§実装完遂デルタ」を追加）
+
+10. **dev report**: `reports/dev-w12-t2-ab-test-foundation-done.md`
+
+#### 含まない（W12-T2.5 / 後続 atomic で分割）
+
+- **月次 streak freeze grant cron 作成**（cron job + variant 適用ロジック / `EXPERIMENTS.streak_freeze_monthly_grant.variants` の枚数を実際に grant に反映）→ W12-T2.5 atomic（0.5 人日）
+- **2 件目以降の experiment 登録**（catalog 拡張のみ / 0.1 人日 polish）
+- **Experiment 終了 / winner 確定 / 全員適用ワークフロー**（Phase 3 candidate）
+- **Experiment 別 cohort の retention / quest / badge 等の cross-cut KPI**（W12-T1 で導入した既存 8 KPI の cohort 別ブレイクダウン / 0.5 人日 polish）
+
+### 制約厳守
+
+- **DEC-024**: 罰語不在（admin 向けでも「失敗」「劣位」等は不使用 / 数値は中立トーン / カタログ + UI 両層で構造的検証）
+- **DEC-003**: 三層認可（middleware 第一層既導入 / `requireAdmin()` 第二層既導入 / SQL aggregate-only 第三層で個別 family / learner 露出ゼロ）
+- **DEC-006**: API surface 不変（GET 10 / mutation 5 不変条件遵守 / `getOrAssignVariant` は server-only helper の単一 UPDATE = 既存 server action とは別系統で count 影響なし / 新規 route 0 / 新規 server action 0）
+- **DEC-055**: idempotency 厳守（`getOrAssignVariant` は既存割当を上書きしない / 同一 learner × experiment への複数 call が安全 / unit test で網羅）
+- **Turbopack `"use server"` sync export ban**: 純関数を `"use server"` ファイル外に置く 7 度目適用（experiments-catalog.ts は server-only directive 不使用 / Server Component から直 import 可）
+
+### 受入基準
+
+- typecheck pass（warning 0）/ lint pass（warning 0）
+- vitest **追加 unit ≥ 20 全 PASS / baseline 752 → ~772**（regression 0）
+- next build **25 routes**（新規 route 0 / route 数不変）
+- E2E 全 PASS（既存 42 + 新規 admin-kpi-experiment 2 = 44 / regression 0）
+- migration 0016 適用後の既存 E2E 全 green（learner_profiles.experiments default '{}' で既存行に影響なし）
+- レビュー部門 APPROVE
+- DEC-024 / DEC-003 / DEC-006 / DEC-055 / DEC-066 厳守
+
+### 後続 atomic 候補
+
+- W12-T2.5: 月次 streak freeze grant cron + variant 適用（0.5 人日 / W12-T2 catalog 流用）
+- W12-T1.5: 模試結果分布 + kotodama-tori 表示数 KPI 追加（0.25 人日 / W12-T1 polish）
+- W12-T3: β ユーザー受入準備（招待 LP + 同意書 + フィードバックフォーム / 1.5 人日 / P0）
+- W12-T4: ストレステスト + Sentry 強化（0.5 人日 / P1）
+- W11 KPT 振り返り（並行可 / 0.25 人日）
+
+### CEO 委任先 / 報告経路
+
+- 開発部門 → 着手 → `reports/dev-w12-t2-ab-test-foundation-done.md` 生成
+- レビュー部門 → 独立判定（CEO が次に呼ぶ）
+- CEO trust-but-verify → commit/push → dashboard 更新 → オーナー報告
+
+### §実装完遂デルタ（2026-05-03 / dev 完遂 + レビュー APPROVE / Critical 0 / Major 0 / Minor 2 / Nit 1）
+
+dev 完遂物（新規 5 + 修正 7 = 12 ファイル）に対するレビュー部門独立判定で **APPROVE / Critical 0 / Major 0 / Minor 2 / Nit 1** を受領。M-1〜M-2 / N-1 は push 阻害 0 / 機能影響 0 / 後続 atomic で吸収可のため、本 atomic は同 commit でクローズ。
+
+**CEO trust-but-verify 結果**: typecheck PASS / lint PASS（warning 0）/ vitest **52 files / 782 PASS**（baseline 752 + 新規 30 / regression 0）/ next build **25 routes**（不変）/ E2E **全 94 PASS**（chromium 47 + mobile-chrome 47 = admin-kpi-experiment 2 新規 + 既存 admin-kpi 4 + family-* / study-* / quest / shop / session 等全 spec green / regression 0）。
+
+**実装ハイライト**:
+1. **Turbopack `"use server"` sync export ban パターン 7 度目定着**: `experiments-catalog.ts`（純関数 / 201 行 / DOM-free / DB-free）と `assignment.ts`（server-only / 225 行）を分離。Server Component から直 import 可。
+2. **DEC-055 idempotency 構造的担保**: `getOrAssignVariant` は既存 valid 割当時 DB write 0 / 未割当時のみ単一 UPDATE。同一 (learnerId, experimentKey) への複数 call が安全。
+3. **DEC-003 三層認可第三層の構造的完成**: `getCohortDistribution` / `getCohortStreakAvg` の SELECT 句に learner_id / family_id / user_id が**構造的に出ない**（json_extract + COUNT/AVG + GROUP BY variant のみ / row 個別返却 0 / aggregate-only / COPPA 構造担保）。
+4. **SQL injection 防御**: `experimentKey` は `sql.raw` 不使用 / template literal bind parameter として渡される（grep 確認済）。
+5. **FNV-1a 32-bit hash deterministic 50/50**: 依存無し / Edge runtime 互換 / `Math.imul` で 32-bit overflow 安全 / 10000 サンプル ±0.5% で 50/50 達成。
+6. **migration 0016 既存行への影響ゼロ**: `ALTER TABLE learner_profiles ADD COLUMN experiments TEXT NOT NULL DEFAULT '{}'` / `validateExperimentsJson` で型ゆらぎ防御。
+7. **fixed-order card 順序不変**: 既存 9 カード順序を末尾 append で維持 / 既存 admin-kpi.spec.ts 4 PASS で間接担保。
+8. **scope creep ゼロ**: dev は `/api/cron/streak-freeze-monthly`（W8 既存 cron）を一切改変せず / W12-T2.5 で variant 別 grant 数適用を分割。
+
+**Minor 2 / Nit 1 の取り扱い**: M-1 (E2E 罰語 grep 7 語 vs unit 10 語の語数揃え) / M-2 (`__snapshots__/ai.coach.test.ts.snap` CRLF noise / .gitattributes) / N-1 (kpi.ts コメント文言「9 並列目」→「9 個目要素」) は W12-T2.5 着手前の 0.25 人日整理 or 任意リファクタ atomic で吸収（push 阻害なし / 機能影響なし）。
+
+---
+
 ## DEC-065: Phase 2 W12 第 1 atomic = W12-T1 KPI ダッシュボード（admin 専用 read-only） GO 判定（2026-05-03 / CEO 着手判断版）
 
 - **状況**: DEC-064 完遂 / commit `67dd31d` (origin/main HANEI repo) push / E2E 38/38 PASS / vitest 715 PASS / Phase 2 W11 完全閉じ（5/5 atomic / T4 のみオーナー VAPID + SW 設定待ち外部依存ブロッカー）/ Phase 2 全体進捗 95%。オーナー「推奨通り A 案 W12 KPI ダッシュボード着手」継続マンデート受領。

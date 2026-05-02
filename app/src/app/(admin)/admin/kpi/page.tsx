@@ -21,6 +21,7 @@ import {
   SparklesIcon,
   ChatBubbleLeftEllipsisIcon,
   ClockIcon,
+  BeakerIcon,
 } from "@heroicons/react/24/outline";
 
 import { requireAdmin } from "@/lib/auth/guards";
@@ -48,6 +49,7 @@ const ICON_BY_NAME = {
   SparklesIcon,
   ChatBubbleLeftEllipsisIcon,
   ClockIcon,
+  BeakerIcon,
 } as const;
 
 type IconName = keyof typeof ICON_BY_NAME;

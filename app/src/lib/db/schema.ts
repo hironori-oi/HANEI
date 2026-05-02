@@ -177,6 +177,17 @@ export const learnerProfiles = sqliteTable(
      * - 課金システム化禁止 (DEC-012) : 外部購入導線ゼロの閉じた経済。
      */
     coinBalance: integer("coin_balance").notNull().default(0),
+    /**
+     * W12-T2: A/B test cohort 割当 JSON (DEC-066)
+     * - shape: { [experimentKey: string]: variantKey: string }
+     * - 例: { "streak_freeze_monthly_grant": "variant_a" }
+     * - getOrAssignVariant で idempotent UPSERT (DEC-055)
+     * - cohort 集計は SQL aggregate-only (json_extract / GROUP BY) で learner_id flow 0 (DEC-003)
+     */
+    experiments: text("experiments", { mode: "json" })
+      .$type<Record<string, string>>()
+      .notNull()
+      .default(sql`('{}')`),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

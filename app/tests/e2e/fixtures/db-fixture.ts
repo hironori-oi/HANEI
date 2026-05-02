@@ -69,6 +69,8 @@ export async function applyMigrations(client: Client): Promise<void> {
     "0014_w10_study_sessions.sql",
     // W11-T1: families.family_streak_days + families.last_family_active_date (家族のれんぞく)
     "0015_w11_family_streak.sql",
+    // W12-T2 (DEC-066): learner_profiles.experiments JSON column (A/B test cohort 永続化)
+    "0016_w12_experiments.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);
