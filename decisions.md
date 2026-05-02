@@ -1,5 +1,113 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-064: Phase 2 W11 第 5 atomic = study-smoke / study-writing-smoke E2E regression 修復（Server Action auto-revalidation 起源の StudyClient unmount 抑止）GO 判定（2026-05-02 / CEO 着手判断・実態スコープ訂正版）
+
+- **状況**: DEC-063 で W11-T5 Weekly Digest Card 完遂 / commit `33ddb80` (origin/main) push / dashboard `f6a21f0` push / vitest 715 PASS / E2E 20/20 green / Phase 2 W11 進捗 75% → 100%（4/5、T4 のみオーナー設定待ち）。オーナー「推奨通り A 案 study-smoke / study-writing-smoke E2E preexisting regression 修復に着手」マンデート受領。task output で観測されていた「`test.describe()` parser エラー（"Playwright Test did not expect test.describe() to be called here"）」を CEO trust-but-verify で**実態調査**した結果、parser エラーは既に解消済 / **真の症状は別**であることが判明（重要訂正 §下記）。
+- **重要訂正（CEO 着手前 trust-but-verify / DIAG spec で確認済）**: 当初の「`test.describe()` parser エラー」は再現せず、**実態は次の runtime regression**:
+  1. `study-smoke.spec.ts:185` / `study-writing-smoke.spec.ts:137` で `expect(locator('[data-testid="study-feedback"]')).toBeVisible({ timeout: 15000 })` がタイムアウト
+  2. 診断ログ trace（StudyClient に console.log 仕込み + page.on console + network capture）で次のシーケンスを確認:
+     ```
+     [t=0ms]   click choice A → handleSelect → setSelected("A") → submitChoiceValue → startTransition
+     [t=6ms]   pending=true / choiceA disabled-selected
+     [t=200ms] [DIAG/submitChoiceValue] submitAnswer returned {correct:true, ...}
+     [t=200ms] [DIAG/submitChoiceValue] setFeedback called
+     [t=200ms] [DIAG/StudyClient] render (problemId=prb_e2e_5_vocab_001)
+     [t=210ms] [DIAG/StudyClient] render (problemId=prb_e2e_5_vocab_002) ← prop 切替！
+     [t=210ms] [DIAG/StudyClient] UNMOUNTED (mt_9ultxu, prb_001)
+     [t=210ms] [DIAG/StudyClient] MOUNTED (mt_iw21lw, prb_002) ← 新インスタンス！
+     [t=324ms] feedback NOT visible / choiceA reset / pending=false
+     ```
+  3. **根本原因**: Next.js 16 Server Action の応答に refreshed RSC payload が同梱され、page.tsx が再評価される。submitAnswer が正解を記録した結果 prb_001 の SRS dueAt が将来へ更新され、`getNextProblem(...)` が `prb_002` を返す → page.tsx の `studyClientKey = "problem:" + problem.id` が `"problem:prb_001"` → `"problem:prb_002"` に変化 → React が StudyClient を unmount → 新インスタンスを mount（fresh useState / `feedback=null`）→ E2E が観測した「クリック後フィードバック描画なし」regression。`setFeedback(result)` 自体は呼ばれているが、auto-revalidation による key 変化 unmount で破棄される。
+  4. これは Phase 1 G-6 設計時には想定外の Next.js 16 / React 19 / startTransition + Server Action auto-revalidation 三者複合挙動。Phase 1 でも厳密には潜在していたが、Next.js 16 にバンプして以降に顕在化。preexisting regression 認識。
+
+- **判定**: **GO**（study-smoke / study-writing-smoke regression 修復、最小 atomic / 0.5 人日 / Phase 1 学習コアループ UX 復旧 / 副作用無し / 既存テスト health max 化）。
+
+- **判断根拠**:
+  1. **オーナー指示**: A 案明示採用、W11 安定化の最後の閉じ。
+  2. **W11 完遂後の test 健全性最大化**: study-smoke + study-writing-smoke の 2 spec × chromium + mobile-chrome = 4 テスト + 関連 study-smoke-multi-level 4 テスト = 計 8 テストが回復 → W12 着手前に Phase 1 / 2 全体の E2E grid を完全 green にする。
+  3. **真の根本原因が特定済**: 表層の parser エラー仮説ではなく、Server Action revalidation × key 構成の構造的バグ。修復は局所的（page.tsx の key 戦略 + StudyClient の reset 条件 + feedback 描画中の問題内容スナップショット）で済む。
+  4. **既存セッションモード設計が同じ問題を回避済**: W10-T4 fix M-A1 で導入した「session-mode 時は studyClientKey を `session:<id>` で安定化」は本質的に同じ unmount 抑止パターン。それを Phase 1 直リンク経路 (非セッション mode) にも展開すれば一貫性が出る。
+  5. **回帰リスクが小さい**: 学習画面の SRS / submitAnswer / coin / quest / family-streak 経路は変更しない（Server Action は無変更）。変更は (a) page.tsx の `studyClientKey` を learner-stable にする、(b) StudyClient の prevProblemId pattern を「feedback 描画中は reset しない」に変える、(c) 描画用に answeredView snapshot を導入、(d) handleNext で answeredView も clear、の 4 点に限定。
+
+- **スコープ（atomic 完遂単位 / dev へのブリーフ要点）**:
+  1. **`src/app/(app)/study/[levelCode]/[skillCode]/page.tsx` の `studyClientKey` 修正**:
+     - 現状: `sessionRawId ? "session:" + sessionRawId : "problem:" + problem.id`
+     - 修正後: `sessionRawId ? "session:" + sessionRawId : "learner:" + learner.id`
+     - 効果: 非セッション mode でも auto-revalidation で `problem.id` が変化しても StudyClient が unmount されなくなる。コメントを「W11-T5 follow-up: Server Action auto-revalidation で problem.id が次問に変化しても unmount しないように learner-stable に変更」に更新。
+  2. **`src/app/(app)/study/[levelCode]/[skillCode]/StudyClient.tsx` の prevProblemId pattern 修正**:
+     - `if (prevProblemId !== problemId) { ... reset all }` を、**`feedback === null` の時のみ reset**するように分岐:
+       ```ts
+       if (prevProblemId !== problemId) {
+         setPrevProblemId(problemId);
+         if (!feedback) {
+           // フィードバック描画中は前問に対する解答結果を保持。
+           // (auto-revalidation で props.problemId が次問に変化しても、ユーザが「次の問題へ」を押すまで snapshot を維持)
+           setSelected(null);
+           setError(null);
+           setEssayDraft("");
+           setPlayCount(0);
+           setIsPlaying(false);
+         }
+       }
+       ```
+     - feedback はここでは reset しない（既に setFeedback で値が入っている / handleNext で明示 clear）。
+  3. **`src/app/(app)/study/[levelCode]/[skillCode]/StudyClient.tsx` に answeredView snapshot 導入**:
+     - 新 state: `const [answeredView, setAnsweredView] = useState<{ problemId: string; prompt: string; choices: Choice[]; problemType: "mcq" | "writing_essay"; audioUrl: string | null; skill: string | undefined; } | null>(null);`
+     - submitChoiceValue で `setFeedback(result)` の直前に `setAnsweredView({ problemId, prompt, choices, problemType, audioUrl: audioUrl ?? null, skill });` を挿入
+     - 描画では「answeredView があればそれを使う、なければ props を使う」の派生値を計算:
+       ```ts
+       const displayedView = answeredView ?? {
+         problemId, prompt, choices, problemType, audioUrl: audioUrl ?? null, skill,
+       };
+       const displayedIsWriting = displayedView.problemType === "writing_essay";
+       const displayedShowAudioUi = shouldShowAudioUi(displayedView.audioUrl, displayedView.skill);
+       ```
+     - prompt / choices.map / showAudioUi / isWriting の参照箇所を `displayedView.prompt` / `displayedView.choices.map` / `displayedShowAudioUi` / `displayedIsWriting` に置換（既存変数名は最小変更）。
+  4. **handleNext で answeredView も clear**:
+     - `setSelected(null); setFeedback(null);` の隣に `setAnsweredView(null);` を追加
+     - これで「次の問題へ」押下時に props（次問）が描画ソースになる
+  5. **既存 unit test を回帰させない / 新規 unit test 追加**:
+     - 既存 `tests/unit/study.*.test.ts` を全件 PASS 維持
+     - 新規: なし（StudyClient はクライアントコンポーネント / vitest jsdom で render するには大きすぎる + 状態 transition 検証は E2E が真値）
+  6. **既存 E2E が green になることが受入の核心**:
+     - `tests/e2e/study-smoke.spec.ts`（chromium + mobile-chrome）= 2 PASS
+     - `tests/e2e/study-writing-smoke.spec.ts`（同上）= 2 PASS
+     - `tests/e2e/study-smoke-multi-level.spec.ts`（同上 / level/skill 直交）= 4 PASS
+     - `tests/e2e/session-cumulative.spec.ts` / `tests/e2e/overtime-cumulative.spec.ts` = 既存挙動維持（session-mode は影響なし / 既に session-stable key を使用）
+     - W11 family-* E2E 16 件 = リグレッション 0
+   - 計 ≥ **8 + 16 = 24 PASS** 。
+
+- **同梱しない（明示的 out-of-scope）**:
+  - submitAnswer / SRS / coin / quest / family-streak / 親メッセージ moderation の挙動変更
+  - W10-T4 / W10-T5 の session-mode（既に session-stable key で正しく動作 / 影響なし）
+  - Next.js 16 Server Action 自体の auto-revalidation 抑止（experimental flag は不安定 / 設計を変えるより React tree 側で対応）
+  - DB schema 変更 / migration 追加 / 新規 server action
+
+- **受入基準**:
+  - typecheck / lint pass（warning 0）
+  - vitest 全 PASS（W11-T5 baseline 715 / 新規 unit 無し / 既存 0 件 regression）
+  - next build 23 routes（新規ルート無し）
+  - E2E **study-smoke 2 + study-writing-smoke 2 + study-smoke-multi-level 4 = 8 PASS**（chromium + mobile-chrome で全 green）
+  - E2E **family-streak 6 + family-leaderboard 6 + family-message 4 + family-weekly-digest 4 = 20 PASS**（W11 既存 / リグレッション 0）
+  - DEC-024 / DEC-006 / DEC-003 / DEC-055 / DEC-061 / DEC-062 / DEC-063 厳守
+
+- **次の atomic 候補**: DEC-064 完遂後 → **A 案**: W11 完遂サマリ + Phase 2 中間振り返り（KPT / 0.25 人日）→ **B 案**: W12 KPI ダッシュボード着手（次 milestone / DEC-064 で W11 完全閉じ済前提）→ **C 案**: W11-T4 Daily Push 通知（オーナー VAPID 鍵 + Service Worker 設定が来た時点で再着手 / P0）。CEO は DEC-064 完遂後に再判定。
+
+- **実装完遂デルタ（dev 着手後判明 / 2026-05-02 / 当初スコープに対する明示追補）**: コード修正 4 点（page.tsx key + prevProblemId + answeredView snapshot + handleNext clear）を適用後、`bun run e2e tests/e2e/study-writing-smoke.spec.ts` を実行したところ別系統の preexisting failure を確認し、計 2 件の追補修正を同 atomic に取り込んだ:
+  1. **`playwright.config.ts` webServer env で `OPENAI_API_KEY: ""` を明示**: `.env.local` に置かれている本番 API キーが production webServer (`npm start`) で読まれて `score-writing` が OpenAI を実呼び出ししていた。primary `gpt-5-mini` が `finishReason:'length'` で JSON parse error → fallback model も含めて 15s `feedback` timeout を超過する flaky 化が発生。`study-writing-smoke.spec.ts:128` の注釈「OPENAI_API_KEY 不在環境前提」設計に合わせ、E2E webServer は決定論 jaccard fallback に固定。
+  2. **`tests/e2e/fixtures/db-fixture.ts` writing seed を 1 問 → 2 問に拡張**: writing-3 が 1 問しか seed されておらず、submitAnswer 後の auto-revalidation で `getNextProblem(level=3, skill=writing-3)` が path1（due）/path2（NOT EXISTS）どちらにも該当せず null を返す → page.tsx が「問題が用意されていません」branch に落ちて `<StudyClient>` 自体を render しなくなる → answeredView snapshot で守れない（snapshot は StudyClient 配下の Card にあるため）。2 問 seed すれば次問描画で同一 StudyClient インスタンスが維持され answeredView snapshot が機能する。production seed は十分な多様性があるため本変更は E2E fixture 限定。
+  - これらは「StudyClient unmount 抑止」という DEC-064 の atomic 主旨と直結する周辺修正であり、別 atomic に分割すると本問題の green 化が達成できないため同梱した。
+  - 副作用: `tests/e2e/.tmp/e2e.db` は globalSetup で truncate + 再 seed されるため、既存 E2E への影響なし（family-* 20 PASS / session-cumulative 2 PASS / overtime-cumulative 2 PASS で確認済）。
+- **trust-but-verify 結果（dev 完遂）**:
+  - typecheck PASS / lint 0 warnings / vitest **715 PASS / 50 files** baseline 維持
+  - next build **23 routes** 完遂
+  - **study-smoke 2 + study-writing-smoke 2 + study-smoke-multi-level 8 = 12 PASS**（chromium + mobile-chrome で全 green）
+  - **family-streak 6 + family-leaderboard 6 + family-message 4 + family-weekly-digest 4 = 20 PASS**（W11 既存リグレッション 0）
+  - **session-cumulative 4 + overtime-cumulative 2 = 6 PASS**（W10-T5 session-mode 既存挙動維持）
+  - 受入基準クリア。
+
+---
+
 ## DEC-063: Phase 2 W11 第 4 atomic = W11-T5 Weekly Digest 強化（保護者ダッシュボード Card 版 / read-only / 既存基盤流用）GO 判定（2026-05-02 / CEO 着手判断）
 
 - **状況**: DEC-062 で W11-T2 親→子応援メッセージ完遂 / commit `12d93cf` (origin/main) push / dashboard `cc410ed` push / レビュー APPROVE / Critical/Major 0 / Minor 4（W12 polish 吸収可）/ vitest 49 files / 683 passed / E2E family-message 4/4 + family-leaderboard 6/6 + family-streak 6/6 = 16/16 green。オーナー「推奨通り進めてください」継続マンデート受領（A 案 W11-T5 採用指示 / 保護者ダッシュボードに週次サマリ Card / 家族 streak / 各子 XP / トップ 3 単元 / 来週の励ましコピー / read-only / 既存 `getFamilyWeeklyLeaderboard` 流用可 / DEC-024 罰則ゼロ厳守）。W11 残タスク: T4 Daily Push 通知（P0 / 1.5 人日 / VAPID 鍵 + Service Worker 必要 = オーナー外部設定ブロッカー / 即着手不可）と T5 Weekly Digest 強化（P1 / 0.5 人日 / 即着手可）。

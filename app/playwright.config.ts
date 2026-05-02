@@ -65,6 +65,14 @@ export default defineConfig({
       NODE_ENV: "production",
       // W10-T5: PORT を Next.js `start` に渡すことで E2E_PORT (default 3000) を実際に listen させる。
       PORT: String(E2E_PORT),
+      // W11 follow-up (DEC-064): writing_essay E2E は score-writing 決定論 fallback
+      // (jaccard 単語重複) で「模範解答に近い回答 → correct=true」を確認する設計
+      // (study-writing-smoke.spec.ts:128 注釈 "OPENAI_API_KEY 不在環境前提")。
+      // .env.local に OPENAI_API_KEY が定義されていると Next.js production server が
+      // それを読んで OpenAI を実呼び出ししてしまい、generateObject が finishReason:'length'
+      // で primary→fallback 両モデル失敗するか、15s feedback timeout を超過して flaky
+      // 化する。E2E では明示的に空文字で上書きして決定論経路に固定する。
+      OPENAI_API_KEY: "",
     },
   },
 });

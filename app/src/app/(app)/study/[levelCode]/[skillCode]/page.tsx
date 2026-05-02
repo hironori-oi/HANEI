@@ -205,12 +205,20 @@ export default async function StudyPage({
   // - session-mode (sessionId 付き) では `session:<id>` で固定 → router.refresh() で次問取得しても
   //   StudyClient が unmount されず、sessionAnswers / sessionStartTime / overtimeOffered などの
   //   useState が保持される (planSize 到達 / overtime 提案が正しく発火するための前提)
-  // - session-mode 外 (Phase 1 直リンク) は従来通り problem.id 切替で feedback リセット
+  //
+  // W11 follow-up (DEC-064): 非セッション直リンク経路でも learner-stable に変更。
+  // - Next.js 16 Server Action の応答に refreshed RSC payload が同梱され、submitAnswer 完了直後に
+  //   page.tsx が再評価される。submitAnswer は SRS dueAt を未来に更新するので getNextProblem(...) は
+  //   次問 ID を返す。従来の `problem:<id>` key だと StudyClient が unmount → setFeedback(...) が
+  //   破棄され「クリック後フィードバック描画なし」regression を引き起こした。
+  // - learner-stable key にすると、StudyClient は同一インスタンスで problemId prop の変化を観測する。
+  //   StudyClient 側の prevProblemId pattern + answeredView snapshot で「次の問題へ」を押すまで
+  //   直前に答えた問題の prompt/choices/feedback を保持し続ける。
   const sessionRawId =
     typeof sessionRaw === "string" && sessionRaw.length > 0 ? sessionRaw : undefined;
   const studyClientKey = sessionRawId
     ? `session:${sessionRawId}`
-    : `problem:${problem.id}`;
+    : `learner:${learner.id}`;
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">

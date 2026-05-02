@@ -450,44 +450,68 @@ export async function seedFixture(client: Client): Promise<{
     });
   }
 
-  // ----- W7 B-10: writing_essay 問題 (3 級 / 1 問) -----
+  // ----- W7 B-10: writing_essay 問題 (3 級 / 2 問) -----
   // OPENAI_API_KEY 未設定の E2E 環境では scoreWritingEssay() が
   // jaccardWordOverlap ベースの決定論フォールバックに落ちるため、
   // 模範解答と単語が十分重複する解答を送れば correct=true で次問へ進める。
+  //
+  // W11 follow-up (DEC-064): 2 問目を seed しているのは、submitAnswer 後の
+  // page.tsx 自動再評価で getNextProblem() が「次問」を返せるようにするため。
+  // 1 問しか無いと submitAnswer 後 srs_states に future dueAt が入って path1/path2
+  // のいずれにもヒットせず page.tsx が「問題が用意されていません」branch に落ち、
+  // StudyClient ごと unmount されるため、answeredView snapshot でも feedback Card
+  // を維持できない (Card は StudyClient 配下にあるため)。2 問にすると次問描画で
+  // StudyClient が同一インスタンス維持 → answeredView snapshot で feedback 表示が
+  // 持続する。
   {
-    const writingId = "prb_e2e_3_writing_001";
-    const writingQuestionJson = JSON.stringify({
-      prompt: "What sport do you like? Please write 2-3 sentences.",
-      modelAnswer:
-        "I like soccer. I play soccer with my friends every weekend. It is a lot of fun.",
-      wordCountMin: 15,
-      wordCountMax: 50,
-    });
-    await client.execute({
-      sql: `INSERT INTO problems (id, level_id, skill_id, type, question_json, correct_answer, explanation, qa_verdict, qa_status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        writingId,
-        "3",
-        mapSkillId("3", "writing"),
-        "writing_essay",
-        writingQuestionJson,
-        // correct_answer は writing_essay では「お手本」を保持するだけ (採点は scoreWritingEssay)
-        "I like soccer. I play soccer with my friends every weekend. It is a lot of fun.",
-        "ライティングは自分の言葉で書くことが大切です。",
-        "pass",
-        "live",
-        "ai_generated",
-      ],
-    });
-    await client.execute({
-      sql: `INSERT INTO problem_explanations (id, problem_id, explanation_text, generated_by) VALUES (?, ?, ?, ?)`,
-      args: [
-        `pe_${writingId}`,
-        writingId,
-        "ライティングはお手本と違っても OK です。 (cached explanation for E2E)",
-        "curated",
-      ],
-    });
+    const writingProblems = [
+      {
+        id: "prb_e2e_3_writing_001",
+        prompt: "What sport do you like? Please write 2-3 sentences.",
+        modelAnswer:
+          "I like soccer. I play soccer with my friends every weekend. It is a lot of fun.",
+        explanation: "ライティングは自分の言葉で書くことが大切です。",
+        explanationText:
+          "ライティングはお手本と違っても OK です。 (cached explanation for E2E)",
+      },
+      {
+        id: "prb_e2e_3_writing_002",
+        prompt: "What food do you like? Please write 2-3 sentences.",
+        modelAnswer:
+          "I like sushi. I eat sushi with my family on weekends. It is delicious.",
+        explanation: "ライティングは自分の言葉で書くことが大切です。",
+        explanationText:
+          "ライティングは小さな違いも個性です。 (cached explanation for E2E)",
+      },
+    ];
+    for (const w of writingProblems) {
+      const writingQuestionJson = JSON.stringify({
+        prompt: w.prompt,
+        modelAnswer: w.modelAnswer,
+        wordCountMin: 15,
+        wordCountMax: 50,
+      });
+      await client.execute({
+        sql: `INSERT INTO problems (id, level_id, skill_id, type, question_json, correct_answer, explanation, qa_verdict, qa_status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          w.id,
+          "3",
+          mapSkillId("3", "writing"),
+          "writing_essay",
+          writingQuestionJson,
+          // correct_answer は writing_essay では「お手本」を保持するだけ (採点は scoreWritingEssay)
+          w.modelAnswer,
+          w.explanation,
+          "pass",
+          "live",
+          "ai_generated",
+        ],
+      });
+      await client.execute({
+        sql: `INSERT INTO problem_explanations (id, problem_id, explanation_text, generated_by) VALUES (?, ?, ?, ?)`,
+        args: [`pe_${w.id}`, w.id, w.explanationText, "curated"],
+      });
+    }
   }
 
   // streaks / xp_levels / characters の初期行 (parent dashboard 集計テスト用)

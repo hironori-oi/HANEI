@@ -63,6 +63,24 @@ interface Choice {
   text: string;
 }
 
+/**
+ * W11 follow-up (DEC-064): フィードバック描画中に「直前に答えた問題」を frozen 状態で
+ * 保持するための snapshot 型。
+ *
+ * Next.js 16 Server Action は応答に refreshed RSC payload を同梱するため、submitAnswer 完了直後に
+ * page.tsx が再評価され、props (problemId / prompt / choices / audioUrl) が次問に切替わる。
+ * フィードバック描画中も「直前に答えた問題」を表示し続けるため、submitChoiceValue で本 snapshot を
+ * setFeedback(...) と同時に capture し、handleNext で setFeedback(null) と一緒に null にする。
+ */
+type AnsweredView = {
+  problemId: string;
+  prompt: string;
+  choices: Choice[];
+  problemType: "mcq" | "writing_essay";
+  audioUrl: string | null;
+  skill: string | undefined;
+};
+
 interface FeedbackResult {
   correct: boolean;
   correctAnswer: string;
@@ -124,13 +142,21 @@ export function StudyClient(props: {
     serverTodayCumulativeSeconds = 0,
     studySessionDbId,
   } = props;
-  const isWriting = problemType === "writing_essay";
   const router = useRouter();
   const [selected, setSelected] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [startTime] = useState<number>(() => Date.now());
+
+  // W11 follow-up (DEC-064): フィードバック描画中の prompt/choices/audio スナップショット。
+  // - Next.js 16 Server Action 応答に同梱される refreshed RSC payload で page.tsx が再評価され、
+  //   props (problemId / prompt / choices / audioUrl) が「次問」に切替わってしまう。
+  // - その間も「直前に答えた問題」の prompt/choices/feedback を描画し続けるため、
+  //   submitChoiceValue で setFeedback(...) と同時に answeredView を capture する。
+  // - handleNext の「次の問題へ」押下で setFeedback(null) と一緒に setAnsweredView(null) して、
+  //   次サイクルから props (新問) を描画ソースとして採用する。
+  const [answeredView, setAnsweredView] = useState<AnsweredView | null>(null);
   // W8-T4: レッスン完了 modal 表示 state
   const [showLessonComplete, setShowLessonComplete] = useState(false);
   // W8-T2: 連続正解 combo state (1 セッション内のみ有効、不正解 / セッション終了でリセット)
@@ -319,27 +345,49 @@ export function StudyClient(props: {
   // UI state」(選択 / フィードバック / エラー / essay 入力 / 音声再生回数) は明示的に
   // problemId 変化を観測してリセットする。
   //
+  // W11 follow-up (DEC-064): 非セッション直リンク経路でも learner-stable key に変更したため
+  // 同じく unmount しない。問題遷移経路は両モードで本 pattern に集約される。
+  //
   // React 公式 "Resetting state when a prop changes" pattern (render 中に prev を比較し
   // 検知時に同期 setState する) を採用 — useEffect 内 setState は cascading render を
   // 招くため (react-hooks/set-state-in-effect) 避ける。
   //
-  // - session-mode 外 (key=problem:<id>) では従来通り unmount による初期化なので冗長だが、
-  //   挙動は同一 (副作用なし) なので分岐せず一律リセット
+  // 重要: フィードバック描画中 (feedback !== null) は reset しない。Server Action 応答に同梱される
+  // refreshed RSC payload で props.problemId は次問に切替わるが、ユーザが「次の問題へ」を押すまで
+  // 直前の問題 (answeredView snapshot + feedback) を表示し続けるため。「次の問題へ」押下後の
+  // handleNext で setFeedback(null) + setAnsweredView(null) になった次サイクルで本ブロックの
+  // reset 経路に入る。
   // - combo はセッション内継続が仕様 (W8-T2) のためここでは触らない
   // - sessionAnswers / sessionEarnedCoins / sessionStartTime / overtimeOffered も
   //   セッションスコープなので problem 単位ではリセットしない
   const [prevProblemId, setPrevProblemId] = useState(problemId);
   if (prevProblemId !== problemId) {
     setPrevProblemId(problemId);
-    setSelected(null);
-    setFeedback(null);
-    setError(null);
-    setEssayDraft("");
-    setPlayCount(0);
-    setIsPlaying(false);
+    if (!feedback) {
+      // フィードバック描画中は前問の解答結果を保持。reset せずに prop の変化を吸収する。
+      setSelected(null);
+      setError(null);
+      setEssayDraft("");
+      setPlayCount(0);
+      setIsPlaying(false);
+    }
   }
 
-  const showAudioUi = shouldShowAudioUi(audioUrl, skill);
+  // W11 follow-up (DEC-064): 描画ソース。フィードバック描画中は answeredView (frozen) を、
+  // それ以外は props を採用。これにより Server Action auto-revalidation 後に props が次問に
+  // 切替わっても、ユーザが「次の問題へ」を押すまで「直前に答えた問題」の prompt/choices/audio を
+  // 描画し続ける。feedback.correctAnswer / feedback.explanation は元から「frozen」(answer 時点の
+  // 値) なのでそのまま使う。
+  const displayedView: AnsweredView = answeredView ?? {
+    problemId,
+    prompt,
+    choices,
+    problemType,
+    audioUrl: audioUrl ?? null,
+    skill,
+  };
+  const isWriting = displayedView.problemType === "writing_essay";
+  const showAudioUi = shouldShowAudioUi(displayedView.audioUrl, displayedView.skill);
 
   const handlePlayToggle = () => {
     const el = audioRef.current;
@@ -373,6 +421,17 @@ export function StudyClient(props: {
           choice: value,
           timeSpentMs: Date.now() - startTime,
           clientCombo: combo,
+        });
+        // W11 follow-up (DEC-064): フィードバック描画中に props (problemId/prompt/choices/audio)
+        // が次問に切替わっても、ユーザが「次の問題へ」を押すまで本問題の描画を維持するため、
+        // submitAnswer 完了時の props を snapshot に capture する。
+        setAnsweredView({
+          problemId,
+          prompt,
+          choices,
+          problemType,
+          audioUrl: audioUrl ?? null,
+          skill,
         });
         setFeedback(result);
 
@@ -459,6 +518,10 @@ export function StudyClient(props: {
       router.refresh();
       setSelected(null);
       setFeedback(null);
+      // W11 follow-up (DEC-064): answeredView snapshot もここで明示 clear。
+      // 次サイクルでは props.problemId が次問に変化済みなので、prevProblemId branch の
+      // reset 経路 (feedback === null) に入って残りの state も clear される。
+      setAnsweredView(null);
       setEssayDraft("");
       // W8-T2: combo はセッション中継続 (router.refresh() でも useState は維持される)
       // ただし「不正解」では既に 0 リセット済み。意図的な離脱は別フローでハンドル。
@@ -632,7 +695,7 @@ export function StudyClient(props: {
             </span>
             <audio
               ref={audioRef}
-              src={audioUrl ?? undefined}
+              src={displayedView.audioUrl ?? undefined}
               preload="metadata"
               onPlay={() => {
                 setIsPlaying(true);
@@ -660,7 +723,7 @@ export function StudyClient(props: {
             className="text-xl font-medium leading-relaxed sm:text-2xl"
             data-testid="study-prompt"
           >
-            {prompt}
+            {displayedView.prompt}
           </p>
         </CardContent>
       </Card>
@@ -735,7 +798,7 @@ export function StudyClient(props: {
           isWriting ? "hidden" : "grid gap-3 sm:grid-cols-2"
         }
       >
-        {choices.map((choice) => {
+        {displayedView.choices.map((choice) => {
           const isSelected = selected === choice.label;
           const isCorrectChoice =
             feedback && choice.label === feedback.correctAnswer;
