@@ -49,5 +49,11 @@ export function resolveStreakFreezeGrantTickets(variantKey: string): number {
   ) {
     return 1; // fallback safety (control 互換)
   }
+  // W12-T1.5 (DEC-068 / DEC-067 N-1): 多層防御コメント.
+  //  - hasOwnProperty.call で key 存在は保証済だが、TS Record<string, number> は
+  //    値が undefined になり得ない signature でも、予期せぬ runtime override
+  //    (例: catalog 拡張時の同期忘れ + prototype-pollution 経路 / Object.prototype
+  //    汚染 / JSON.parse からの値挿入) を防ぐため fallback 1 を残置する.
+  //  - dead branch ではあるが構造的安全網として意図的に保持 (削除禁止).
   return STREAK_FREEZE_GRANT_TICKETS_BY_VARIANT[variantKey] ?? 1;
 }

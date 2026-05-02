@@ -72,24 +72,34 @@ export async function GET(request: NextRequest) {
         // W12-T2.5 (DEC-067): A/B test variant 別 grant 数を適用.
         //  - control: 1 枚 / variant_a: 2 枚 (FREEZE_MAX_TICKETS=2 上限尊重)
         //  - getOrAssignVariant は idempotent UPSERT (DEC-055 / W12-T2 構造担保)
-        const variantKey = await getOrAssignVariant(
-          row.learnerId,
-          EXPERIMENTS.streak_freeze_monthly_grant.key,
-        );
-        const grantTickets = resolveStreakFreezeGrantTickets(variantKey);
-        const { newCount, grantedCount } = grantFreezeTicketsN(
-          row.freezeTickets,
-          grantTickets,
-        );
-        if (grantedCount > 0) {
-          await db
-            .update(streaks)
-            .set({ freezeTickets: newCount, updatedAt: new Date() })
-            .where(eq(streaks.id, row.id));
-          monthlyGranted += grantedCount; // 実枚数集計 (旧: 学習者数)
-          monthlyGrantedLearners += 1;
-          monthlyGrantedByVariant[variantKey] =
-            (monthlyGrantedByVariant[variantKey] ?? 0) + grantedCount;
+        // W12-T1.5 (DEC-068 / DEC-067 M-1): per-row 失敗を吸収し残 learner の処理継続.
+        //  - 一 learner の getOrAssignVariant / DB UPDATE 失敗で全体 break しない.
+        //  - errors 配列に { learnerId: row.learnerId, message } を push して観測性確保.
+        //  - 失敗 learner は次回月初に再試行 (DEC-055 idempotency / 上限到達なら自然 no-op).
+        try {
+          const variantKey = await getOrAssignVariant(
+            row.learnerId,
+            EXPERIMENTS.streak_freeze_monthly_grant.key,
+          );
+          const grantTickets = resolveStreakFreezeGrantTickets(variantKey);
+          const { newCount, grantedCount } = grantFreezeTicketsN(
+            row.freezeTickets,
+            grantTickets,
+          );
+          if (grantedCount > 0) {
+            await db
+              .update(streaks)
+              .set({ freezeTickets: newCount, updatedAt: new Date() })
+              .where(eq(streaks.id, row.id));
+            monthlyGranted += grantedCount; // 実枚数集計 (旧: 学習者数)
+            monthlyGrantedLearners += 1;
+            monthlyGrantedByVariant[variantKey] =
+              (monthlyGrantedByVariant[variantKey] ?? 0) + grantedCount;
+          }
+        } catch (err) {
+          errors.push(
+            `learner=${row.learnerId} ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
       }
     }
@@ -101,37 +111,48 @@ export async function GET(request: NextRequest) {
       .from(learnerProfiles);
 
     for (const learner of allLearners) {
-      // 受験日: exam_dates テーブルから取得 (latest 1 件)
-      // eslint-disable-next-line no-restricted-syntax -- cron 内部
-      const examRows = await db
-        .select({ examDate: examDates.examDate })
-        .from(examDates)
-        .where(eq(examDates.learnerId, learner.id))
-        .limit(50);
+      // W12-T1.5 (DEC-068 / DEC-067 M-1): per-row 失敗を吸収し残 learner の処理継続.
+      //  - 受験日 / streak SELECT or UPDATE が一 learner で失敗しても全体 break しない.
+      //  - errors 配列に { learnerId: learner.id, message } を push.
+      //  - 失敗 learner は翌日 cron で再評価 (該当日の判定 = 「ちょうど 30 日前」なので
+      //    リトライ機会が 1 日のみだが、上限到達なら自然 no-op).
+      try {
+        // 受験日: exam_dates テーブルから取得 (latest 1 件)
+        // eslint-disable-next-line no-restricted-syntax -- cron 内部
+        const examRows = await db
+          .select({ examDate: examDates.examDate })
+          .from(examDates)
+          .where(eq(examDates.learnerId, learner.id))
+          .limit(50);
 
-      // 「ちょうど 30 日前」となる日が 1 つでもあれば bonus 付与対象
-      const isBonus = examRows.some((r) =>
-        isExamDateBonusDay(todayIsoJst, r.examDate),
-      );
-      if (!isBonus) continue;
+        // 「ちょうど 30 日前」となる日が 1 つでもあれば bonus 付与対象
+        const isBonus = examRows.some((r) =>
+          isExamDateBonusDay(todayIsoJst, r.examDate),
+        );
+        if (!isBonus) continue;
 
-      // streak 行を取得
-      // eslint-disable-next-line no-restricted-syntax -- cron 内部
-      const streakRows = await db
-        .select()
-        .from(streaks)
-        .where(eq(streaks.learnerId, learner.id))
-        .limit(1);
-      const streakRow = streakRows[0];
-      if (!streakRow) continue;
+        // streak 行を取得
+        // eslint-disable-next-line no-restricted-syntax -- cron 内部
+        const streakRows = await db
+          .select()
+          .from(streaks)
+          .where(eq(streaks.learnerId, learner.id))
+          .limit(1);
+        const streakRow = streakRows[0];
+        if (!streakRow) continue;
 
-      const { newCount, granted } = grantFreezeTicket(streakRow.freezeTickets);
-      if (granted) {
-        await db
-          .update(streaks)
-          .set({ freezeTickets: newCount, updatedAt: new Date() })
-          .where(eq(streaks.id, streakRow.id));
-        examBonusGranted += 1;
+        const { newCount, granted } = grantFreezeTicket(streakRow.freezeTickets);
+        if (granted) {
+          await db
+            .update(streaks)
+            .set({ freezeTickets: newCount, updatedAt: new Date() })
+            .where(eq(streaks.id, streakRow.id));
+          examBonusGranted += 1;
+        }
+      } catch (err) {
+        errors.push(
+          `learner=${learner.id} ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   } catch (err) {
@@ -147,7 +168,8 @@ export async function GET(request: NextRequest) {
     monthlyGranted,
     // W12-T2.5 (DEC-067): grant を受けた学習者数 (旧 monthlyGranted の意味 / 後方互換用).
     monthlyGrantedLearners,
-    // W12-T2.5 (DEC-067): variant 別 grant 枚数集計 (観測性確保).
+    // W12-T2.5 (DEC-067 / DEC-068): variant 別 grant 枚数集計 (観測性確保).
+    // 月初以外は {} (= grant 処理スキップで未集計を表現 / 'control:0' のような擬似値は出力しない).
     monthlyGrantedByVariant,
     examBonusGranted,
     scanned,

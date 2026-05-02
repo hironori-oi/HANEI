@@ -1,0 +1,8 @@
+# HANEI - Git attributes (W12-T1.5 / DEC-068)
+#
+# `*.snap` を LF 固定にして Vitest snapshot の CRLF noise を構造的に解消する.
+#  - 背景: Windows で vitest -u 等が実行されると Vitest が一部の snapshot を
+#    LF で書き出し、git の autocrlf 設定によっては毎回 git status に
+#    "modified" として現れる (W12-T1 / W12-T2 / W12-T2.5 で再発した noise).
+#  - 対処: `text eol=lf` で snapshot は常に LF に統一する.
+*.snap text eol=lf

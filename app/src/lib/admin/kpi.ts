@@ -33,6 +33,7 @@ import {
   userBadges,
   badges,
   parentMessages,
+  mockExamResults,
 } from "@/lib/db/schema";
 import {
   composeKpiDashboardView,
@@ -41,8 +42,10 @@ import {
   type DailyQuestCompletionRaw,
   type ExperimentCohortRaw,
   type FamilyMessageFrequencyRaw,
+  type KotodamaMessageDeliveryRaw,
   type KpiDashboardRaw,
   type KpiDashboardView,
+  type MockExamDistributionRaw,
   type RetentionRaw,
   type StreakStatsRaw,
 } from "@/lib/admin/kpi-summary";
@@ -298,6 +301,77 @@ async function getExperimentCohortRaw(): Promise<ExperimentCohortRaw> {
   };
 }
 
+/**
+ * 模試結果分布 (直近 30 日 / 級別 / W12-T1.5 / DEC-068).
+ *
+ *  - 級 (5 / 4 / 3) ごとに COUNT(*) と AVG(score / max_score) を集計.
+ *  - 母数 0 級は SQL 結果に出ないため自然に脱落.
+ *  - learner_id / 個別 score は SELECT 句から構造的排除 (DEC-003 第三層 / aggregate-only).
+ */
+async function getMockExamDistribution(
+  now: Date,
+): Promise<MockExamDistributionRaw> {
+  const cutoff = unixSeconds(
+    new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+  );
+  // eslint-disable-next-line no-restricted-syntax -- admin aggregate-only (DEC-003 / DEC-068)
+  const rows = await db
+    .select({
+      level: mockExamResults.level,
+      cnt: sql<number>`COUNT(*)`,
+      avgRatio: sql<number>`AVG(CAST(${mockExamResults.score} AS REAL) / NULLIF(${mockExamResults.maxScore}, 0))`,
+    })
+    .from(mockExamResults)
+    .where(sql`${mockExamResults.takenAt} >= ${cutoff}`)
+    .groupBy(mockExamResults.level);
+
+  const byLevel: MockExamDistributionRaw["byLevel"] = rows
+    .filter(
+      (r): r is { level: "5" | "4" | "3"; cnt: number; avgRatio: number } =>
+        r.level === "5" || r.level === "4" || r.level === "3",
+    )
+    .map((r) => ({
+      level: r.level,
+      count: Number(r.cnt ?? 0),
+      avgRatio: Number(r.avgRatio ?? 0),
+    }))
+    .filter((r) => r.count > 0);
+
+  return { byLevel };
+}
+
+/**
+ * kotodama-tori メッセージ表示率 (直近 7 日 / W12-T1.5 / DEC-068).
+ *
+ *  - parent_messages の createdAt >= cutoff の COUNT(*) (送信総数) +
+ *    SUM(CASE WHEN read_at IS NOT NULL THEN 1 ELSE 0 END) (表示済).
+ *  - family_id / from_user_id / to_learner_id を SELECT 句から構造的排除 (DEC-003 第三層).
+ */
+async function getKotodamaMessageDeliveryLast7Days(
+  now: Date,
+): Promise<KotodamaMessageDeliveryRaw> {
+  const cutoff = unixSeconds(
+    new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+  );
+  // eslint-disable-next-line no-restricted-syntax -- admin aggregate-only (DEC-003 / DEC-068)
+  const rows = await db
+    .select({
+      totalSent: sql<number>`COUNT(*)`,
+      totalRead: sql<number>`COALESCE(
+        SUM(CASE WHEN ${parentMessages.readAt} IS NOT NULL THEN 1 ELSE 0 END),
+        0
+      )`,
+    })
+    .from(parentMessages)
+    .where(sql`${parentMessages.createdAt} >= ${cutoff}`);
+
+  const r = rows[0];
+  return {
+    totalSent: Number(r?.totalSent ?? 0),
+    totalRead: Number(r?.totalRead ?? 0),
+  };
+}
+
 /** 親→子メッセージ送信頻度 (直近 7 日 / aggregate のみ). */
 async function getFamilyMessageFrequencyLast7Days(
   now: Date,
@@ -342,6 +416,8 @@ export async function getKpiDashboard(now?: Date): Promise<KpiDashboardView> {
     badgeDistribution,
     familyMessageFrequency,
     experimentCohort,
+    mockExamDistribution,
+    kotodamaMessageDelivery,
   ] = await Promise.all([
     safeAggregate("retentionDay1", () => getRetentionDayN(1, generatedAt)),
     safeAggregate("retentionDay7", () => getRetentionDayN(7, generatedAt)),
@@ -357,8 +433,17 @@ export async function getKpiDashboard(now?: Date): Promise<KpiDashboardView> {
     safeAggregate("familyMessageFrequency", () =>
       getFamilyMessageFrequencyLast7Days(generatedAt),
     ),
-    // W12-T2 (DEC-066): A/B test cohort 9 並列目 (内部で 2 SQL を Promise.all で並列取得)
+    // W12-T2 (DEC-066): A/B test cohort 9 個目要素 (10 → 11 個目要素は W12-T1.5 / DEC-068)
+    // (内部で 2 SQL を Promise.all で並列取得)
     safeAggregate("experimentCohort", () => getExperimentCohortRaw()),
+    // W12-T1.5 (DEC-068): 模試結果分布 10 個目要素 (直近 30 日 / 級別 aggregate)
+    safeAggregate("mockExamDistribution", () =>
+      getMockExamDistribution(generatedAt),
+    ),
+    // W12-T1.5 (DEC-068): kotodama-tori メッセージ表示率 11 個目要素 (直近 7 日 / aggregate)
+    safeAggregate("kotodamaMessageDelivery", () =>
+      getKotodamaMessageDeliveryLast7Days(generatedAt),
+    ),
   ]);
 
   const raw: KpiDashboardRaw = {
@@ -371,6 +456,8 @@ export async function getKpiDashboard(now?: Date): Promise<KpiDashboardView> {
     badgeDistribution,
     familyMessageFrequency,
     experimentCohort,
+    mockExamDistribution,
+    kotodamaMessageDelivery,
     generatedAt,
   };
 

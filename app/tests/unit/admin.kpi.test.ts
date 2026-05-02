@@ -10,6 +10,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildKotodamaMessageDeliveryCard,
+  buildMockExamDistributionCard,
   composeKpiDashboardView,
   formatCount,
   formatMinutes,
@@ -19,7 +21,9 @@ import {
   safeNonNegInt,
   safeRatio,
   type BadgeDistributionRaw,
+  type KotodamaMessageDeliveryRaw,
   type KpiDashboardRaw,
+  type MockExamDistributionRaw,
 } from "@/lib/admin/kpi-summary";
 
 const PUNISHMENT_WORDS = [
@@ -55,6 +59,8 @@ function buildRaw(
     badgeDistribution: undefined,
     familyMessageFrequency: undefined,
     experimentCohort: undefined,
+    mockExamDistribution: undefined,
+    kotodamaMessageDelivery: undefined,
     generatedAt: FIXED_NOW,
     ...overrides,
   };
@@ -158,9 +164,9 @@ describe("formatCount + formatMinutes", () => {
 // composeKpiDashboardView - 全 fallback (= 全 raw undefined)
 // ---------------------------------------------------------------------------
 describe("composeKpiDashboardView (全 fallback)", () => {
-  it("全 raw undefined でも 10 枚 card を返す + 罰語不在", () => {
+  it("全 raw undefined でも 12 枚 card を返す + 罰語不在", () => {
     const view = composeKpiDashboardView(buildRaw());
-    expect(view.cards.length).toBe(10);
+    expect(view.cards.length).toBe(12);
     const ids = view.cards.map((c) => c.kpiId);
     expect(ids).toEqual([
       "retention-day-1",
@@ -173,6 +179,8 @@ describe("composeKpiDashboardView (全 fallback)", () => {
       "badge-distribution",
       "family-message-frequency",
       "experiment-streak-freeze-cohort",
+      "mock-exam-distribution",
+      "kotodama-message-delivery",
     ]);
     for (const c of view.cards) {
       expectNoPunishmentWords(c.title);
@@ -480,6 +488,156 @@ describe("composeKpiDashboardView (family message frequency)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 模試結果分布 (W12-T1.5 / DEC-068)
+// ---------------------------------------------------------------------------
+describe("buildMockExamDistributionCard (W12-T1.5 / DEC-068)", () => {
+  it("raw undefined は中立 fallback (rows=[] / 罰語不在)", () => {
+    const card = buildMockExamDistributionCard(undefined);
+    expect(card.kpiId).toBe("mock-exam-distribution");
+    expect(card.iconName).toBe("ChartBarIcon");
+    expect(card.primaryValue).toBe("——");
+    expect(card.secondaryLabel).toContain("0");
+    expect(card.rows).toEqual([]);
+    expectNoPunishmentWords(card.title);
+    expectNoPunishmentWords(card.secondaryLabel);
+  });
+
+  it("byLevel 空配列も中立 fallback", () => {
+    const card = buildMockExamDistributionCard({ byLevel: [] });
+    expect(card.primaryValue).toBe("——");
+    expect(card.rows).toEqual([]);
+  });
+
+  it("1 級のみ (5 級) raw でも row 1 件で構築", () => {
+    const raw: MockExamDistributionRaw = {
+      byLevel: [{ level: "5", count: 8, avgRatio: 0.625 }],
+    };
+    const card = buildMockExamDistributionCard(raw);
+    expect(card.primaryValue).toMatch(/8/);
+    expect(card.rows!.length).toBe(1);
+    expect(card.rows![0]!.id).toBe("level-5");
+    expect(card.rows![0]!.label).toBe("5 級");
+    expect(card.rows![0]!.value).toContain("8 件");
+    expect(card.rows![0]!.value).toContain("62.5%");
+  });
+
+  it("3 級揃い (5/4/3) は 5 → 4 → 3 順で安定 + 合計件数を primaryValue", () => {
+    const raw: MockExamDistributionRaw = {
+      byLevel: [
+        // 入力順は意図的に逆順 / シャッフル.
+        { level: "3", count: 4, avgRatio: 0.4 },
+        { level: "5", count: 10, avgRatio: 0.7 },
+        { level: "4", count: 6, avgRatio: 0.55 },
+      ],
+    };
+    const card = buildMockExamDistributionCard(raw);
+    expect(card.rows!.map((r) => r.id)).toEqual([
+      "level-5",
+      "level-4",
+      "level-3",
+    ]);
+    expect(card.primaryValue).toMatch(/20/); // 10 + 6 + 4
+  });
+
+  it("count=0 の級は配列に出さない (母数 0 級は表示対象外)", () => {
+    const raw: MockExamDistributionRaw = {
+      byLevel: [
+        { level: "5", count: 0, avgRatio: 0 },
+        { level: "4", count: 3, avgRatio: 0.5 },
+      ],
+    };
+    const card = buildMockExamDistributionCard(raw);
+    expect(card.rows!.map((r) => r.id)).toEqual(["level-4"]);
+    expect(card.primaryValue).toMatch(/3/);
+  });
+
+  it("avgRatio 0..1 を超えた異常値は '——' にフォールバック (クランプではなく明示)", () => {
+    const raw: MockExamDistributionRaw = {
+      byLevel: [
+        { level: "5", count: 2, avgRatio: 1.5 },
+        { level: "4", count: 1, avgRatio: -0.1 },
+      ],
+    };
+    const card = buildMockExamDistributionCard(raw);
+    // 異常値は ratio undefined → "——"
+    expect(card.rows![0]!.value).toContain("——");
+    expect(card.rows![1]!.value).toContain("——");
+  });
+
+  it("通常 raw + 罰語不在 (DEC-024)", () => {
+    const raw: MockExamDistributionRaw = {
+      byLevel: [
+        { level: "5", count: 10, avgRatio: 0.85 },
+        { level: "4", count: 5, avgRatio: 0.6 },
+      ],
+    };
+    const card = buildMockExamDistributionCard(raw);
+    expectNoPunishmentWords(card.title);
+    expectNoPunishmentWords(card.primaryValue);
+    expectNoPunishmentWords(card.secondaryLabel);
+    for (const row of card.rows!) {
+      expectNoPunishmentWords(row.label);
+      expectNoPunishmentWords(row.value);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// kotodama-tori メッセージ表示率 (W12-T1.5 / DEC-068)
+// ---------------------------------------------------------------------------
+describe("buildKotodamaMessageDeliveryCard (W12-T1.5 / DEC-068)", () => {
+  it("raw undefined は中立 fallback", () => {
+    const card = buildKotodamaMessageDeliveryCard(undefined);
+    expect(card.kpiId).toBe("kotodama-message-delivery");
+    expect(card.iconName).toBe("ChatBubbleLeftEllipsisIcon");
+    expect(card.primaryValue).toBe("——");
+    expectNoPunishmentWords(card.secondaryLabel);
+  });
+
+  it("totalSent=0 は fallback (送信 0 件 / 表示 0 件)", () => {
+    const raw: KotodamaMessageDeliveryRaw = { totalSent: 0, totalRead: 0 };
+    const card = buildKotodamaMessageDeliveryCard(raw);
+    expect(card.primaryValue).toBe("——");
+    expect(card.secondaryLabel).toContain("送信 0 件");
+    expect(card.secondaryLabel).toContain("表示 0 件");
+  });
+
+  it("全 read (totalSent=8 / totalRead=8) は 100.0%", () => {
+    const raw: KotodamaMessageDeliveryRaw = { totalSent: 8, totalRead: 8 };
+    const card = buildKotodamaMessageDeliveryCard(raw);
+    expect(card.primaryValue).toBe("100.0%");
+    expect(card.secondaryLabel).toContain("送信 8");
+    expect(card.secondaryLabel).toContain("表示 8");
+  });
+
+  it("部分 read (totalSent=10 / totalRead=3) は 30.0%", () => {
+    const raw: KotodamaMessageDeliveryRaw = { totalSent: 10, totalRead: 3 };
+    const card = buildKotodamaMessageDeliveryCard(raw);
+    expect(card.primaryValue).toBe("30.0%");
+  });
+
+  it("totalRead > totalSent でも 100% にクランプ (異常 raw 防御)", () => {
+    const raw: KotodamaMessageDeliveryRaw = { totalSent: 5, totalRead: 999 };
+    const card = buildKotodamaMessageDeliveryCard(raw);
+    expect(card.primaryValue).toBe("100.0%");
+  });
+
+  it("負値 raw は 0 として扱う", () => {
+    const raw: KotodamaMessageDeliveryRaw = { totalSent: -3, totalRead: -1 };
+    const card = buildKotodamaMessageDeliveryCard(raw);
+    expect(card.primaryValue).toBe("——"); // safeNonNegInt → 0 → fallback
+  });
+
+  it("通常 raw + 罰語不在 (DEC-024)", () => {
+    const raw: KotodamaMessageDeliveryRaw = { totalSent: 25, totalRead: 18 };
+    const card = buildKotodamaMessageDeliveryCard(raw);
+    expectNoPunishmentWords(card.title);
+    expectNoPunishmentWords(card.primaryValue);
+    expectNoPunishmentWords(card.secondaryLabel);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 全 cards の罰語不在を最終 grep
 // ---------------------------------------------------------------------------
 describe("全 cards 罰語不在 (DEC-024 構造的担保)", () => {
@@ -501,8 +659,16 @@ describe("全 cards 罰語不在 (DEC-024 構造的担保)", () => {
           { badgeId: "b_b", label: "Bb", earnedCount: 30 },
         ],
         familyMessageFrequency: { totalMessagesLast7Days: 9 },
+        mockExamDistribution: {
+          byLevel: [
+            { level: "5", count: 12, avgRatio: 0.83 },
+            { level: "4", count: 7, avgRatio: 0.61 },
+          ],
+        },
+        kotodamaMessageDelivery: { totalSent: 30, totalRead: 22 },
       }),
     );
+    expect(view.cards.length).toBe(12);
     for (const c of view.cards) {
       expectNoPunishmentWords(
         `${c.title} ${c.primaryValue} ${c.secondaryLabel} ${(c.rows ?? [])

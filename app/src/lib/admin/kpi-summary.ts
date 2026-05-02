@@ -96,6 +96,39 @@ export interface ExperimentCohortRaw {
   }>;
 }
 
+/**
+ * 模試結果分布 (直近 30 日 / W12-T1.5 / DEC-068) の入力.
+ *
+ *  - 級別 (5 / 4 / 3) の COUNT と AVG(score / max_score) を SQL aggregate-only で集計.
+ *  - 母数 0 件 (= 該当級の受験 0 件) は SQL 結果から自然脱落 → 配列に出さない.
+ *  - learner_id / 個別 score は flow しない (DEC-003 第三層 / aggregate-only).
+ */
+export interface MockExamDistributionRaw {
+  /** 級別の集計 row (= 母数 0 件は含まない) */
+  byLevel: ReadonlyArray<{
+    /** 模試対象級 (5 / 4 / 3) */
+    level: "5" | "4" | "3";
+    /** 該当級の受験件数 (直近 30 日) */
+    count: number;
+    /** 該当級の平均得点率 (= AVG(score / max_score) / 0..1) */
+    avgRatio: number;
+  }>;
+}
+
+/**
+ * kotodama-tori メッセージ表示 (直近 7 日 / W12-T1.5 / DEC-068) の入力.
+ *
+ *  - parent_messages.createdAt >= cutoff の COUNT(*) (送信総数)
+ *    + その内 readAt IS NOT NULL の COUNT (表示済).
+ *  - SQL aggregate-only で family_id / from_user_id / to_learner_id を flow させない.
+ */
+export interface KotodamaMessageDeliveryRaw {
+  /** 送信総数 (直近 7 日) */
+  totalSent: number;
+  /** 表示 (= 子端末で readAt が立った) 件数 */
+  totalRead: number;
+}
+
 /** view-model に渡る完成済 raw 構造体 */
 export interface KpiDashboardRaw {
   retentionDay1: RetentionRaw | undefined;
@@ -108,6 +141,10 @@ export interface KpiDashboardRaw {
   familyMessageFrequency: FamilyMessageFrequencyRaw | undefined;
   /** W12-T2 (DEC-066): A/B test cohort raw (1 experiment = 1 raw / 拡張時は配列化検討) */
   experimentCohort: ExperimentCohortRaw | undefined;
+  /** W12-T1.5 (DEC-068): 模試結果分布 (直近 30 日 / 級別 COUNT + 平均得点率) */
+  mockExamDistribution: MockExamDistributionRaw | undefined;
+  /** W12-T1.5 (DEC-068): kotodama-tori メッセージ表示率 (直近 7 日) */
+  kotodamaMessageDelivery: KotodamaMessageDeliveryRaw | undefined;
   /** 計算基準時刻 (server now / unit テストで固定) */
   generatedAt: Date;
 }
@@ -492,6 +529,117 @@ export function buildExperimentCohortCard(
   };
 }
 
+/**
+ * 模試結果分布 (直近 30 日 / 級別 / W12-T1.5 / DEC-068) の card builder.
+ *
+ *  - 級コード昇順固定 (5 → 4 → 3) で rows を構築.
+ *  - 母数 0 件級は SQL 結果から脱落しているため配列に含まれない (= 表示しない).
+ *  - 全級母数 0 / undefined → primaryValue "——" / rows: [].
+ *  - primaryValue = 全級合計受験件数 / secondaryLabel = 中立コピー.
+ *  - DEC-024 罰語ゼロ (中立トーン: 「平均得点率 X.X%」のみ).
+ */
+export function buildMockExamDistributionCard(
+  raw: MockExamDistributionRaw | undefined,
+): KpiCardView {
+  type ValidLevelRow = {
+    level: "5" | "4" | "3";
+    count: number;
+    avgRatio: number;
+  };
+  const safeByLevel: ValidLevelRow[] = Array.isArray(raw?.byLevel)
+    ? raw!.byLevel.filter(
+        (r): r is ValidLevelRow =>
+          !!r &&
+          (r.level === "5" || r.level === "4" || r.level === "3") &&
+          safeNonNegInt(r.count) > 0,
+      )
+    : [];
+
+  if (safeByLevel.length === 0) {
+    return {
+      kpiId: "mock-exam-distribution",
+      title: "模試結果分布 (直近 30 日)",
+      primaryValue: "——",
+      secondaryLabel: "対象 受験 0 件",
+      iconName: "ChartBarIcon",
+      rows: [],
+    };
+  }
+
+  // 級コード昇順固定 (5 → 4 → 3) で安定ソート.
+  const LEVEL_ORDER: Record<"5" | "4" | "3", number> = { "5": 0, "4": 1, "3": 2 };
+  const sorted = [...safeByLevel].sort(
+    (a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level],
+  );
+
+  const totalCount = sorted.reduce(
+    (acc, r) => acc + safeNonNegInt(r.count),
+    0,
+  );
+
+  const rows = sorted.map((r) => {
+    const cnt = safeNonNegInt(r.count);
+    const ratio = safeFiniteNumber(r.avgRatio);
+    return {
+      id: `level-${r.level}`,
+      label: `${r.level} 級`,
+      value: `${formatCount(cnt)} 件 / 平均 ${formatPercentage(
+        ratio >= 0 && ratio <= 1 ? ratio : undefined,
+      )}`,
+    };
+  });
+
+  return {
+    kpiId: "mock-exam-distribution",
+    title: "模試結果分布 (直近 30 日)",
+    primaryValue: formatCount(totalCount),
+    secondaryLabel: "4/5/3 級別の件数 + 平均得点率",
+    iconName: "ChartBarIcon",
+    rows,
+  };
+}
+
+/**
+ * kotodama-tori メッセージ表示率 (直近 7 日 / W12-T1.5 / DEC-068) の card builder.
+ *
+ *  - primaryValue = totalRead / totalSent (= 表示率 / 母数 0 → "——").
+ *  - secondaryLabel = "送信 N 件 / 表示 M 件" (内訳が見える中立コピー).
+ *  - 全 raw undefined / totalSent=0 → 中立 fallback.
+ *  - DEC-024 罰語ゼロ (中立トーン: 「未読」「無視」等は使わない).
+ */
+export function buildKotodamaMessageDeliveryCard(
+  raw: KotodamaMessageDeliveryRaw | undefined,
+): KpiCardView {
+  if (!raw) {
+    return {
+      kpiId: "kotodama-message-delivery",
+      title: "kotodama-tori メッセージ表示率 (直近 7 日)",
+      primaryValue: "——",
+      secondaryLabel: "集計データ未取得 (前向き fallback)",
+      iconName: "ChatBubbleLeftEllipsisIcon",
+    };
+  }
+  const totalSent = safeNonNegInt(raw.totalSent);
+  const totalRead = safeNonNegInt(raw.totalRead);
+  if (totalSent <= 0) {
+    return {
+      kpiId: "kotodama-message-delivery",
+      title: "kotodama-tori メッセージ表示率 (直近 7 日)",
+      primaryValue: "——",
+      secondaryLabel: "送信 0 件 / 表示 0 件",
+      iconName: "ChatBubbleLeftEllipsisIcon",
+    };
+  }
+  const ratio = safeRatio(totalRead, totalSent);
+  return {
+    kpiId: "kotodama-message-delivery",
+    title: "kotodama-tori メッセージ表示率 (直近 7 日)",
+    primaryValue: formatPercentage(ratio),
+    secondaryLabel: `送信 ${formatCount(totalSent)} 件 / 表示 ${formatCount(totalRead)} 件`,
+    iconName: "ChatBubbleLeftEllipsisIcon",
+  };
+}
+
 function buildFamilyMessageFrequencyCard(
   raw: FamilyMessageFrequencyRaw | undefined,
 ): KpiCardView {
@@ -561,6 +709,10 @@ export function composeKpiDashboardView(
     // W12-T2 (DEC-066): A/B test cohort 分布 を fixed-order 末尾に追加
     // (既存 9 card の順序は不変 / E2E が data-kpi-id で stable に当てる)
     buildExperimentCohortCard(raw.experimentCohort),
+    // W12-T1.5 (DEC-068): 模試結果分布 (直近 30 日) を fixed-order 11 個目に追加.
+    buildMockExamDistributionCard(raw.mockExamDistribution),
+    // W12-T1.5 (DEC-068): kotodama-tori メッセージ表示率 (直近 7 日) を fixed-order 12 個目に追加.
+    buildKotodamaMessageDeliveryCard(raw.kotodamaMessageDelivery),
   ];
 
   return {

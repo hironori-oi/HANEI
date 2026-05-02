@@ -64,6 +64,9 @@ function buildRaw(
     badgeDistribution: undefined,
     familyMessageFrequency: undefined,
     experimentCohort: undefined,
+    // W12-T1.5 (DEC-068): KpiDashboardRaw に追加された 2 系統の必須フィールドを undefined で埋める.
+    mockExamDistribution: undefined,
+    kotodamaMessageDelivery: undefined,
     generatedAt: FIXED_NOW,
     ...overrides,
   };
@@ -425,10 +428,11 @@ describe("buildExperimentCohortCard", () => {
 });
 
 // ---------------------------------------------------------------------------
-// composeKpiDashboardView 経由で 10 枚 card に展開されるか
+// composeKpiDashboardView 経由で 12 枚 card に展開されるか
+// (W12-T1.5 / DEC-068 で 11 / 12 個目に mock-exam-distribution + kotodama-message-delivery を追加)
 // ---------------------------------------------------------------------------
 describe("composeKpiDashboardView (with experiment cohort)", () => {
-  it("experimentCohort raw を渡すと 10 枚目に experiment-streak-freeze-cohort が現れる", () => {
+  it("experimentCohort raw を渡すと 10 番目に experiment-streak-freeze-cohort が現れる (12 cards 化後も index 不変)", () => {
     const view = composeKpiDashboardView(
       buildRaw({
         experimentCohort: {
@@ -445,9 +449,12 @@ describe("composeKpiDashboardView (with experiment cohort)", () => {
         },
       }),
     );
-    expect(view.cards.length).toBe(10);
-    const last = view.cards[view.cards.length - 1]!;
-    expect(last.kpiId).toBe("experiment-streak-freeze-cohort");
-    expect(last.primaryValue).toMatch(/17/);
+    expect(view.cards.length).toBe(12);
+    const cohortCard = view.cards[9]!; // 0-indexed = 10 個目
+    expect(cohortCard.kpiId).toBe("experiment-streak-freeze-cohort");
+    expect(cohortCard.primaryValue).toMatch(/17/);
+    // 末尾は W12-T1.5 (DEC-068) で追加された kotodama-tori 表示率カード.
+    expect(view.cards[10]!.kpiId).toBe("mock-exam-distribution");
+    expect(view.cards[11]!.kpiId).toBe("kotodama-message-delivery");
   });
 });

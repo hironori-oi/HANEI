@@ -4,9 +4,8 @@
  * 検証スコープ (read path / 認可レイヤ / DEC-024 罰則ゼロ / DEC-065):
  *   ① admin login → /admin/kpi
  *      → data-testid="admin-kpi-dashboard" 可視
- *      → 6 カテゴリ全 9 card (3 retention + 4 KPI + バッジ + メッセージ) が data-kpi-id で見える
- *        (W12-T2 / DEC-066 で 10 枚目 A/B test cohort が追加されたが、本 spec は 9 card 可視のみ確認.
- *         10 枚目の検証は admin-kpi-experiment.spec.ts に分離.)
+ *      → 全 12 card (W11/W12-T1 9 + W12-T2 cohort + W12-T1.5 模試 + kotodama-tori) が
+ *        data-kpi-id で見える (W12-T1.5 / DEC-068 で 11 / 12 個目を追加)
  *      → 罰語が一切含まれない
  *   ② parent login → /admin/kpi
  *      → /home に redirect (admin 以外を構造的に弾く / 第二層認可)
@@ -152,6 +151,8 @@ async function clearCookiesAndReLogin(
   await expect(page).toHaveURL(/\/home(\?|$)/, { timeout: 15000 });
 }
 
+// W12-T1.5 (DEC-068): unit `tests/unit/admin.kpi.test.ts` の 9 語と完全一致させ、
+// E2E と unit の罰語不在検証を構造的に揃える (DEC-066 M-1 polish).
 const PUNISHMENT_WORDS = [
   "最下位",
   "ペナルティ",
@@ -160,6 +161,8 @@ const PUNISHMENT_WORDS = [
   "失敗",
   "やりすぎ",
   "がんばってない",
+  "だめ",
+  "やる気",
 ] as const;
 
 function expectNoPunishmentWords(text: string): void {
@@ -171,6 +174,8 @@ function expectNoPunishmentWords(text: string): void {
   }
 }
 
+// W12-T1.5 (DEC-068): 全 12 card を E2E で構造的に確認.
+//  - W11/W12-T1 9 + W12-T2 (DEC-066) cohort + W12-T1.5 (DEC-068) 模試 + kotodama-tori.
 const REQUIRED_KPI_IDS = [
   "retention-day-1",
   "retention-day-7",
@@ -181,6 +186,9 @@ const REQUIRED_KPI_IDS = [
   "daily-quest-completion-rate",
   "badge-distribution",
   "family-message-frequency",
+  "experiment-streak-freeze-cohort",
+  "mock-exam-distribution",
+  "kotodama-message-delivery",
 ] as const;
 
 // fullyParallel=true で同一 file: SQLite に複数 worker から書き込むと SQLITE_BUSY が発生する.
@@ -188,7 +196,7 @@ const REQUIRED_KPI_IDS = [
 test.describe.configure({ mode: "serial" });
 
 test.describe("admin-kpi (W12-T1 / DEC-065 / admin 専用 read-only)", () => {
-  test("admin login → /admin/kpi → 全 9 card 可視 + 罰語不在", async ({
+  test("admin login → /admin/kpi → 全 12 card 可視 + 罰語不在", async ({
     page,
   }, testInfo) => {
     const { email, password } = await signupAndOnboard(
@@ -207,7 +215,7 @@ test.describe("admin-kpi (W12-T1 / DEC-065 / admin 専用 read-only)", () => {
     const dashboard = page.locator('[data-testid="admin-kpi-dashboard"]');
     await expect(dashboard).toBeVisible({ timeout: 15000 });
 
-    // 9 KPI card 全件可視
+    // 12 KPI card 全件可視
     for (const kpiId of REQUIRED_KPI_IDS) {
       const card = page.locator(`[data-kpi-id="${kpiId}"]`);
       await expect(

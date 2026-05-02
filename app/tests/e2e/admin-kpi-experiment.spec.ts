@@ -3,8 +3,8 @@
  *
  * 検証スコープ:
  *   ① admin login → /admin/kpi
- *      → 10 枚目の card (data-kpi-id="experiment-streak-freeze-cohort") が見える
- *      → 既存 9 枚 + 10 枚目で計 10 card 可視
+ *      → A/B test cohort card (data-kpi-id="experiment-streak-freeze-cohort") が見える
+ *      → 既存 9 枚 + cohort + W12-T1.5 模試 / kotodama-tori で計 12 card 可視
  *      → 罰語が含まれない (DEC-024 構造的担保)
  *
  * 戦略:
@@ -130,6 +130,8 @@ async function clearCookiesAndReLogin(
   await expect(page).toHaveURL(/\/home(\?|$)/, { timeout: 15000 });
 }
 
+// W12-T1.5 (DEC-068): unit `tests/unit/admin.kpi.test.ts` の 9 語と完全一致させ、
+// E2E と unit の罰語不在検証を構造的に揃える (DEC-066 M-1 polish).
 const PUNISHMENT_WORDS = [
   "最下位",
   "ペナルティ",
@@ -138,6 +140,8 @@ const PUNISHMENT_WORDS = [
   "失敗",
   "やりすぎ",
   "がんばってない",
+  "だめ",
+  "やる気",
 ] as const;
 
 function expectNoPunishmentWords(text: string): void {
@@ -149,6 +153,7 @@ function expectNoPunishmentWords(text: string): void {
   }
 }
 
+// W12-T1.5 (DEC-068): 全 12 card を E2E で構造的に確認 (admin-kpi.spec.ts と同 set).
 const REQUIRED_KPI_IDS = [
   "retention-day-1",
   "retention-day-7",
@@ -160,12 +165,14 @@ const REQUIRED_KPI_IDS = [
   "badge-distribution",
   "family-message-frequency",
   "experiment-streak-freeze-cohort",
+  "mock-exam-distribution",
+  "kotodama-message-delivery",
 ] as const;
 
 test.describe.configure({ mode: "serial" });
 
 test.describe("admin-kpi-experiment (W12-T2 / DEC-066 / A/B test cohort)", () => {
-  test("admin login → /admin/kpi → 10 枚目に A/B test cohort card 可視 + 罰語不在", async ({
+  test("admin login → /admin/kpi → 12 枚目までに A/B test cohort card 可視 + 罰語不在", async ({
     page,
   }, testInfo) => {
     const { email, password } = await signupAndOnboard(
@@ -180,7 +187,7 @@ test.describe("admin-kpi-experiment (W12-T2 / DEC-066 / A/B test cohort)", () =>
     const dashboard = page.locator('[data-testid="admin-kpi-dashboard"]');
     await expect(dashboard).toBeVisible({ timeout: 15000 });
 
-    // 10 KPI card 全件可視 (新規 experiment card 含む)
+    // 12 KPI card 全件可視 (W11/W12-T1 9 + cohort + 模試 + kotodama-tori)
     for (const kpiId of REQUIRED_KPI_IDS) {
       const card = page.locator(`[data-kpi-id="${kpiId}"]`);
       await expect(
@@ -189,7 +196,7 @@ test.describe("admin-kpi-experiment (W12-T2 / DEC-066 / A/B test cohort)", () =>
       ).toBeVisible({ timeout: 10000 });
     }
 
-    // 10 枚目 (A/B test cohort) の中身を確認
+    // A/B test cohort (10 枚目) の中身を確認
     const expCard = page.locator(
       '[data-kpi-id="experiment-streak-freeze-cohort"]',
     );
