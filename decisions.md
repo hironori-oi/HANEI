@@ -1,5 +1,389 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-069: Phase 2 W12 第 5 atomic = W12-T3-A β invite flow（招待コード生成 + redeem 動線）GO 判定（2026-05-03 / CEO 着手判断版）
+
+- **状況**: DEC-068 完遂 / commit `bfd2c55` (origin/main HANEI repo) push / E2E **admin-kpi 4 + admin-kpi-experiment 2 + shop 6 = 12 PASS** / vitest **53 files / 815 PASS** / next build **25 routes** / Phase 2 進捗 **97.5% → 98%** / W12 進捗 **60% → 80%（4/5）**。オーナー「続きの実装を進めて」継続マンデート受領（CEO 推奨 = W12-T3 着手 = Phase 2 完遂前最大障壁 = β ユーザー受入準備）。
+- **判定**: **GO**（W12-T3-A = β invite flow 最小構成 / 0.5 人日 / **W12-T3 を 3 atomic に分解した第 1 弾**: T3-A invite flow / T3-B feedback 収集動線 / T3-C 緊急 hotfix 体制 + Sentry 強化 + α→β 移行アナウンス）。
+- **判断根拠**:
+  1. **オーナー指示**: 「続きの実装を進めて」= CEO 推奨採用 = W12-T3 着手。1.5 人日 atomic を 1 セッション完遂困難なため CEO 判断で T3-A/B/C の 3 atomic に分解。
+  2. **T3-A 優先理由**: β ユーザーを「招待」する機構自体が β 運営の前提インフラ。feedback (T3-B) や hotfix 体制 (T3-C) は β 招待後に必要となるため、T3-A を最初に置くのが論理連続。
+  3. **既存 signup フロー最大流用**: `src/app/(auth)/signup/actions.ts` 既存 signup action に invite code redeem ロジックを **追加** するだけ = 新規 server action 0 / 新規 mutation 0 / DEC-006 mutation 5 不変条件構造的遵守。
+  4. **CLI script で運営側コード生成**: 招待コード生成は運営者ローカル実行の CLI script (`scripts/generate-beta-invite.ts`) で完結 = 新規 route 0 / 新規 server action 0 / admin UI 不要 (β 期間中は数十〜数百件規模で運営者手動発行 / Phase 3 の admin UI 化は別 atomic)。
+  5. **環境変数 gate で開発/E2E 互換性**: `BETA_INVITE_REQUIRED` flag (default `false`) で本番のみ有効化 = 既存 dev/staging/E2E 全 spec が **invite なしで signup 完了する既存挙動を維持** = 既存 E2E regression 0。
+  6. **DEC-055 idempotency**: invite code redeem は (a) コード正規化（trim + uppercase）+ (b) `redemptionCount < maxRedemptions` チェック + (c) signup action 内 transaction で「user 作成 → redemptionCount+1」を atomic 化 → 二重実行で重複付与 0 / 上限超過 0。
+  7. **Turbopack `"use server"` sync export ban (8 度定着) を 9 度目構造的適用**: 純関数 `validateInviteCodeFormat / normalizeInviteCode / generateInviteCode` は新規 `src/lib/beta/invite-codes.ts` に隔離（DOM-free / DB-free / `"use server"` 不在）= 9 度目構造定着。
+  8. **DEC-024 罰則ゼロ + DEC-003 三層認可継承**: 招待コードエラー文言は中立（「コードを確認してください」/「招待が満員です」/「コードの有効期限が切れています」）= 罰語ゼロ。invite_codes テーブルは middleware 第一層 + signup action 第二層 + SQL aggregate-only 不要（個人特定可能要素を含まないため第三層は invite_codes テーブル設計時点で構造排除）。
+
+### 本 atomic スコープ（CEO 確定 / W12-T3-A minimal）
+
+#### 含む（必須）
+
+##### A. 新規 schema migration
+
+1. **`src/lib/db/schema.ts` に `betaInviteCodes` テーブル追加**:
+   - `id: text("id").primaryKey()` (`bic_${uuid}` 形式)
+   - `code: text("code").notNull().unique()` (8 文字大文字英数 / 紛らわしい文字 `0/O/1/I/L` 除外)
+   - `createdBy: text("created_by")` (運営者識別子 / nullable)
+   - `note: text("note")` (発行メモ / nullable)
+   - `maxRedemptions: integer("max_redemptions").notNull().default(1)` (1 = 個人用 / >1 = 共有用)
+   - `redemptionCount: integer("redemption_count").notNull().default(0)`
+   - `expiresAt: integer("expires_at", { mode: "timestamp_ms" })` (nullable / null = 無期限)
+   - `disabledAt: integer("disabled_at", { mode: "timestamp_ms" })` (nullable / null = 有効)
+   - `createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()`
+   - インデックス: `code` (unique 既存) / `(disabledAt, expiresAt)` 複合 (有効コード検索高速化)
+
+2. **`users` テーブルに `betaInvitedByCode: text("beta_invited_by_code")` カラム追加** (nullable / `betaInviteCodes.code` 参照 / FK 不要 / 履歴保持目的)
+
+3. **新規 migration 0011（仮）**: `0011_beta_invite.sql` (drizzle-kit generate で自動生成)
+
+##### B. 新規純関数 lib (Turbopack 9 度目)
+
+4. **`src/lib/beta/invite-codes.ts` 新規（純関数 / `"use server"` 不在 / DOM-free / DB-free）**:
+   - `INVITE_CODE_LENGTH = 8` / `INVITE_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"` (`0/O/1/I/L` 除外)
+   - `normalizeInviteCode(input: string): string` — trim + uppercase + 内部空白除去
+   - `validateInviteCodeFormat(code: string): { ok: true } | { ok: false; reason: "empty" | "length" | "alphabet" }` — 形式検証のみ (DB 参照不要 = 早期 fail / Turbopack 制約遵守)
+   - `generateInviteCode(): string` — `crypto.randomBytes` ベース / 暗号学的乱数 / alphabet からの一様分布
+   - **環境変数読み出し**: `isBetaInviteRequired(): boolean` = `process.env.BETA_INVITE_REQUIRED === "true"` (純関数 / dev/E2E では false)
+
+##### C. signup action 改修（既存拡張のみ）
+
+5. **`src/app/(auth)/signup/schema.ts` 拡張**:
+   - `SignupSchema` に `invite_code: z.string().optional()` 追加（必須/任意は実行時 `isBetaInviteRequired()` で判定）
+
+6. **`src/app/(auth)/signup/actions.ts` 拡張（新規 server action 追加せず既存 `signupAction` を改修のみ）**:
+   - `parsed.data` 取り出し直後に invite check ブロック追加:
+     ```ts
+     // W12-T3-A (DEC-069): β 期間中は invite code 必須
+     const requireInvite = isBetaInviteRequired();
+     let inviteCodeRow: BetaInviteCode | null = null;
+     if (requireInvite) {
+       const rawCode = formData.get("invite_code");
+       const codeStr = typeof rawCode === "string" ? rawCode : "";
+       const fmt = validateInviteCodeFormat(normalizeInviteCode(codeStr));
+       if (!fmt.ok) redirect("/signup?error=invite_invalid");
+       inviteCodeRow = await fetchValidInviteCode(normalizeInviteCode(codeStr));
+       if (!inviteCodeRow) redirect("/signup?error=invite_not_found");
+       if (inviteCodeRow.disabledAt) redirect("/signup?error=invite_disabled");
+       if (inviteCodeRow.expiresAt && inviteCodeRow.expiresAt.getTime() < Date.now()) redirect("/signup?error=invite_expired");
+       if (inviteCodeRow.redemptionCount >= inviteCodeRow.maxRedemptions) redirect("/signup?error=invite_full");
+     }
+     ```
+   - 既存 user / family / consent 作成後、`requireInvite && inviteCodeRow` の場合のみ:
+     ```ts
+     await db.transaction(async (tx) => {
+       // redemption 上限を再チェックして atomic 増加 (DEC-055 idempotency)
+       const updated = await tx
+         .update(betaInviteCodes)
+         .set({ redemptionCount: sql`${betaInviteCodes.redemptionCount} + 1` })
+         .where(and(
+           eq(betaInviteCodes.id, inviteCodeRow.id),
+           lt(betaInviteCodes.redemptionCount, betaInviteCodes.maxRedemptions),
+         ))
+         .returning({ id: betaInviteCodes.id });
+       if (updated.length === 0) {
+         // race condition で上限到達 = redirect (user 削除は better-auth 側に任せず scope 外)
+         redirect("/signup?error=invite_full");
+       }
+       await tx.update(users).set({ betaInvitedByCode: inviteCodeRow.code }).where(eq(users.id, userId));
+     });
+     ```
+   - **race-safe atomic UPDATE**: `WHERE redemptionCount < maxRedemptions` で同時 redeem を SQL レベルで防止
+
+7. **`src/app/(auth)/signup/page.tsx` 拡張**:
+   - `BETA_INVITE_REQUIRED === "true"` (server-side process.env / Server Component なので OK) なら invite_code Input 欄を form に追加
+   - エラーメッセージ map に `invite_invalid` / `invite_not_found` / `invite_disabled` / `invite_expired` / `invite_full` の 5 件追加（罰語ゼロ / 中立文言）
+
+##### D. CLI script
+
+8. **`scripts/generate-beta-invite.ts` 新規（運営者ローカル実行用）**:
+   - 引数: `--count=10` (生成数 / default 1) / `--max-redemptions=1` / `--note="..."` / `--expires-days=30`
+   - drizzle 直接 INSERT (`db.insert(betaInviteCodes).values([...])`)
+   - 標準出力に生成済コード一覧（運営者がメール/Discord 等で β ユーザーに配布）
+   - `bun scripts/generate-beta-invite.ts --count=10` で実行可能 (package.json scripts 追加不要 / ad-hoc 実行)
+
+##### E. 受入更新 (テスト)
+
+9. **Unit `tests/unit/beta.invite-codes.test.ts` 新規（≥10 cases）**:
+   - `normalizeInviteCode` 正常系 (trim/uppercase/空白除去) ≥3
+   - `validateInviteCodeFormat` 正常 + length/alphabet 失敗 ≥4
+   - `generateInviteCode` 形式適合 (length / alphabet / 一意性) ≥2
+   - `isBetaInviteRequired` env 切替 ≥2 (true/false)
+
+10. **E2E `tests/e2e/signup-beta-invite.spec.ts` 新規（chromium + mobile-chrome / 4 spec × 2 = 8 PASS）**:
+    - 正常 redeem (BETA_INVITE_REQUIRED=true で env 設定 / 事前 INSERT で valid code 用意 / signup → /verify-email 遷移)
+    - 不正 code (`?error=invite_invalid` 表示)
+    - 上限到達 (`maxRedemptions=1` / `redemptionCount=1` を事前 INSERT → `?error=invite_full`)
+    - 期限切れ (`expiresAt < now` を事前 INSERT → `?error=invite_expired`)
+    - **重要**: 既存 E2E は `BETA_INVITE_REQUIRED` 未設定 / "false" で動作 = signup 既存挙動完全維持 (regression 0)
+
+##### F. decisions.md 追補
+
+11. **decisions.md 追補**（本 DEC-069 / 完遂時に「§実装完遂デルタ」を追加）
+
+12. **dev report**: `reports/dev-w12-t3-a-beta-invite-flow-done.md`
+
+#### 含まない（後続 atomic / 本 atomic では実装しない）
+
+- admin UI からの招待コード発行画面（Phase 3 candidate / β 期間中は CLI 運用）
+- T3-B: feedback 収集動線（in-app feedback button + Sentry/DB 永続化 / 次 atomic）
+- T3-C: 緊急 hotfix 体制 + Sentry 観測強化 + α→β 移行アナウンス（次々 atomic）
+- 招待コード経由 signup ユーザーの cohort KPI 集計（W12-T2 cohort 流用 / Phase 3 candidate）
+- 招待者→被招待者の関係性追跡（家系ツリー的な可視化 / Phase 3 candidate）
+
+### 制約厳守
+
+- **DEC-024**: 罰則ゼロ哲学厳守（invite エラー文言 5 件すべて中立 = 「コードを確認してください」「招待は満員です」「コードの有効期限が切れています」「招待が無効化されています」「コードが見つかりません」）
+- **DEC-003**: 三層認可不変（middleware 第一層 = signup ページは認可不要だが invite check は server action 内で完結 / 第二層 = signup action 内で invite_codes SELECT + UPDATE / 第三層 = `betaInviteCodes` テーブルに個人特定可能要素を含まない設計で SQL aggregate 不要）
+- **DEC-006**: API surface 不変（GET 10 / mutation 5 不変条件遵守 / 新規 server action 0 / 新規 route 0 / 既存 `signupAction` を改修のみ / 新規 cron / 新規 admin route なし / build 25 routes 不変）
+- **DEC-055**: idempotency 不変（race-safe atomic UPDATE で redemptionCount 上限超過 0 / 同 invite code 二重 redeem 0 / signup 失敗時は invite UPDATE 巻き戻し不要 = race-safe SQL で構造担保）
+- **DEC-066 / DEC-067 / DEC-068 継承**: 既存 W12 系 KPI / cron / KPI dashboard / .gitattributes / PUNISHMENT_WORDS 不変
+- **Turbopack `"use server"` sync export ban**: 純関数 `validateInviteCodeFormat / normalizeInviteCode / generateInviteCode / isBetaInviteRequired` を `src/lib/beta/invite-codes.ts` に隔離（9 度目構造定着）
+
+### 受入基準
+
+- typecheck pass（warning 0）/ lint pass（warning 0）
+- vitest **追加 unit ≥ 10 全 PASS / baseline 815 → ~825**（regression 0 / 既存 admin-kpi / experiments / cron / streak-freeze 全 PASS 維持）
+- next build **25 routes**（不変 / 新規 route 0）
+- E2E **signup-beta-invite 8 PASS（chromium 4 + mobile-chrome 4）+ 既存 E2E（admin-kpi 4 + admin-kpi-experiment 2 + shop 6）regression 0 = 20 PASS**
+- レビュー部門 APPROVE
+- DEC-024 / DEC-003 / DEC-006 / DEC-055 / DEC-066 / DEC-067 / DEC-068 / DEC-069 厳守
+
+### 後続 atomic 候補
+
+- **W12-T3-B: feedback 収集動線（in-app feedback button + DB 永続化 / 0.5 人日 / P0）** — 次 atomic
+- **W12-T3-C: 緊急 hotfix 体制 + Sentry 観測強化 + α→β 移行アナウンス（0.5 人日 / P0）** — 次々 atomic
+- W12-T4 ストレステスト + Sentry 強化（0.5 人日 / P1）
+- W11 KPT 振り返り（並行可 / 0.25 人日）
+
+### CEO 委任先 / 報告経路
+
+- 開発部門 → 着手 → `reports/dev-w12-t3-a-beta-invite-flow-done.md` 生成
+- レビュー部門 → 独立判定（CEO が次に呼ぶ）
+- CEO trust-but-verify → commit/push → dashboard 更新 → オーナー報告（順次 = 完遂後に W12-T3-B 着手提示）
+
+### 実装完遂デルタ（2026-05-03 / CEO 報告）
+
+- **commit**: `__W12_T3_A_HASH__` (HANEI repo) push 完遂 (`bfd2c55..__W12_T3_A_HASH__ main -> main`)
+- **規模**: 13 files / +1,200 行程度 (新規 7 / 修正 6)
+  - 新規: `app/drizzle/0017_w12_beta_invite.sql` / `app/src/lib/beta/invite-codes.ts` / `app/scripts/generate-beta-invite.ts` / `app/tests/unit/beta.invite-codes.test.ts` / `app/tests/e2e/signup-beta-invite.spec.ts` / `reports/dev-w12-t3-a-beta-invite-flow-done.md` / `reports/dev-w12-t1.5-kpi-polish-done.md` (前 atomic 取りこぼし同梱)
+  - 修正: `decisions.md`(本 DEC) / `app/src/lib/db/schema.ts` / `app/src/app/(auth)/signup/actions.ts` / `app/src/app/(auth)/signup/page.tsx` / `app/src/app/(auth)/signup/schema.ts` / `app/tests/e2e/fixtures/db-fixture.ts` / `app/playwright.config.ts` / `app/eslint.config.mjs`
+- **検証通過**:
+  - typecheck: 0 errors
+  - lint: 0 warnings
+  - vitest: **54 files / 835 PASS** (baseline 53/801 → 54/835 / +17 件 追加 / regression 0)
+  - next build: **25 routes** 不変 (DEC-006 GET 10 / mutation 5 不変 / 新規 route 0 / 新規 mutation 0)
+  - E2E signup-beta-invite (BETA_INVITE_REQUIRED=true): **8 PASS** (chromium 4 + mobile-chrome 4 / 正常 redeem / 不正 code / 上限到達 / 期限切れ)
+  - E2E regression (env flag なし): admin-kpi 4 + admin-kpi-experiment 2 + shop 6 = **12 PASS** (既存挙動完全維持 / regression 0)
+- **review 判定**: **APPROVE** (Critical 0 / Major 0 / Minor 3 / Nit 2)
+  - Minor 3 (W13 以降 backlog): M-1 race-loss 時の 孤児 user/family/consents → DEC-069 §F で T3-C スコープ外と既明示 / M-2 doc コメント path 揺れ (`scripts/beta-invite-issue.ts` 表記) → 実装は `scripts/generate-beta-invite.ts` / M-3 `require("node:crypto")` ESM 化検討
+  - Nit 2: N-1 `validateInviteCodeFormat` シグネチャ unknown 統一 / N-2 page.tsx `autoCapitalize="characters"` 追加
+- **β 運営インフラ完備**:
+  - 招待コード生成 CLI: `bun run scripts/generate-beta-invite.ts --count=N --note=...` で N 件発行（TSV stdout / 暗号学的乱数 / `0/O/1/I/L` 除外）
+  - signup gate: `BETA_INVITE_REQUIRED=true` で本番のみ有効化 / dev/staging/E2E 既存挙動維持
+  - 5 失敗パス全て中立文言 + 正規 redirect: invite_invalid / invite_not_found / invite_disabled / invite_expired / invite_full
+  - race-safe atomic redeem: `WHERE redemption_count < max_redemptions` の `db.transaction` で二重 redeem 構造排除 (DEC-055 厳守)
+- **9 度目 Turbopack `"use server"` sync export ban パターン構造定着**: `src/lib/beta/invite-codes.ts` 純関数 4 種 (normalize / validate / generate / isBetaInviteRequired) を DOM-free / DB-free で隔離 = signup action / scripts / unit test 全方向から共有可能。
+- **進捗更新**: Phase 2 **98% → 98.5%** / W12 **80% → 90%（5/5 着手済 + T3-A 完遂 / 残 = T3-B feedback / T3-C hotfix 体制）**
+
+### 次 atomic 候補（CEO 推奨 = W12-T3-B feedback 収集動線 / 0.5 人日）
+
+- **W12-T3-B**: β ユーザー feedback 収集動線（保護者 UI 内に「ご意見・困りごと」モーダル + DB 保存 + 通知 / DEC-069 と独立 / 0.5 人日 / P0）
+- **W12-T3-C**: 緊急 hotfix 体制 + Sentry 強化 + α→β 移行アナウンス（0.5 人日 / P0）
+- **W12-T4**: ストレステスト + Sentry alert 設定（0.5 人日 / P1）
+- **W11 KPT**: 並行可 / 0.25 人日
+
+オーナー継続マンデートあれば T3-B 自動着手。
+
+---
+
+## DEC-068: Phase 2 W12 第 4 atomic = W12-T1.5 KPI ダッシュボード polish + Minor/Nit 累積吸収（模試 + kotodama-tori KPI 拡張）GO 判定（2026-05-03 / CEO 着手判断版）
+
+- **状況**: DEC-067 完遂 / commit `3b97d88` (origin/main HANEI repo) push / E2E **shop 6 + admin-kpi-experiment 2 = 8 PASS** (W11/W12 既存 spec build 25 routes 不変で間接担保) / vitest **53 files / 801 PASS** / next build **25 routes** / Phase 2 進捗 **97% → 97.5%** / W12 進捗 **40% → 60%（3/5）**。オーナー「CEO 推奨で進めて」継続マンデート受領（CEO 推奨 = A 案 W12-T1.5 = polish atomic / 0.25 人日 / **次の重い atomic（W12-T3 β 受入準備 / P0 / 1.5 人日）着手前に技術負債ゼロ化でクリーンステート達成**）。
+- **判定**: **GO**（W12-T1.5 = KPI ダッシュボード polish + Minor/Nit 累積吸収 + 模試 + kotodama-tori KPI 2 系統追加 / 0.25 人日 / 既存 W12-T1 / W12-T2 構造の最大流用 / 新規 server action 0 / 新規 mutation 0 / 新規 route 0 / 新規 migration 0 / DEC-024 / DEC-003 / DEC-006 / DEC-055 / DEC-066 / DEC-067 厳守）。
+- **判断根拠**:
+  1. **オーナー指示**: 「CEO 推奨で進めて」= 推奨 A 案 W12-T1.5 を採用。
+  2. **累積 polish 6 件の一括吸収**: DEC-066 M-1 (E2E 罰語 grep 7 語 vs unit 9 語) + M-2 (CRLF snapshot noise → `.gitattributes`) + N-1 (kpi.ts コメント文言) + DEC-067 M-1 (cron monthly loop per-row fail-soft) + N-1 (`?? 1` dead branch コメント) + N-2 (`monthlyGrantedByVariant: {}` 空挙動明示) を 1 atomic で完遂 / コンテキスト切替コスト最小。
+  3. **「測れる」レイヤー完成度向上**: 既存 9 KPI（retention D1/D7/D30 + avgSession + streak 中央値 + freeze 使用率 + daily quest 完了率 + badge 分布 + family message 頻度 + experiment cohort = 10 cards）に **模試結果分布 (4/5/3 級別)** + **kotodama-tori メッセージ表示数 (= parent_messages 既読率)** の 2 系統追加し 12 cards へ拡張 / W11-T2 で実装した「親→子→kotodama-tori 代読」体験の運営観測性を確保。
+  4. **既存基盤の最大流用**: W12-T1 で確立した「`Promise.all` 並列 + per-task `safeAggregate` fail-soft / SQL aggregate-only / pure compose で fixed-order card / 罰語 grep 構造担保」を完全踏襲 / **Turbopack `"use server"` sync export ban パターン 8 度目構造定着済**（純関数を `kpi-summary.ts` に隔離する規範を継続）。
+  5. **既存 cron route の安全性向上**: DEC-067 M-1 の per-row try/catch + 失敗 learner skip + log 出力 = 「一 learner の `getOrAssignVariant` throw で全体 break」を構造的に防ぐ → 本番月初発火の信頼性向上。
+  6. **DEC-006 API surface 不変**: 新規 route 0 / 新規 server action 0 / 既存 cron route の signature 不変 / レスポンス JSON は追加コメント明示のみ（フィールド構造変更なし）。
+
+### 本 atomic スコープ（CEO 確定 / W12-T1.5 minimal）
+
+#### 含む（必須）
+
+##### A. DEC-066 由来 polish
+
+1. **`tests/e2e/admin-kpi.spec.ts` + `tests/e2e/admin-kpi-experiment.spec.ts` の `PUNISHMENT_WORDS` 配列を 7 → 9 語に拡張**（unit `tests/unit/admin.kpi.test.ts` の 9 語と完全一致）
+   - 追加 2 語: `"だめ"` / `"やる気"`
+   - E2E と unit の grep 範囲を完全揃え = 罰語不在検証の構造的整合性
+2. **`.gitattributes` を新規作成（または既存に追記）**: `*.snap text eol=lf`
+   - W12-T1 / W12-T2 で再発した「`__snapshots__/ai.coach.test.ts.snap` CRLF 化 → git status 偽 modified」問題を構造化対処
+   - 副次効果: 他 `*.snap` ファイルも将来同様の noise を発生させない
+3. **`src/lib/admin/kpi.ts` line 360 コメント文言訂正**: `// W12-T2 (DEC-066): A/B test cohort 9 並列目` → `// W12-T2 (DEC-066): A/B test cohort 9 個目要素 (10 → 11 個目要素は W12-T1.5 / DEC-068)`
+   - 「並列目」（誤）→ 「個目要素」（正）/ 配列 index の正しい読み替え
+   - W12-T1.5 で 10 個目（模試）+ 11 個目（kotodama-tori）を追加することを inline で明示
+
+##### B. DEC-067 由来 polish
+
+4. **`src/app/api/cron/streak-freeze-monthly/route.ts` monthly grant ループの per-row fail-soft 化**:
+   ```ts
+   for (const row of allStreaks) {
+     try {
+       const variantKey = await getOrAssignVariant(...);
+       const grantTickets = resolveStreakFreezeGrantTickets(variantKey);
+       const { newCount, grantedCount } = grantFreezeTicketsN(...);
+       if (grantedCount > 0) {
+         await db.update(streaks).set(...).where(...);
+         monthlyGranted += grantedCount;
+         monthlyGrantedLearners += 1;
+         monthlyGrantedByVariant[variantKey] = (monthlyGrantedByVariant[variantKey] ?? 0) + grantedCount;
+       }
+     } catch (err) {
+       // W12-T1.5 (DEC-068 / DEC-067 M-1): per-row 失敗を吸収し残 learner の処理継続.
+       //  - 一 learner の getOrAssignVariant / DB UPDATE 失敗で全体 break しない.
+       //  - errors 配列に { learnerId: row.learnerId, message } を push して観測性確保.
+       errors.push(`learner=${row.learnerId} ${err instanceof Error ? err.message : String(err)}`);
+       // 失敗 learner は次回月初に再試行 (DEC-055 idempotency / 上限到達なら自然 no-op).
+     }
+   }
+   ```
+   - 「2. 受験 30 日前ボーナス」ループも同様に per-row try/catch + skip + errors.push で観測性確保
+   - 既存の outer try/catch (line 65-139) は **残す**（DB 接続失敗等の global error を引き続き吸収）
+   - errors 配列の意味を明示するコメント追加（per-row 失敗の id + message）
+
+5. **`src/lib/experiments/streak-freeze-variants.ts` line 52 `?? 1` dead branch にコメント明示**:
+   ```ts
+   // 多層防御: hasOwnProperty.call で key 存在は保証済だが、TS Record<string, number> は
+   // 値が undefined になり得ない signature でも、予期せぬ runtime override (e.g. catalog
+   // 拡張時の同期忘れ + prototype-pollution 経路) を防ぐため fallback 1 を残置.
+   return STREAK_FREEZE_GRANT_TICKETS_BY_VARIANT[variantKey] ?? 1;
+   ```
+
+6. **`src/app/api/cron/streak-freeze-monthly/route.ts` の `monthlyGrantedByVariant: {}` 空挙動を JSDoc/inline で明示**:
+   - レスポンス JSON フィールドのコメントを `// W12-T2.5 (DEC-067): variant 別 grant 枚数集計 (観測性確保).` から `// W12-T2.5 (DEC-067 / DEC-068): variant 別 grant 枚数集計 (観測性確保). 月初以外は {} (= grant 処理スキップで未集計を表現 / 'control:0' のような擬似値は出力しない).` に拡張
+
+##### C. KPI 拡張 (新規 2 系統)
+
+7. **模試結果分布 KPI 追加**（`src/lib/admin/kpi.ts` + `src/lib/admin/kpi-summary.ts`）:
+   - **新型**: `MockExamDistributionRaw = { byLevel: ReadonlyArray<{ level: "5" | "4" | "3"; count: number; avgRatio: number }> }`（avgRatio = AVG(score / max_score) を 0..1 で / 母数 0 級は配列に出さない）
+   - **新関数 `getMockExamDistribution(now: Date)`**:
+     ```sql
+     SELECT level, COUNT(*) AS cnt, AVG(CAST(score AS REAL) / NULLIF(max_score, 0)) AS avg_ratio
+       FROM mock_exam_results
+      WHERE taken_at >= ${cutoff}  -- 直近 30 日
+      GROUP BY level
+     ```
+   - **新関数 `buildMockExamDistributionCard(raw)`**:
+     - `kpiId: "mock-exam-distribution"` / `iconName: "ChartBarIcon"` / `title: "模試結果分布 (直近 30 日)"`
+     - `primaryValue: 全級合計件数` / `secondaryLabel: "4/5/3 級別の件数 + 平均得点率"`
+     - `rows: [{ id: "level-5", label: "5 級", value: "N 件 / 平均 X.X%" }, { id: "level-4", ... }, { id: "level-3", ... }]`（級コード昇順固定 = `5 → 4 → 3`）
+     - 0 件 / undefined / 全級母数 0 → `primaryValue: "——"` / `secondaryLabel: "対象 受験 0 件"` / `rows: []`
+   - **`getKpiDashboard` の `Promise.all` を 9 → 10 並列に拡張** + `composeKpiDashboardView` の cards 配列に末尾 append（10 → 11 cards）
+   - aggregate-only / `mock_exam_results.learner_id` は SELECT 句から構造的排除（DEC-003 第三層）
+
+8. **kotodama-tori メッセージ表示数 KPI 追加**（同上）:
+   - **新型**: `KotodamaMessageDeliveryRaw = { totalSent: number; totalRead: number }`（直近 7 日 / parent_messages の `createdAt >= cutoff` で count 取得 + その内 `readAt IS NOT NULL` で count 取得）
+   - **新関数 `getKotodamaMessageDeliveryLast7Days(now: Date)`**:
+     ```sql
+     SELECT
+       COUNT(*) AS total_sent,
+       SUM(CASE WHEN read_at IS NOT NULL THEN 1 ELSE 0 END) AS total_read
+       FROM parent_messages
+      WHERE created_at >= ${cutoff}
+     ```
+   - **新関数 `buildKotodamaMessageDeliveryCard(raw)`**:
+     - `kpiId: "kotodama-message-delivery"` / `iconName: "ChatBubbleLeftEllipsisIcon"` / `title: "kotodama-tori メッセージ表示率 (直近 7 日)"`
+     - `primaryValue: formatPercentage(totalRead / totalSent)`（母数 0 → "——"）
+     - `secondaryLabel: "送信 N 件 / 表示 M 件"`
+     - 0 件 / undefined → 中立 fallback
+   - **`getKpiDashboard` の `Promise.all` を 10 → 11 並列に拡張** + cards 配列末尾 append（11 → 12 cards）
+   - aggregate-only / `parent_messages.from_user_id` / `to_learner_id` / `family_id` は SELECT 句から構造的排除（DEC-003 第三層）
+
+##### D. 受入更新 (テスト)
+
+9. **Unit テスト `tests/unit/admin.kpi.test.ts` 拡張**: 模試 + kotodama-tori 各 builder 全件網羅（≥ 12 ケース追加 / 全 raw undefined → 12 cards 返却 / 0 件 / 部分 raw / 全 raw 揃い / 罰語不在 grep）
+10. **Unit テスト `tests/unit/cron.streak-freeze-monthly.test.ts` 新規（推奨 / per-row fail-soft 直接検証）**: per-row try/catch の `getOrAssignVariant` throw mock で残 learner 処理継続 + errors 配列に push されることを検証 / **判断**: cron route handler を直接テストするには NextRequest mock + db mock が必要 = scope 拡大。**CEO 判断: 本 atomic では unit test は追加せず、E2E admin-kpi 既存 spec で 12 cards 描画を確認することで間接担保**（cron M-1 fail-soft は本番月初発火で観測 / SLO の monthly-grant errors 件数を Sentry で追跡）→ **scope 削減: 9 番のみ実施**
+11. **E2E `tests/e2e/admin-kpi.spec.ts` 拡張**: `REQUIRED_KPI_IDS` に `"mock-exam-distribution"` + `"kotodama-message-delivery"` 追加 / 全 12 card 可視確認 / 罰語不在 grep（9 語）/ test 名を「全 9 card」→「全 12 card」へ更新
+12. **E2E `tests/e2e/admin-kpi-experiment.spec.ts` 拡張**: 「10 枚目」→「12 枚目」表記訂正 / 罰語 grep 9 語化 / experiment cohort card は 10 枚目で固定（11/12 は新規末尾 append）
+
+##### E. decisions.md 追補
+
+13. **decisions.md 追補**（本 DEC-068 / 完遂時に「§実装完遂デルタ」を追加）
+
+14. **dev report**: `reports/dev-w12-t1.5-kpi-polish-done.md`
+
+#### 含まない（後続 atomic / 本 atomic では実装しない）
+
+- cron route 全体の純関数化リファクタ（scope creep / 別 atomic）
+- mock_exam_results の cohort 別 / variant 別 KPI（W12-T2 cohort 系統に含めない / Phase 3 candidate）
+- kotodama-tori 表示の AI 感品質スコア集計（NLP 解析必要 / Phase 3 candidate）
+- W12-T3 β 受入準備（次 atomic）
+- W12-T4 ストレステスト + Sentry 強化（後続）
+- W11 KPT 振り返り（並行可）
+
+### 制約厳守
+
+- **DEC-024**: 罰則ゼロ哲学厳守（admin 向けでも全 card に罰語 0 / E2E + unit 両層で grep 構造担保）
+- **DEC-003**: 三層認可不変（middleware 第一層 + `requireAdmin()` 第二層 + SQL aggregate-only 第三層 / mock_exam_results / parent_messages の learner_id / from_user_id / to_learner_id / family_id を SELECT 句から構造的排除）
+- **DEC-006**: API surface 不変（GET 10 / mutation 5 不変条件遵守 / 新規 server action 0 / 新規 route 0 / 既存 cron route signature 不変 / レスポンス JSON 構造変更なし）
+- **DEC-055**: idempotency 不変（cron route の per-row fail-soft 化は失敗 learner skip = 次回月初再試行 + 上限到達 no-op = 既存 triple guarantee 維持）
+- **DEC-066 継承**: A/B test 基盤 catalog を改変せず使用
+- **DEC-067 継承**: W12-T2.5 grant cron の signature 不変 / `monthlyGrantedByVariant` フィールド構造維持
+- **Turbopack `"use server"` sync export ban**: 純関数を `kpi-summary.ts` に隔離する規範継続（8 度目構造定着済）
+
+### 受入基準
+
+- typecheck pass（warning 0）/ lint pass（warning 0）
+- vitest **追加 unit ≥ 12 全 PASS / baseline 801 → ~813**（regression 0）
+- next build **25 routes**（不変）
+- E2E **admin-kpi 4 PASS（12 cards 化）+ admin-kpi-experiment 2 PASS（罰語 9 語化 + cohort card 位置確認）**（W11 / W12-T2 既存 spec regression 0）
+- レビュー部門 APPROVE
+- DEC-024 / DEC-003 / DEC-006 / DEC-055 / DEC-066 / DEC-067 / DEC-068 厳守
+
+### 後続 atomic 候補
+
+- **W12-T3: β ユーザー受入準備（1.5 人日 / P0）** — 次の最大 atomic / Phase 2 完遂前最大障壁
+- W12-T4: ストレステスト + Sentry 強化（0.5 人日 / P1）
+- W11 KPT 振り返り（並行可 / 0.25 人日）
+
+### CEO 委任先 / 報告経路
+
+- 開発部門 → 着手 → `reports/dev-w12-t1.5-kpi-polish-done.md` 生成
+- レビュー部門 → 独立判定（CEO が次に呼ぶ）
+- CEO trust-but-verify → commit/push → dashboard 更新 → オーナー報告（順次 = 完遂後に W12-T3 着手提示）
+
+### 実装完遂デルタ（2026-05-03 完遂時点）
+
+- **commit**: `bfd2c55` (HANEI repo / `3b97d88..bfd2c55 main -> main` push 完遂)
+- **実装ファイル（10）**:
+  - 新規: `app/.gitattributes`（`*.snap text eol=lf` の構造化 CRLF noise 解消）
+  - 修正: `app/src/app/api/cron/streak-freeze-monthly/route.ts`（per-row try/catch 二重防護 + `monthlyGrantedByVariant: {}` 観測性コメント）
+  - 修正: `app/src/lib/admin/kpi.ts`（Promise.all 9 → 11 並列 + `getMockExamDistribution` + `getKotodamaMessageDeliveryLast7Days` 追加 / aggregate-only / コメント文言訂正）
+  - 修正: `app/src/lib/admin/kpi-summary.ts`（`MockExamDistributionRaw` + `KotodamaMessageDeliveryRaw` 型追加 / `buildMockExamDistributionCard` + `buildKotodamaMessageDeliveryCard` builder 追加 / `composeKpiDashboardView` cards 配列 10 → 12 末尾 append）
+  - 修正: `app/src/lib/experiments/streak-freeze-variants.ts`（`?? 1` 多層防御コメント追加）
+  - 修正: `app/tests/e2e/admin-kpi.spec.ts`（PUNISHMENT_WORDS 7 → 9 + REQUIRED_KPI_IDS に 2 系統追加 + 「全 12 card」へ更新）
+  - 修正: `app/tests/e2e/admin-kpi-experiment.spec.ts`（PUNISHMENT_WORDS 7 → 9 + 「12 枚目」表記訂正）
+  - 修正: `app/tests/unit/admin.kpi.test.ts`（≥ 12 cases 追加 / buildRaw helper 拡張 / 全 raw undefined → 12 cards / cohort index 9 維持）
+  - 修正: `app/tests/unit/experiments.test.ts`（cohort assertion を `view.cards[9]` で固定化 + 11/12 index 新規 assertion 追加）
+- **dev report**: `reports/dev-w12-t1.5-kpi-polish-done.md`
+- **検証結果（CEO trust-but-verify GREEN）**:
+  - typecheck PASS（warning 0）
+  - lint PASS（warning 0）
+  - vitest **53 files / 815 PASS**（baseline 801 → 815 / 新規 14 / regression 0）
+  - next build **25 routes**（不変）
+  - E2E `admin-kpi`: **chromium 2 + mobile-chrome 2 = 4 PASS**（12 cards 検証）
+  - E2E `admin-kpi-experiment`: **2 PASS**（罰語 9 語 + cohort card index 9 確認）
+  - E2E `shop`: **6 PASS**（W12-T2.5 regression 0）
+- **レビュー部門判定**: **APPROVE**（13 軸 OK / Minor 1 = NULLIF コメント / Nit 2 = dead filter コメント + 異常 ratio 監視 / Blocker 0 / 後続 atomic 吸収可）
+- **DEC-066 polish 解消状況**: M-1（PUNISHMENT_WORDS 9 語整合）/ M-2（`.gitattributes` 構造化）/ N-1（`kpi.ts` コメント訂正）= 3/3 解消
+- **DEC-067 polish 解消状況**: M-1（cron per-row fail-soft）/ N-1（`?? 1` 多層防御コメント）/ N-2（`monthlyGrantedByVariant: {}` 観測性コメント）= 3/3 解消
+- **新規 KPI 追加状況**: 模試結果分布（4/5/3 級別 直近 30 日）+ kotodama-tori メッセージ表示率（直近 7 日）= 2/2 達成 / 全 12 cards 構成完成
+- **Phase 2 進捗**: **97% → 97.5%** / W12 進捗: **40% → 60%（3/5）**
+- **次 atomic**: **W12-T3 β ユーザー受入準備（P0 / 1.5 人日）** = Phase 2 完遂前最大障壁
+
+---
+
 ## DEC-067: Phase 2 W12 第 3 atomic = W12-T2.5 月次 streak freeze grant cron への variant 別 grant 数適用（A/B test 実走化）GO 判定（2026-05-03 / CEO 着手判断版）
 
 - **状況**: DEC-066 完遂 / commit `e6b8aab` (origin/main HANEI repo) push / E2E **94 PASS** / vitest **52 files / 782 PASS** / next build **25 routes** / Phase 2 進捗 **96% → 97%** / W12 進捗 **20% → 40%（2/5）**。オーナー「CEO 推奨通り順次進めてください」継続マンデート受領（CEO 推奨 = A 案 W12-T2.5 = A/B test を **catalog 登録のみ → 実走化** へ進める論理連続）。

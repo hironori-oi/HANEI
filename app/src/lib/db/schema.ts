@@ -35,6 +35,14 @@ export const users = sqliteTable(
     role: text("role", { enum: ["parent", "learner", "admin"] })
       .notNull()
       .default("parent"),
+    /**
+     * W12-T3-A (DEC-069): β invite flow
+     *  - 当該 user が β 招待コード経由で signup した場合、該当 betaInviteCodes.code を保存.
+     *  - nullable / FK 不要 (履歴保持目的 / 後で invite code を delete しても痕跡を残す).
+     *  - better-auth は additionalFields で管理しないため、`input: false` 相当の運用 (signup
+     *    action 内の DB UPDATE でのみ書き換え / クライアントから直接書き換え不可).
+     */
+    betaInvitedByCode: text("beta_invited_by_code"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
@@ -1160,6 +1168,63 @@ export const studySessions = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// 32. beta_invite_codes (W12-T3-A / DEC-069 / β 招待コード)
+//
+// β リリース期間中の signup ゲーティング用の招待コード.
+//
+// 設計思想 (DEC-069):
+//   - 1 行 = 1 招待コード. `code` UNIQUE. 8 文字大文字英数 (`0/O/1/I/L` 除外).
+//   - `maxRedemptions` >= 1 / `redemptionCount` 0..maxRedemptions.
+//   - `disabledAt`/`expiresAt` は nullable で構造的に「無期限 / 有効」を表現.
+//   - 個人特定可能要素 0 (DEC-003 第三層: SQL aggregate 不要 / SELECT で隠蔽不要).
+//   - admin UI 不要 (β 期間は scripts/generate-beta-invite.ts で運営者手動発行).
+//
+// 三層認可 (DEC-003):
+//   - 第一層: signup ページは middleware 認可不要 (公開 form / invite check は
+//     server action 内で完結).
+//   - 第二層: signup action 内で SELECT + race-safe atomic UPDATE.
+//   - 第三層: テーブル設計時点で個人特定要素 0 = 構造排除.
+//
+// idempotency (DEC-055):
+//   - signup action 内 transaction で
+//       UPDATE ... SET redemption_count = redemption_count + 1
+//        WHERE id = ? AND redemption_count < max_redemptions
+//     の atomic 増加で race 条件下でも上限超過 0 を SQL レベルで担保.
+// ---------------------------------------------------------------------------
+export const betaInviteCodes = sqliteTable(
+  "beta_invite_codes",
+  {
+    id: text("id").primaryKey(),
+    /**
+     * 招待コード本体 (8 文字 / 大文字英数 / `0/O/1/I/L` 除外).
+     * normalizeInviteCode (trim + uppercase + 内部空白除去) 後の値で保存.
+     */
+    code: text("code").notNull(),
+    /** 運営者識別子 (任意 / 「ceo」「dev」等のフリーテキスト) */
+    createdBy: text("created_by"),
+    /** 発行メモ (任意 / 「2026-05 早期 β 配布」等) */
+    note: text("note"),
+    /** 同コードを redeem 可能な最大回数 (1 = 個人用 / >1 = 共有用) */
+    maxRedemptions: integer("max_redemptions").notNull().default(1),
+    /** 既に redeem された回数 (atomic +1 で更新 / 0..maxRedemptions) */
+    redemptionCount: integer("redemption_count").notNull().default(0),
+    /** 期限 (nullable / null = 無期限) */
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+    /** 無効化日時 (nullable / null = 有効) */
+    disabledAt: integer("disabled_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => ({
+    codeIdx: uniqueIndex("beta_invite_codes_code_idx").on(t.code),
+    /** 「有効コード」検索高速化 (disabled / expired を構造的に弾く) */
+    activeIdx: index("beta_invite_codes_active_idx").on(
+      t.disabledAt,
+      t.expiresAt,
+    ),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Drizzle inferred types
 // ---------------------------------------------------------------------------
 export type User = typeof users.$inferSelect;
@@ -1225,3 +1290,7 @@ export type NewDailyQuest = typeof dailyQuests.$inferInsert;
 // W10-T5 / Study Sessions (過学習防止)
 export type StudySession = typeof studySessions.$inferSelect;
 export type NewStudySession = typeof studySessions.$inferInsert;
+
+// W12-T3-A / β invite codes (DEC-069)
+export type BetaInviteCode = typeof betaInviteCodes.$inferSelect;
+export type NewBetaInviteCode = typeof betaInviteCodes.$inferInsert;

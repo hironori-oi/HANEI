@@ -71,6 +71,8 @@ export async function applyMigrations(client: Client): Promise<void> {
     "0015_w11_family_streak.sql",
     // W12-T2 (DEC-066): learner_profiles.experiments JSON column (A/B test cohort 永続化)
     "0016_w12_experiments.sql",
+    // W12-T3-A (DEC-069): beta_invite_codes + users.beta_invited_by_code (β invite flow)
+    "0017_w12_beta_invite.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);
@@ -161,6 +163,8 @@ export async function seedFixture(client: Client): Promise<{
     "families",
     "badges",
     "generated_problems_queue",
+    // W12-T3-A (DEC-069): β 招待コード (signup ゲーティング)
+    "beta_invite_codes",
   ]) {
     try {
       await client.execute(`DELETE FROM ${tbl}`);

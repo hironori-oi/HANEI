@@ -54,6 +54,18 @@ const config = [
       "no-restricted-syntax": "off",
     },
   },
+  {
+    // W12-T3-A (DEC-069): signup action は pre-auth (familyId 未確定) で
+    // beta_invite_codes をルックアップするため、scopedQueries を経由できない.
+    //  - beta_invite_codes は global inventory (個人特定要素 0 / 第三層は構造排除済).
+    //  - signup action 自体は middleware 第一層を通らない公開エンドポイントであり、
+    //    invite check は server action 内 SELECT + race-safe atomic UPDATE で完結する
+    //    (DEC-003 三層認可遵守 / DEC-006 mutation 5 不変条件遵守).
+    files: ["src/app/(auth)/signup/actions.ts"],
+    rules: {
+      "no-restricted-syntax": "off",
+    },
+  },
 ];
 
 export default config;

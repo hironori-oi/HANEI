@@ -15,6 +15,12 @@ export const SignupSchema = z.object({
   consent_coppa: z.literal("on"),
   consent_ai_chat: z.literal("on"),
   consent_terms: z.literal("on"),
+  /**
+   * W12-T3-A (DEC-069): β 招待コード (任意 / `BETA_INVITE_REQUIRED === "true"` のときに
+   * 実行時必須化される). normalize / 形式検証 / DB 検証は signup action 内で行う.
+   * Schema レベルでは「任意」で受け取り、必須判定は invite ゲート (実行時 env flag) に委ねる.
+   */
+  invite_code: z.string().optional(),
 });
 
 export type SignupActionResult =

@@ -73,6 +73,18 @@ export default defineConfig({
       // で primary→fallback 両モデル失敗するか、15s feedback timeout を超過して flaky
       // 化する。E2E では明示的に空文字で上書きして決定論経路に固定する。
       OPENAI_API_KEY: "",
+      // W12-T3-A (DEC-069): β invite ゲート flag.
+      //  - 未設定 / "false" のとき = 既存 signup 挙動完全維持 (regression 0).
+      //  - "true" のとき = 新 invite_code 入力欄が出現し signupAction が
+      //    invite check を必須化する.
+      //  - signup-beta-invite.spec.ts を走らせる場合は実行コマンド側で
+      //    `BETA_INVITE_REQUIRED=true npm run e2e tests/e2e/signup-beta-invite.spec.ts`
+      //    のように環境変数を渡すと、Playwright runner が webServer 子プロセスにも
+      //    継承する (Node の child_process spawn は親プロセス env を inherit).
+      //  - ここでは明示的に空文字で上書きせず、process.env を pass-through する.
+      ...(process.env.BETA_INVITE_REQUIRED === "true"
+        ? { BETA_INVITE_REQUIRED: "true" }
+        : {}),
     },
   },
 });
