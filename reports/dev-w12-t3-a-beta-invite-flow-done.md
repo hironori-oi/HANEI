@@ -4,7 +4,7 @@
 - atomic: Phase 2 W12-T3-A (= 0.5 人日 / W12-T3 を 3 atomic に分解した第 1 弾)
 - 根拠 DEC: DEC-069 (本 atomic) / DEC-068 / DEC-067 / DEC-066 / DEC-065 / DEC-024 / DEC-003 / DEC-006 / DEC-055
 - 完遂日: 2026-05-03
-- HEAD (HANEI repo): `bfd2c55..__W12_T3_A_HASH__`
+- HEAD (HANEI repo): `bfd2c55..eea5448`
 
 ## 概要
 

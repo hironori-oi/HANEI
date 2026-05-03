@@ -163,7 +163,7 @@
 
 ### 実装完遂デルタ（2026-05-03 / CEO 報告）
 
-- **commit**: `__W12_T3_A_HASH__` (HANEI repo) push 完遂 (`bfd2c55..__W12_T3_A_HASH__ main -> main`)
+- **commit**: `eea5448` (HANEI repo) push 完遂 (`bfd2c55..eea5448 main -> main`)
 - **規模**: 13 files / +1,200 行程度 (新規 7 / 修正 6)
   - 新規: `app/drizzle/0017_w12_beta_invite.sql` / `app/src/lib/beta/invite-codes.ts` / `app/scripts/generate-beta-invite.ts` / `app/tests/unit/beta.invite-codes.test.ts` / `app/tests/e2e/signup-beta-invite.spec.ts` / `reports/dev-w12-t3-a-beta-invite-flow-done.md` / `reports/dev-w12-t1.5-kpi-polish-done.md` (前 atomic 取りこぼし同梱)
   - 修正: `decisions.md`(本 DEC) / `app/src/lib/db/schema.ts` / `app/src/app/(auth)/signup/actions.ts` / `app/src/app/(auth)/signup/page.tsx` / `app/src/app/(auth)/signup/schema.ts` / `app/tests/e2e/fixtures/db-fixture.ts` / `app/playwright.config.ts` / `app/eslint.config.mjs`
