@@ -82,7 +82,17 @@ import {
 import { KotodamaToriModal } from "@/components/messages/kotodama-tori-modal";
 import { getOrGenerateTodayQuests } from "@/lib/actions/quests";
 import { DailyQuestSummaryRibbon } from "@/components/quest/DailyQuestSummaryRibbon";
+import { FeedbackButton } from "@/components/feedback/feedback-button";
 import { cn } from "@/lib/utils";
+
+/**
+ * W12-T3-B (DEC-070): β feedback ボタンの kill switch 評価.
+ *  - default 表示 / "false" 設定時のみ非表示.
+ *  - server component 評価のため client bundle に env が漏れない.
+ */
+function isBetaFeedbackEnabled(): boolean {
+  return process.env.BETA_FEEDBACK_ENABLED !== "false";
+}
 
 export const metadata = {
   title: "ホーム",
@@ -696,6 +706,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </Button>
         </div>
       </section>
+
+      {/* W12-T3-B (DEC-070): β feedback 収集動線
+          目立たない位置 = ページ最下部に小型 outline ボタン.
+          parent role 認可は requireAuth + getFamilyIdForUser で既に通過済 = ここに到達した時点で
+          parent 確定. learner UI には出さない設計 (DEC-070 §2). */}
+      {isBetaFeedbackEnabled() ? (
+        <footer className="mt-10 flex justify-center pb-4">
+          <FeedbackButton userEmail={session.email} />
+        </footer>
+      ) : null}
     </main>
   );
 }
