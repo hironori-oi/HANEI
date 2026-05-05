@@ -169,6 +169,72 @@ export async function requireLearnerOwner(
 }
 
 /**
+ * 認証済みかつ family_members.role = 'learner' であることを確認 (W12-T2 / DEC-076).
+ *
+ * 学習者本人が自分のリソース (受験日 / 学習目標 等) を直接操作するパスで使う第二層認可。
+ * 親が parent role でログインしている場合は本ガードは throw し、呼び出し側が
+ * 「parent path」「learner-self path」の二系統認可で分岐する想定 (DEC-003 三層認可拡張)。
+ *
+ * 現行 Phase 1〜2 では学習者ログイン経路が無く、親が学習者画面 (/home) を代理操作する
+ * 構造になっている。本ガードは将来 learner 直接ログイン導入時の forward-compat と、
+ * テスト時の意図明示のために先行整備する (mutation +0 / top-level fn ではなく helper)。
+ */
+export async function requireLearner(
+  userId: string,
+): Promise<{ familyId: string }> {
+  // 認可判定そのもの (eslint.config.mjs 内 files 例外で no-restricted-syntax は無効化済)
+  const rows = await db
+    .select({ familyId: familyMembers.familyId, role: familyMembers.role })
+    .from(familyMembers)
+    .where(and(eq(familyMembers.userId, userId), eq(familyMembers.role, "learner")))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) {
+    throw new Error("[HANEI/auth] requireLearner: user is not a learner in any family");
+  }
+  return { familyId: row.familyId };
+}
+
+/**
+ * 学習者本人が「自分自身の learnerProfiles 行」にアクセスしていることを確認 (W12-T2 / DEC-076).
+ *
+ * 学習者として認証している userId が、対象 learnerId の所有者 (learnerProfiles.userId 一致) で
+ * あることを SQL レベルで検証する。第三層 (DB scoped) の代替として learnerId に紐付く
+ * userId を直接照合する。
+ *
+ * 現行 Phase 1〜2 では学習者ログイン経路がないため、本ガードは forward-compat として
+ * 用意する。実運用では親代理 (requireParent + requireLearnerOwner) を使うため、
+ * 現状本ガードの呼び出しは Server Action 内の二系統認可分岐の learner-self 枝で発火する。
+ */
+export async function requireSelfLearner(
+  learnerUserId: string,
+  learnerId: string,
+): Promise<{ familyId: string; learnerId: string }> {
+  // 認可判定そのもの (eslint.config.mjs 内 files 例外で no-restricted-syntax は無効化済)
+  const rows = await db
+    .select({
+      familyId: learnerProfiles.familyId,
+    })
+    .from(learnerProfiles)
+    .where(
+      and(
+        eq(learnerProfiles.id, learnerId),
+        eq(learnerProfiles.userId, learnerUserId),
+      ),
+    )
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) {
+    throw new Error(
+      `[HANEI/auth] requireSelfLearner: learner ${learnerUserId} cannot access learner profile ${learnerId}`,
+    );
+  }
+  return { familyId: row.familyId, learnerId };
+}
+
+/**
  * セッションから家族 ID を取得 (parent / learner どちらでも可)。
  * 家族未所属なら null (新規 onboarding 中の状態)。
  */

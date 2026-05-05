@@ -1,5 +1,65 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-076: W12-T2 atomic = 受験日 学習者 UI 拡充（学習者本人画面で自己編集 link 追加 + dashboard 双方向同期 + 過去日入力ガード / Phase 3 第 1 波 2 番目 / 0.5 人日 / mutation +0 想定）GO 判定（2026-05-05 / オーナー「徹底的に進めて」マンデート）
+
+- **状況**: DEC-075 完遂着地（PRJ-016 `05af181`+`74f7486` / workspace `af855e8` / mutation 8/8 上限ジャスト到達 / page 23/32 / GET 10/15）。オーナーから「**CEO 推奨通り進めてください。徹底的に進めてください。**」明示 directive 受領 = T2 即時着手 + 第 1 波完遂までの連続着手志向マンデート。
+- **判定**: **GO**（T2 = 受験日 学習者 UI 拡充 atomic / **0.5 人日** / **mutation +0**（既存 `updateExamDate` 再利用）/ DEC-006 拡張版 mutation 残枠 0 状態でも着手可能）。
+- **判断根拠**:
+  1. **WBS §1.2 第 1 波着手順序通り**: T1 統合 → **T2** → T4 → T5 = 5.5 人日完遂で β 開始可能。
+  2. **mutation +0 で着手可能**: 既存 `updateExamDate` Server Action を「親 path」+「学習者本人 path」両 use case で再利用（top-level fn 1 個維持 / DEC-074 §本来意図再定義に整合）= DEC-006 再拡張不要で T2 着手可能。
+  3. **既存実装の活用度高**: 学習者 home（`(app)/home/page.tsx` line 391 / 310）には既に examDate + daysUntilExam 表示が実装済。親 dashboard（`(parent)/parent/dashboard/page.tsx` line 582-613）には ExamDateDialog 既存。**追加すべきは「学習者本人による自己編集 path」のみ**。
+  4. **dev sub-agent 委任で 0.5 人日 軽量 atomic**: 1 セッション完遂可（前回 T1 統合 1.25 人日の半分以下）。
+- **本 atomic スコープ（含むもの）**:
+  - 学習者 home に「受験日を変更する」link 追加（既存表示の隣 / 専用 page へ navigate）
+  - 学習者本人専用 edit page 新設: `(app)/home/exam-date/page.tsx`（学習者本人が自分の examDate を編集可 / DEC-003 三層認可で「learner-self」path 許可）
+  - 学習者本人 edit form Client Component（`LearnerExamDateForm.tsx`）: Date input + 過去日入力ガード + 罰語ゼロエラーメッセージ
+  - 既存 `updateExamDate` Server Action の DEC-003 hooks 改修（**top-level fn 数は不変 / 内部分岐で「parent-call」「learner-self-call」両対応** = mutation +0）
+  - 親 dashboard と学習者 home の双方向同期（`revalidatePath('/home')` + `revalidatePath('/parent/dashboard')` 両対応）
+  - E2E: `learner-exam-date-self-edit.spec.ts`（学習者本人による受験日設定 → 親 dashboard 反映 + 過去日ガード動作確認）
+- **本 atomic スコープ（含まないもの = 第 2 波以降）**:
+  - T4（学習時間目標 + cron / mutation +1 想定 → DEC-006 再拡張前提）
+  - T5（リスニング音源 seed / data only）
+  - T6（長期 / 短期目標）
+  - 受験日複数登録（exam_dates 関連 / 既存仕様維持）
+- **制約厳守**:
+  - DEC-024 罰則ゼロ（過去日ガードエラーメッセージ含めて全て丁寧日本語）
+  - DEC-003 三層認可（**学習者本人 path** 追加 = 第 2 層 requireAuth + requireLearner + requireSelfLearner / 親 path との混同防止）
+  - DEC-006 拡張版（page 23 → **24** / mutation **8/8 維持** / GET 10/15）
+  - DEC-055 冪等性（updateExamDate は既存通り idempotent）
+  - DEC-074 reauth: **学習者本人による自己編集は reauth 不要**（自分の data の self-edit / parent-only sensitive 操作とは区別 / dev に明確化要請）
+  - Turbopack `"use server"` sync export ban パターン
+- **受入基準**:
+  - [ ] `bun run typecheck` PASS（warning 0）
+  - [ ] `bun run lint` PASS（warning 0）
+  - [ ] `bun run test` 846+ PASS（baseline 維持 / regression 0）
+  - [ ] `bun run build` PASS（page routes 23 → 24 = +1）
+  - [ ] `bun run e2e tests/e2e/learner-exam-date-self-edit.spec.ts --workers=1` PASS（chromium + mobile-chrome）
+  - [ ] 既存 E2E regression 0（settings-smoke / study-smoke / family-streak / parent-dashboard）
+  - [ ] 罰語 grep 0 件
+  - [ ] DEC-006 拡張版上限内（page 24/32 / mutation **8/8 維持** / GET 10/15）
+  - [ ] 過去日入力ガード動作確認（unit test or E2E）
+  - [ ] 親 dashboard ↔ 学習者 home 双方向同期動作確認
+- **後続 atomic 候補**:
+  - **T4 学習時間目標 + cron（1.0 人日 / P0）**: DEC-006 再拡張 atomic（DEC-077 候補）が前提条件 = mutation +1（cron Server Action 用 or learner_study_targets 編集用）想定。**T2 完遂後に CEO は DEC-006 再拡張を起票する**。
+  - T5 リスニング音源 seed（1.5 人日 / P0 / data only / 並走可）
+- **CEO 委任先**: dev 部門 sub-agent（前回 T1 統合と同パターン / 1 sub-agent 直委任）
+- **報告経路**: 標準フロー継承（dev 委任 → trust-but-verify → §実装完遂デルタ → commit/push → dashboard → CEO 報告 → 次の atomic 推奨）
+
+### §実装完遂デルタ（2026-05-05 完遂）
+
+- dev sub-agent（agentId `a1a505901b2886e81` / tool_uses 63 / duration 711s）に直委任 → 完遂着地
+- **新規 3 ファイル**: `(app)/home/exam-date/page.tsx` / `components/learner/learner-exam-date-form.tsx` / `tests/e2e/learner-exam-date-self-edit.spec.ts`
+- **既存変更 3 ファイル**: `lib/actions/exam-date.ts`（二系統認可化 + denormalize 同期 + revalidatePath 両画面）/ `lib/auth/guards.ts`（`requireLearner` + `requireSelfLearner` helper 追加 / forward-compat 準備）/ `(app)/home/page.tsx`（受験日変更 link + PencilSquareIcon import）
+- **dev 受入基準 8/8 PASS**: typecheck / lint / vitest **846 PASS / 55 files**（baseline 完全維持）/ build PASS（**page routes 23 → 24**）/ E2E learner-exam-date-self-edit **4/4 PASS**（chromium + mobile-chrome）/ regression（settings-smoke + study-smoke）**12/12 PASS**
+- **DEC-006 拡張版数値遵守**: page **24/32**（margin 8）/ mutation **8/8 維持（+0）** / GET **10/15**（margin 5）= **mutation 8/8 上限ジャスト維持達成（既存 `updateExamDate` 内部分岐拡張のみで二系統認可化）**
+- **CEO trust-but-verify サンプリング再確認**（CEO 直接実行）: typecheck PASS / lint PASS / vitest 846 PASS = dev sub-agent verify 結果と完全一致 / GREEN 承認
+- **副次効果 = 既存 silent bug 同時修正**: 親 dashboard 経由 `updateExamDate` の更新が `/home`（`learnerProfiles.examDate` 由来表示）に反映されない gap を denormalize 同期（exam_dates → learnerProfiles.examDate 整合）+ revalidatePath('/home') 両画面 invalidate で吸収。**実子使用開始前の運用上重要な改善**（息子が examDate 変更後 home に即時反映されないと混乱要因 = β 開始判定上 GREEN 寄与）。
+- **CEO 確認事項 3 点への判断記録**:
+  1. **罰語 grep「失敗」1 件 = 既存踏襲 OK**: 既存 `exam-date-dialog.tsx` 同パターンの system error 文（「保存に失敗しました」等）を新規 form でも踏襲。技術的失敗を指す中立語であり、息子への罰意図無し。本 atomic では不変として承認 / 文言改修は将来の polish atomic 候補（DEC-024 厳格化観点で再評価）。
+  2. **denormalize 同期 silent bug 修正の DEC 記録方式**: DEC-076 §実装完遂デルタ（本記録）の「副次効果」セクションで明記 = 補足 DEC 起票は不要 / 本 atomic 完遂デルタの一部として記録。
+  3. **T4 着手前 DEC-006 再拡張 atomic 起票前提**: **CEO 確認 = YES** / T2 完遂直後に **DEC-077 = DEC-006 再拡張 atomic（mutation 8 → 10 想定 / T4 cron + T6 長期目標 用 +2）+ オーナー判断要請** を CEO 単独で起票する方針 / オーナー「徹底的に進めて」マンデート遵守の連続着手フロー継続。
+- **次の atomic（即時着手）**: **DEC-077 = DEC-006 再拡張 atomic（CEO 単独起票 / Markdown のみ / 0.1 人日）→ オーナー判断受領 → T4 学習時間目標 + cron（1.0 人日）着手**。並走可候補: T5 リスニング音源 seed（1.5 人日 / data only / mutation +0）。
+
 ## DEC-075: W12-T1 統合 atomic = settings 全体 page（4 routes 新設 / 親 (parent) layer）+ 親パスワード reauth dialog 統合（5 分グレース / Better Auth 自前実装）+ `learner_settings` 新設（M-1 migration）+ top-level Server Action +2（mutation 6→8 / DEC-006 拡張版上限ジャスト到達）= Phase 3 第 1 波最初の実装 atomic（1.25 人日）GO 判定 + 完遂着地（2026-05-05 / オーナー「速やかに」マンデート）
 
 - **状況**: DEC-074 完遂着地（PRJ-016 `b4949d4` + `ebe6a7b` / workspace `e84982f` co-landing / オーナー判断 10 件全件 A 採択受領 / 第 1 波 5 atomics 着手順序確定 = T1 統合 → T2 → T4 → T5）。CEO は本 T1 統合 atomic を dev 部門に直委任 + trust-but-verify で完遂検証。

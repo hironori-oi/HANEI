@@ -28,6 +28,7 @@ import {
   CalendarDaysIcon,
   ChartBarIcon,
   EnvelopeIcon,
+  PencilSquareIcon,
   ShoppingBagIcon,
   SparklesIcon,
   TrophyIcon,
@@ -413,6 +414,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 {cd.message}
               </p>
             )}
+            {/* W12-T2 / DEC-076: 学習者本人による受験日 自己編集 link
+                罰則ゼロ哲学 (DEC-024) に基づき、リンク文言は丁寧日本語のみ */}
+            <Link
+              href={`/home/exam-date?learner=${encodeURIComponent(activeId)}`}
+              className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
+              data-testid="home-exam-date-edit-link"
+            >
+              <PencilSquareIcon className="h-3.5 w-3.5" aria-hidden="true" />
+              受験日を変更する
+            </Link>
           </CardContent>
         </Card>
 
