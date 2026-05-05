@@ -61,6 +61,47 @@
 - **CEO 委任先**: dev 部門 sub-agent（T4 と同パターン / 1 sub-agent 直委任 / 効率化指示継承: 必読ファイル一括読込・seed 20 問は batch 生成・DRY_RUN で完遂・E2E は最後の最後に 1 回だけ）
 - **報告経路**: 標準フロー継承（dev 委任 → trust-but-verify → §実装完遂デルタ → commit/push → dashboard → 第 1 波完遂判定 → CEO 報告）
 
+### §実装完遂デルタ（2026-05-05 完遂）
+
+- dev sub-agent（agentId `a98494c44b82d3395` / tool_uses 91 / duration 943s / T1・T4 効率化指示完全継承）に直委任 → 完遂着地
+- **新規 7 ファイル**:
+  - `scripts/seed-problems-w5.ts`（eiken-3 listening 20 問 / L3-001..L3-020 / kid-safe AI 生成 / ORIGINAL_AI / copyright_safe / 罰語 0）
+  - `scripts/generate-tts-listening-3.ts`（voice = nova 1 本 / cache key `tts/v1/{problemId}-nova.mp3` / DRY_RUN 標準 / pingR2 smoke check 継承）
+  - `scripts/apply-audio-urls-eiken3-listening.ts`（TTS 完了後 `problems.audio_url` を batch UPDATE / 冪等 / DRY_RUN 標準）
+  - `tests/unit/seed-id-mapper.w5.test.ts`（W5 採番 + 重複検知 + 罰語 grep）
+  - `tests/unit/study.audio-gate.eiken3.test.ts`（5 cases / eiken-3 listening URL 描画判定）
+  - `tests/e2e/study-listening-eiken3.spec.ts`（chromium + mobile-chrome / `<audio>` 要素描画 + MAX_REPLAY 連打防止検証）
+  - `reports/dev-w12-t5-listening-audio-seed-done.md`（dev 完遂報告 + オーナー実行手順 3 step）
+- **既存変更 6 ファイル**:
+  - `scripts/seed-id-mapper.ts`（assignW5Ids 追加 / total 822 → 842）
+  - `scripts/seed-problems-runner.ts`（warning 閾値 822 → 842）
+  - `package.json`（npm scripts: `ai:generate-tts-listening-3` / `db:apply-audio-urls-eiken3-listening` 追加）
+  - `tests/unit/scripts.seed-id-mapper.test.ts`（既存 test の総数 assert を 842 に更新）
+  - `tests/unit/scripts.seed-runner.test.ts`（既存 test の総数 assert を 842 に更新）
+  - `src/app/(app)/study/[levelCode]/[skillCode]/page.tsx`（**dev 自己修復で既存バグ 1 件発見・修正**: line 246 `skill={skill}` = `"listening-3"` → `skill={skillBase}` = `"listening"` / `audio-gate.shouldShowAudioUi` は `skill === "listening"` 完全一致が必要なため、本修正なしでは全 level の listening 画面で audio UI が描画されない隠れバグ）
+- **CEO trust-but-verify 直接実行 結果**:
+  - `bun run typecheck` PASS（warning 0 / error 0）
+  - `bun run lint` PASS（warning 0 / error 0）
+  - `bun run test` **881 PASS / 58 files**（baseline 868 + 新規 13 / regression 0 / 完全一致）
+  - `bun run build` PASS（page routes 25 不変 / 新規 page なし）
+  - `DRY_RUN=1 bun run db:seed` **total=842**（200 W2 + 401 W3 + 221 W4 + 20 W5 / inserted=842 / 重複なし）
+  - `DRY_RUN=1 bun run ai:generate-tts-listening-3` **20 件 / chars=1467 / estCost ≒ ¥3.30**（O-3 cap ¥3,000/月の 0.11% / negligible）
+  - `bun run e2e tests/e2e/study-listening-eiken3.spec.ts --workers=1` **2/2 PASS**（chromium + mobile-chrome）
+  - `bun run e2e tests/e2e/study-smoke.spec.ts --workers=1` **2/2 PASS**（**page.tsx skill→skillBase 修正の安全性確認** / vocab 経路無影響）
+  - `bun run e2e tests/e2e/study-writing-smoke.spec.ts --workers=1` **2/2 PASS**（writing 経路無影響）
+  - `bun run e2e tests/e2e/settings-smoke.spec.ts --workers=1` **10/10 PASS**（settings 経路無影響）
+- **DEC-006 再拡張版数値遵守**: page **25/32**（不変 / margin 7）/ mutation **9/10**（不変 / margin 1）/ GET **11/15**（不変 / margin 4）= **全項目 +0** / data only atomic として完全独立 / T6 以降の mutation +1 atomic に枠 1 残存維持。
+- **罰語 grep 0 件**: W5 全 20 問の audio_transcript / 4 択 / explanation_jp / tags 全件 / dev unit test `seed-id-mapper.w5.test.ts` が grep `失敗` `サボ` `ダメ` `悪い` `罰` `怠` 0 件を検証 PASS。
+- **β 開始 19 項目判定（DEC-074 §6）への寄与**: 「**T5 リスニング音源最低 1 セット seed 投入完遂**」項目を直接 GREEN 化（19 項目中の 1 つを消し込み）+ 著作権完全クリア（OpenAI tts-1 自前生成 / WBS R-6 構造的解消）。
+- **オーナー実行手順（β 開始前 / dev report より）**:
+  1. `.env.local` に `OPENAI_API_KEY` + `R2_BUCKET_NAME`/`R2_AUDIO_BUCKET` + `R2_S3_ENDPOINT` + `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` + `R2_PUBLIC_URL` が揃っていることを確認
+  2. `npm run db:seed`（W5 20 問を problems table に挿入 / 既存 822 + 20 = 842 件）
+  3. `npm run ai:generate-tts-listening-3`（実 OpenAI 課金 ¥3.30 + R2 PutObject 20 件）
+  4. `npm run db:apply-audio-urls-eiken3-listening`（DB の audio_url を 20 行 UPDATE）
+- **dev 自己修復の隠れバグ修正 = 重要発見**: `study/[levelCode]/[skillCode]/page.tsx:246` の skill prop 渡しバグ（W6 B-6 skill_id mapping 整理時の見落とし / `mapSkillCode` の戻り値 `"listening"` を渡すべきところ DB 形式 `"listening-3"` を渡していた）= 全 listening 画面で audio UI 非表示の status quo（既存 audio_url 未設定問題群では露呈しなかった）/ T5 で初めて audio_url が設定されるため発覚 / **CEO 承認**（自己修復範囲内 / 既存 study-smoke regression PASS で安全性確認 / 別 atomic 起票不要）。
+- **commit hash 記録（後段）**: 実装本体 + DEC-079 §実装完遂デルタ + dashboard 更新を本セクション記述後に commit/push。
+- **次の atomic（CEO 判断）**: **第 1 波完遂判定 + β 開始 19 項目判定 atomic**（DEC-074 §6 / Sentry 実発火必須化 + cost cap + reauth gate + null 化実演 + DB backup + 月次予算 alert）/ 第 1 波 5.5 人日のうち T1 統合 + T2 + T4 + T5 = 4.25 人日完遂 / 残 1.25 人日 = 第 1 波完遂宣言可（オーナーへの最終報告 + β 実子使用開始 GO 判断要請）。
+
 ---
 
 ## DEC-078: W12-T4 atomic = 学習時間目標 + 日次リマインド cron 実装（`learner_study_targets` 新設 / M-3 migration + cron route `/api/cron/study-minutes-reminder` + 親設定 UI + 学習者本人 home 表示 + 新 mutation `updateLearnerStudyTarget` / Phase 3 第 1 波 3 番目 / 1.0 人日 / mutation +1 = 9/10）GO 判定（2026-05-05 / オーナー O-1 承認受領後即時 / DEC-077 effective）

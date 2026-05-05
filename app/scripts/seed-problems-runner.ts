@@ -3,7 +3,8 @@
  *
  * 用途:
  *   - W2 (200 問) + W3 (401 問 / choice 271 + writing 100 + reorder 30) +
- *     W4 (221 問 / choice 181 + reading-passage 40) = **計 822 問**
+ *     W4 (221 問 / choice 181 + reading-passage 40) +
+ *     W5 (20 問 / choice 3 級 listening / DEC-079) = **計 842 問**
  *     を `problems` テーブルへ投入する admin スクリプト。
  *   - 各問題の自然 ID (V5-001 / G5-001 / L5-001 / V5W4-001 / L4-021 /
  *     R3-011 / W3-001 / O5-001 / V3-012R 等) は `seed-id-mapper.ts` から取得し、
@@ -463,9 +464,9 @@ async function main(): Promise<void> {
     `[seed-runner] done inserted=${summary.inserted} skipped=${summary.skipped} total=${summary.total}`,
   );
 
-  if (summary.total !== 822) {
+  if (summary.total !== 842) {
     console.warn(
-      `[seed-runner] WARNING: total=${summary.total} (expected 822). seed-id-mapper の採番ロジックに変更があった可能性があります。`,
+      `[seed-runner] WARNING: total=${summary.total} (expected 842). seed-id-mapper の採番ロジックに変更があった可能性があります。`,
     );
   }
 }

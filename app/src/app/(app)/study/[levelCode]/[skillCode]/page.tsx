@@ -243,7 +243,7 @@ export default async function StudyPage({
         prompt={questionJson.prompt}
         choices={questionJson.choices ?? []}
         audioUrl={problem.audioUrl ?? null}
-        skill={skill}
+        skill={skillBase}
         sessionDurationMinutes={sessionDurationMinutes ?? undefined}
         sessionPlanSize={
           sessionDurationMinutes

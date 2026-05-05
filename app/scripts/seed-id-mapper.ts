@@ -29,7 +29,9 @@
  *   - W4 reading eiken-3:         R3-011  〜 R3-050   (40 問 / W2 R3-001..010 と衝突回避)
  *   - W4 replacements:            G4-080R             (1 問 = W3 G4-080 改稿版)
  *
- * 累計: 200 (W2) + 401 (W3) + 221 (W4) = 822 問
+ *   - W5 listening eiken-3:       L3-001  〜 L3-020   (20 問 / β 開始用 / DEC-079)
+ *
+ * 累計: 200 (W2) + 401 (W3) + 221 (W4) + 20 (W5) = 842 問
  *
  * 重要:
  *   - 既存 seed-problems-w2/w3/w4.ts のデータ本体（問題文 / 選択肢 / 正解 / 解説）
@@ -462,11 +464,42 @@ export function assignW4Ids(w4: W4BundleShape): W4IdResult {
 }
 
 // ---------------------------------------------------------------------------
-// 統合: 全 822 問の自然 ID 採番
+// W5 採番 (β 開始用 3 級 listening 20 問 / DEC-079)
+// ---------------------------------------------------------------------------
+
+interface W5BundleShape {
+  listening: ReadonlyArray<Parameters<typeof toSeedChoice>[0]>;
+}
+
+export interface W5IdResult {
+  /** 3 級 listening 20 問 (L3-001 〜 L3-020) */
+  choiceProblems: SeedChoice[];
+}
+
+export function assignW5Ids(w5: W5BundleShape): W5IdResult {
+  const choiceProblems: SeedChoice[] = [];
+
+  // 3 級 listening 20 問: L3-001 〜 L3-020
+  w5.listening.forEach((p, i) => {
+    choiceProblems.push(toSeedChoice(p, pad("L3", i + 1, 3)));
+  });
+
+  return { choiceProblems };
+}
+
+// ---------------------------------------------------------------------------
+// 統合: 全 842 問の自然 ID 採番
 // ---------------------------------------------------------------------------
 
 export interface AllSeedIds {
-  /** 4 択型: 200 (W2) + 271 (W3 listening+grammar+reading+repl) + 181 (W4 vocab+listening+repl) = 652 */
+  /**
+   * 4 択型:
+   *   200 (W2)
+   *   + 271 (W3 listening+grammar+reading+repl)
+   *   + 181 (W4 vocab+listening+repl)
+   *   +  20 (W5 listening eiken-3)
+   *   = 672
+   */
   choiceProblems: SeedChoice[];
   /** writing: 100 (W3) */
   writingProblems: SeedWriting[];
@@ -474,7 +507,7 @@ export interface AllSeedIds {
   reorderProblems: SeedReorder[];
   /** reading passage: 40 (W4 / 1 passage = 1 problem) */
   readingPassageProblems: SeedReadingPassage[];
-  /** 合計件数 = 200 + 401 + 221 = 822 */
+  /** 合計件数 = 200 + 401 + 221 + 20 = 842 */
   total: number;
 }
 
@@ -497,7 +530,18 @@ export async function loadAllSeedIds(): Promise<AllSeedIds> {
   };
   const w4 = assignW4Ids(w4Module.default);
 
-  const choiceProblems = [...w2, ...w3.choiceProblems, ...w4.choiceProblems];
+  // ---- W5 (β 開始用 3 級 listening 20 問 / DEC-079) ----
+  const w5Module = (await import("./seed-problems-w5")) as {
+    default: W5BundleShape;
+  };
+  const w5 = assignW5Ids(w5Module.default);
+
+  const choiceProblems = [
+    ...w2,
+    ...w3.choiceProblems,
+    ...w4.choiceProblems,
+    ...w5.choiceProblems,
+  ];
 
   // 重複検知（早期失敗）
   const seen = new Set<string>();
