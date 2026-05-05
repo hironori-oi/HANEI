@@ -1,5 +1,67 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-075: W12-T1 統合 atomic = settings 全体 page（4 routes 新設 / 親 (parent) layer）+ 親パスワード reauth dialog 統合（5 分グレース / Better Auth 自前実装）+ `learner_settings` 新設（M-1 migration）+ top-level Server Action +2（mutation 6→8 / DEC-006 拡張版上限ジャスト到達）= Phase 3 第 1 波最初の実装 atomic（1.25 人日）GO 判定 + 完遂着地（2026-05-05 / オーナー「速やかに」マンデート）
+
+- **状況**: DEC-074 完遂着地（PRJ-016 `b4949d4` + `ebe6a7b` / workspace `e84982f` co-landing / オーナー判断 10 件全件 A 採択受領 / 第 1 波 5 atomics 着手順序確定 = T1 統合 → T2 → T4 → T5）。CEO は本 T1 統合 atomic を dev 部門に直委任 + trust-but-verify で完遂検証。
+- **判定**: **GO + 完遂着地**（受入基準全項目 PASS / DEC-006 拡張版数値内 / 罰語 grep 0 / regression 0）。
+- **判断根拠**:
+  1. **オーナー「速やかに」明示**: 第 1 波最初の実装 atomic として即時着手要請に応えた。
+  2. **WBS §1.1 に従い T1 + T3 統合**（親パスワード reauth dialog は T1 settings 全体と同セッション完遂が合理的 / 1.25 人日 / WBS §1.2 第 1 波着手順序通り）。
+  3. **DEC-074 拡張版に従い構造遵守**: page routes 19→23（+4 / 上限 32 内 / 9 件余裕）/ Server Actions / mutation 6→8（+2 / 上限 8 ジャスト到達）/ GET API routes 不変。
+  4. **DEC-024 / DEC-003 / DEC-055 / DEC-074 hooks 全実装**: requireAuth + requireParent + requireLearnerOwner + requireParentReauth の 4 層 guard / `learner_id` UNIQUE で冪等性 / 罰語ゼロ。
+  5. **vitest 846 PASS / E2E settings-smoke 10/10 + 既存 regression 0**: trust-but-verify ALL GREEN。
+- **本 atomic スコープ（含むもの）**:
+  - M-1 migration `0018_w12_t1_learner_settings.sql`: `learner_settings` table 新設 + `learner_id` UNIQUE index
+  - 親 settings 4 page route 新設: `(parent)/parent/settings/{index, account, notifications, security}`
+  - top-level Server Actions +2: `updateLearnerProfile` / `updateLearnerSettings`
+  - `requireParentReauth` helper（mutation カウント対象外）+ session-bound `reauth_at` 5 分グレース
+  - `parent-reauth-dialog.tsx` modal component（password input + 丁寧日本語エラー）
+  - learner-settings 入力 validation（`learner-settings-validate.ts`）
+  - E2E `settings-smoke.spec.ts` 5 シナリオ × chromium + mobile-chrome = 10 tests
+- **本 atomic スコープ（含まないもの = 第 2 波以降）**:
+  - T2（受験日 学習者 UI 拡充 / 0.5 人日 / 次の atomic）
+  - T4（学習時間目標 + cron / 1.0 人日）
+  - T5（リスニング音源 seed / 1.5 人日）
+  - T6 / T7 / T8 / T9 / T10 / T11（第 2〜3 波）
+  - 既存 `learner_profiles.preferences.soundEnabled` と新 `learner_settings.sound_enabled` の wiring 統合（段階移行 / 将来 atomic）
+- **制約厳守**:
+  - DEC-024 罰則ゼロ（実装コード罰語 grep 0 / コメントの「罰語ゼロ (DEC-024)」intent declaration のみ検出）
+  - DEC-003 三層認可（requireAuth + requireParent + requireLearnerOwner / 第二層 + 第三層 厳守）
+  - DEC-006 拡張版（page routes ≤ 32 / mutation ≤ 8 / GET API ≤ 15）
+  - DEC-055 冪等性（`learner_id` UNIQUE で 1 行制約 / 同一入力で同一結果）
+  - DEC-074 reauth: sensitive 操作（account 編集 / 退会 / 親 email 変更）で `requireParentReauth()` 必須化
+  - Turbopack `"use server"` sync export ban パターン（async 化）
+- **受入基準（全項目 PASS）**:
+  - [x] `bun run typecheck` PASS（warning 0 / error 0）
+  - [x] `bun run lint` PASS（warning 0 / error 0）
+  - [x] `bun run test` 846 PASS / 55 files（baseline 完全維持 / regression 0）
+  - [x] `bun run build` PASS（page routes 19 → 23 = +4 / 全 27 routes visible）
+  - [x] `bun run e2e tests/e2e/settings-smoke.spec.ts --workers=1` 10/10 PASS（chromium 5 + mobile-chrome 5）
+  - [x] E2E study-smoke regression 2/2 PASS / family-streak regression 6/6 PASS
+  - [x] 罰語 grep 0 件
+  - [x] DEC-006 拡張版上限内（page 23/32 / mutation 8/8 / GET 10/15）
+- **後続 atomic 候補**:
+  - **T2 受験日 学習者 UI 拡充（0.5 人日 / P0 / 次の atomic 候補）**: 学習者 home に受験日と残日数表示 + 過去日入力ガード + 親 dashboard 双方向同期。**mutation 既存再利用想定で +0**。
+  - T4 学習時間目標 + cron（1.0 人日 / P0）: M-3 + cron `/api/cron/study-minutes-reminder` / mutation +1 想定 → **DEC-006 再拡張要**
+  - T5 リスニング音源 seed（1.5 人日 / P0）: data only / mutation +0
+- **CEO 委任先**: dev 部門 sub-agent（実装実体は agent 完遂 / agent 自身の tool budget で報告書未生成のため CEO trust-but-verify フェーズで CEO が報告書代行生成）
+- **報告経路**:
+  - dev 報告書（CEO 代行生成）: `projects/PRJ-016/reports/dev-w12-t1-settings-reauth-done.md`（2026-05-05）
+  - trust-but-verify（CEO 直接実行）: typecheck / lint / vitest / build / E2E 全 GREEN
+  - 独立 review（CEO 軽量実施 / sensitive Server Action の 4 層 guard hook 確認）
+  - DEC-075 起票 + §実装完遂デルタ（本記録）
+  - PRJ-016 commit + push → workspace dashboard 反映 → オーナー報告
+
+### §実装完遂デルタ（2026-05-05 完遂）
+
+- DEC-074 §実装完遂デルタの「次の atomic」明記通り、T1 統合 atomic を dev sub-agent に直委任完遂
+- dev sub-agent は実装実体を完遂（11 新規ファイル + 3 既存変更 / 1744 行 / migration 1 件 / E2E 192 行）
+- sub-agent 自身の tool budget 上限（115 tool_uses / 828 秒）で sub-agent 側 dev 報告書未生成 → CEO 代行生成（実体検証済 / 報告書冒頭に明記）
+- CEO trust-but-verify ALL GREEN: typecheck PASS / lint PASS / vitest 846 PASS（55 files baseline 完全維持）/ next build PASS（page routes 23）/ E2E settings-smoke 10/10 + 既存 regression（study-smoke + family-streak）8/8 PASS / 罰語 grep 0
+- DEC-006 拡張版数値遵守: page 23/32（margin 9）/ mutation 8/8（**margin 0 / 上限ジャスト到達**）/ GET 10/15（margin 5）
+- **第 2 波着手前 alert**: mutation 残枠 0 のため、新規 top-level Server Action 必要な atomic（T4 cron Server Action 等）の前に DEC-006 再拡張 atomic（CEO 起票）が前提条件。但し T2（既存 mutation 再利用想定）は再拡張不要で着手可能。
+- **次の atomic**: T2 受験日 学習者 UI 拡充（0.5 人日 / P0 / 学習者本人画面で自己編集 link 追加 + dashboard invalidate / mutation +0 想定）。オーナー「速やかに」マンデート継続。
+
 ## DEC-074: T0 = Phase 3 前提整備 atomic = DEC-006 拡張正式起票 + オーナー判断 10 件決議記録 + 第 1 波着手順序確定（息子実使用前提 / 0.1 人日 / Markdown のみ / コード変更ゼロ）GO 判定（2026-05-05 / CEO 着手判断版）
 
 - **状況**: DEC-073 完遂着地（PRJ-016 commit `f485c49` + `68538ae` / workspace `7e182cd` / dashboard 反映 / push 完遂）+ **オーナー Phase 3 全体 WBS 提示への即時 10 件判断受領**: O-1〜O-10 全件 A 採択（O-4 は「CEO にお任せ」= 推奨 Better Auth reauth で確定 / O-7 は CEO 推奨 100 ターン/月 → **オーナー 500 ターン/月 採択** = 5 倍拡大）+ 「続きを進めてください」明示 directive。

@@ -50,6 +50,13 @@ export default async function ParentLayout({
               >
                 模試結果
               </Link>
+              <Link
+                href="/parent/settings"
+                data-testid="parent-nav-settings"
+                className="text-foreground hover:text-primary"
+              >
+                設定
+              </Link>
             </nav>
             {learners.length > 1 ? (
               <div className="ml-auto">

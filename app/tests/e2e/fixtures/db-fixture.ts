@@ -73,6 +73,8 @@ export async function applyMigrations(client: Client): Promise<void> {
     "0016_w12_experiments.sql",
     // W12-T3-A (DEC-069): beta_invite_codes + users.beta_invited_by_code (β invite flow)
     "0017_w12_beta_invite.sql",
+    // W12-T1 (Phase 3 第 1 波 / DEC-074 / M-1): learner_settings テーブル新設
+    "0018_w12_t1_learner_settings.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);

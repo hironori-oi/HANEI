@@ -1225,6 +1225,57 @@ export const betaInviteCodes = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// 33. learner_settings (W12-T1 / Phase 3 第 1 波 / M-1 / DEC-073 / DEC-074)
+//
+// 1 学習者 1 行 (learner_id UNIQUE).
+//
+// 親が parent settings (/parent/settings/notifications) から編集する通知 / リマインド系設定.
+// 既存 learner_profiles.preferences (JSON) は PWA 内動作 preferences として残し, 本テーブルは
+// 「親が制御する settings」として分離管理する.
+//
+// フィールド:
+//   - notifications_enabled: メール / push 通知の総合 ON/OFF (default true)
+//   - daily_reminder_time:   1 日 1 回のリマインド時刻 'HH:MM' (NULL = 無効)
+//   - sound_enabled:         効果音 ON/OFF (default true) — 学習画面の audio-feedback と連動可
+//   - display_name_override: 学習者本人が自分の表示名を変えたい場合の override (任意)
+//
+// 三層認可 (DEC-003):
+//   - 第二層: 親 settings page で requireAuth + requireParent + requireLearnerOwner.
+//   - 第三層: learner_id 経由で family_id 間接 scope.
+//
+// 罰則ゼロ哲学 (DEC-024): 通知 OFF でも罰メッセージは出さない.
+// 冪等性 (DEC-055): learner_id UNIQUE で upsert 結果が同一入力で同一.
+// ---------------------------------------------------------------------------
+export const learnerSettings = sqliteTable(
+  "learner_settings",
+  {
+    id: text("id").primaryKey(),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learnerProfiles.id, { onDelete: "cascade" }),
+    notificationsEnabled: integer("notifications_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    /** 'HH:MM' (24h) / NULL = リマインド無効 */
+    dailyReminderTime: text("daily_reminder_time"),
+    soundEnabled: integer("sound_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    /** 学習者本人が表示名を変えたい場合の override (任意) */
+    displayNameOverride: text("display_name_override"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    uniqLearner: uniqueIndex("learner_settings_learner_idx").on(t.learnerId),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Drizzle inferred types
 // ---------------------------------------------------------------------------
 export type User = typeof users.$inferSelect;
@@ -1294,3 +1345,7 @@ export type NewStudySession = typeof studySessions.$inferInsert;
 // W12-T3-A / β invite codes (DEC-069)
 export type BetaInviteCode = typeof betaInviteCodes.$inferSelect;
 export type NewBetaInviteCode = typeof betaInviteCodes.$inferInsert;
+
+// W12-T1 / Phase 3 第 1 波 / learner_settings (DEC-073 / DEC-074 / M-1)
+export type LearnerSettings = typeof learnerSettings.$inferSelect;
+export type NewLearnerSettings = typeof learnerSettings.$inferInsert;
