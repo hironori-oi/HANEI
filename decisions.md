@@ -61,6 +61,7 @@
 - DEC-006 拡張版数値遵守: page 23/32（margin 9）/ mutation 8/8（**margin 0 / 上限ジャスト到達**）/ GET 10/15（margin 5）
 - **第 2 波着手前 alert**: mutation 残枠 0 のため、新規 top-level Server Action 必要な atomic（T4 cron Server Action 等）の前に DEC-006 再拡張 atomic（CEO 起票）が前提条件。但し T2（既存 mutation 再利用想定）は再拡張不要で着手可能。
 - **次の atomic**: T2 受験日 学習者 UI 拡充（0.5 人日 / P0 / 学習者本人画面で自己編集 link 追加 + dashboard invalidate / mutation +0 想定）。オーナー「速やかに」マンデート継続。
+- **commit hash 記録**: PRJ-016 `05af181`（feat(W12-T1) / 17 files / +2000 insertions）push 完遂（origin/main / 2026-05-05）
 
 ## DEC-074: T0 = Phase 3 前提整備 atomic = DEC-006 拡張正式起票 + オーナー判断 10 件決議記録 + 第 1 波着手順序確定（息子実使用前提 / 0.1 人日 / Markdown のみ / コード変更ゼロ）GO 判定（2026-05-05 / CEO 着手判断版）
 
