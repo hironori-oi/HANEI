@@ -1,5 +1,111 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-073: Phase 3 計画立案 atomic = 本格運用準備 WBS 徹底洗い出し（息子実使用前提 / 7 要望統合 / コード変更ゼロ / WBS atomic 0.75 人日）GO 判定（2026-05-05 / CEO 着手判断版）
+
+- **状況**: DEC-072 完遂（commit `b6c03f7` workspace + `d3126fc` PRJ-016 / dashboard `b7ceae6` push 完遂 / Phase 2 100% 完遂 + v2 ナレッジ 20 件着地 GREEN）。オーナーから **本格運用準備マンデート受領** =「本格的に私の息子にこのアプリを使わせたいと思います / 運用開始に向けて徹底的に必要なタスクを洗い出してください」+ 7 機能要望明示:
+  1. 受験日の登録
+  2. アカウントの設定・変更
+  3. 長期目標 / 短期目標の設定
+  4. 目標学習時間の入力
+  5. 問題解答中の単語の意味/発音調査（辞書 + TTS）
+  6. 解説でわからない場合の追加 AI チャット質問
+  7. リスニング・ライティングの実施可能化
+- **判定**: **GO**（**WBS 立案 atomic / 0.75 人日 / コード変更ゼロ / Markdown ドキュメント主体 = DEC-006 完全不変 / 個別実装 atomic は本 atomic 完遂後にオーナー承認を経て分解開始**）。
+- **判断根拠**:
+  1. **オーナー指示の核心**: 「徹底的に必要なタスクを洗い出してください」= まず WBS 全洗い出しが先 = 個別機能の即時着手ではない。
+  2. **実子使用前提 = production-ready 化要件**: COPPA + safety + UX 子供向け継続性 + 実運用での failure mode 全洗い出しが必須 = 単一 atomic で実装着手できる規模を遥かに超える。
+  3. **既存基盤把握済**: 受験日 / リスニング / ライティングは foundation あり = 拡張系。settings 拡張 / 目標 / 学習時間 / 辞書 / AI チャットは新規 = atomic 5〜8 件想定。
+  4. **3 並列委任戦略**: research（外部技術調査 + 一般的子供向け学習アプリ運用必須項目）+ secretary（7 要望の受入条件 spec + 優先順位付け）+ dev（既存基盤の充足度詳細 + 各機能 technical feasibility + 工数見積）= 異なる成果物への独立着手で衝突ゼロ。
+  5. **DEC-006 完全不変**: 本 atomic はコード（src / app / migrations）に一切触れず `projects/PRJ-016/reports/` 配下に WBS Markdown を生成するのみ = build / typecheck / lint / vitest / E2E に regression 構造的ゼロ。
+  6. **オーナー承認ゲート**: WBS を CEO 統合した時点でオーナーに「この WBS で進めます / 優先順位はこの並びで」承認を取り、その後 atomic 分解 + 実装に進む。承認前の見切り発車を防ぐ。
+- **本 atomic スコープ（CEO 確定）**:
+  - **含む（必須）**:
+    - **1. research 部門 → `reports/research-phase3-runtime-readiness-investigation.md`（300〜500 行想定）**:
+      - 外部技術調査:
+        - **辞書 API 候補比較**: Weblio API / 英辞郎 / WordNet / Free Dictionary API / Merriam-Webster Learners' Dictionary API 等。子供向け / 英検3級レベル定義語彙適合性 / 価格 / 利用制限 / レイテンシ / コピペ防止 / API key 管理。推奨 1 件選定。
+        - **TTS（発音）API 候補比較**: OpenAI TTS / Google Cloud TTS / Amazon Polly / Web Speech API（ブラウザ）/ ElevenLabs。価格 / 子供向け声質 / 米英アクセント切替 / レイテンシ / cache 戦略 / 同一文字列の二重 fetch 防止。推奨 1 件選定。
+        - **AI チャット UX 子供向け実装事例**: OpenAI Assistants API / streaming UI / 教育向け Q&A bot UX / 学習履歴連動。子供向け safe completion 設定 / プロンプト injection 対策 / 暴言や個人情報入力時の guard。
+        - **リスニング音源生成 / ライティング採点**: 既存 OpenAI 接続（PIT-006 既存）の流用可否、リスニング英文 mp3 生成方針、ライティング採点既存 `score-writing.ts` の運用充足度。
+      - **子供向け学習アプリ運用必須項目チェックリスト** = 一般的に「実子に使わせる」前に必要となる項目を網羅: アカウント保護（パスワード強度 / 親パスワード / セッションタイムアウト）/ 個人情報保護（COPPA / GDPR-K）/ 通知（push / email opt-in）/ オフライン対応 / バックアップ / リカバリ / 利用時間制限 / 親モニタリング / 料金通知 / 障害時連絡 / 緊急停止経路。
+      - **本格運用フェーズで起こりうる failure mode + 対処**: API key quota 超過 / Vercel 障害 / Supabase 障害 / OpenAI 障害 / 子供が誤操作で課金画面に入る等。
+      - **競合 / 類似アプリの基本機能棚卸**: Quipper / atama+ / すらら / 学研ステイフル English / 進研ゼミ等。受験日逆算 / 目標学習時間 / 単語辞書 / リスニング / ライティング機能の相場感。
+    - **2. secretary 部門 → `reports/secretary-phase3-requirements-spec.md`（200〜350 行想定）**:
+      - **7 要望の受入条件 spec**: 各要望を「ユーザーストーリー / 受入条件 / Out of scope / 関連既存 DEC」の 4 要素で書き下し:
+        - 1. 受験日登録: 学習者が受験予定日を保存 / 残日数表示 / 親 dashboard 連動 / 既存 `lib/actions/exam-date.ts` 拡張可否。
+        - 2. アカウント設定変更: 表示名 / 学年 / アバター / 親 email / 通知 ON-OFF / パスワード変更 / 退会経路。
+        - 3. 長期 / 短期目標: 「英検3級合格」+ 「今週 XX 問解く」等の階層。チェックポイント / 達成判定 / 表示。
+        - 4. 目標学習時間: 1 日 X 分 / 1 週間 Y 分。リマインド / 進捗 bar。学習時間カウント方式 = active time vs elapsed time。
+        - 5. 単語辞書 + 発音: 学習画面で hover / tap で単語の意味 popup + 発音再生。検索履歴保存可否。
+        - 6. AI チャット質問: 解説を見てもわからない時の追加質問 1 ターン / マルチターン / コンテキスト（問題文 + 子の回答）の自動付与 / 安全 guard（学習文脈外の質問拒否）。
+        - 7. リスニング・ライティング: 既存 listening / writing skill の有効化判定 / コンテンツ拡充 / 採点 UX 整備。
+      - **優先順位付け（MoSCoW + 運用必須度）**:
+        - Must: 実子使用前に絶対必須 = アカウント設定 / 親パスワード経路 / 親 email / 受験日 / 目標学習時間 / リスニング音源最低 1 セット
+        - Should: 1 ヶ月以内導入推奨 = 長期/短期目標 / ライティング採点 UX / 辞書
+        - Could: 余裕あれば = AI チャット質問 / 発音 TTS（Web Speech API でまず代替可）
+        - Won't (本フェーズ): 友達招待 / family 拡張等
+      - **依存関係グラフ**: 各機能の前提となる別機能 / DB schema 変更必要可否 / 既存 atomic との衝突可能性。
+      - **W12-T4 ストレステスト atomic との関係**: Phase 3 着手前に T4 完遂が前提か並走可かの判定。
+    - **3. dev 部門 → `reports/dev-phase3-feasibility-and-estimation.md`（400〜600 行想定）**:
+      - **既存基盤の充足度詳細調査**:
+        - 受験日: `lib/actions/exam-date.ts` / `exam-date-dialog.tsx` / `exam-date-validation.ts` の API / DB schema / 既存 UI 経路。学習者画面で「あと X 日」表示が既にあるか調査。
+        - リスニング: `audio-gate.ts` / studyClient `displayedShowAudioUi` / `listening-master` badge / 既存 audio コンテンツ件数（DB seed 確認）。
+        - ライティング: `writing-input.ts` / `score-writing.ts` / OpenAI 接続経路 / 採点フィードバック UI 充足度。
+        - settings: `(app)/settings/accessories/page.tsx` のみ → 全体 settings page 不在の確認。
+      - **新規実装が必要な機能の technical scope**:
+        - settings 拡張: route / form / DB schema / 親パスワード confirmation gate
+        - 目標（長期/短期）: schema 案 / actions / UI / dashboard 連動
+        - 目標学習時間: schema 案 / 計測方式（active vs elapsed） / リマインド経路
+        - 辞書 popup: 単語クリック検出 / 外部 API 接続 / cache 設計（Redis / KV / DB）
+        - 発音再生: TTS 選定後の wiring / cache 戦略 / 連打防止
+        - AI チャット質問: streaming UI / context 自動 inject / cost cap / 履歴保存
+      - **DB schema 変更影響範囲**: 各機能で migration 必要件数 + 既存 25 routes + 5 mutations への影響評価。DEC-006（GET 10 / mutation 5）厳守可能か。超過する場合の代替案。
+      - **工数見積**: 各機能を atomic 単位（0.25 / 0.5 / 1.0 / 1.5 人日）で見積。Phase 3 全体の総工数 + atomic 数概算。
+      - **technical risk**:
+        - OpenAI 月次コスト膨張リスク（AI チャット + リスニング音源 + ライティング採点）
+        - 子供が辞書 / AI チャットで遊んでしまうことによる学習離脱リスク
+        - リスニング音源の著作権 / 自前生成 vs 既存音源使用
+        - exam-date / 目標 / 学習時間が COPPA で子供が直接操作可能か親操作必須かの判断
+      - **Phase 3 atomic 暫定分解案**: T1 settings 拡張 / T2 受験日学習者 UI / T3 目標 / T4 目標時間 / T5 辞書 / T6 発音 / T7 AI チャット / T8 listening 拡充 / T9 writing UX 等の暫定列挙 + 各 P0/P1/P2 区分。
+    - **4. CEO 統合 → `reports/ceo-phase3-runtime-readiness-wbs.md`（250〜400 行想定 / 本 atomic の最終成果物）**:
+      - 3 部門 report の統合
+      - **オーナー承認用 WBS 提示** = atomic の番号 / 名前 / 概要 / 工数 / 依存 / 優先度 / 受入条件 KEY / risk
+      - 推奨実行順序 + マイルストーン（β 1 名運用開始 / 1 ヶ月運用後評価 / Phase 3 完遂宣言条件）
+      - **オーナー判断要請項目**: ① WBS 全体の優先順位確定 / ② 月次予算上限（OpenAI コスト + 外部 API コスト）/ ③ β 開始タイミング（即時 vs ストレステスト後）/ ④ 親パスワード方式の決定 / ⑤ 辞書 API・TTS API の選定承認 / ⑥ 課金有無（無料継続 vs 一部有料）。
+  - **含まない（持ち越し）**:
+    - 個別機能の実装着手（本 atomic 完遂 + オーナー承認 + atomic 分解後）
+    - W12-T4 ストレステスト（必要可否は WBS で判定）
+    - 実 API key 取得 / Vercel env 設定（オーナー判断後）
+    - knowledge/INDEX.md 整備（別 atomic / 0.1 人日）
+- **制約厳守 (継承)**:
+  - DEC-024 罰則ゼロ哲学（4 文書全てで罰語 grep 0 件）
+  - DEC-006 GET 10 / mutation 5 不変（コード変更 0 / 設計影響評価のみ）
+  - DEC-019-033 拡張ルール準拠（PII redaction：オーナー個人情報 / 子情報は仮名・型のみ記述）
+  - 子供向け UI 絵文字ゼロ哲学（PAT-007 / 7 要望全てに継承）
+- **受入基準**:
+  - 4 ファイル新規生成（research / secretary / dev / CEO 統合）
+  - 7 要望全てが 4 ファイルのいずれかで言及されている
+  - WBS に atomic 番号 / 工数 / 依存 / 優先度が揃っている
+  - DEC-024 罰語 grep 0 件
+  - オーナー判断要請項目が CEO 統合に明記されている
+  - review APPROVE
+- **CEO 委任先（3 並列）**:
+  - 軸-1 **research 部門**: 外部技術調査 + 一般的子供向け学習アプリ運用必須項目チェックリスト
+  - 軸-2 **secretary 部門**: 7 要望の受入条件 spec + 優先順位付け（MoSCoW）+ 依存関係
+  - 軸-3 **dev 部門**: 既存基盤充足度 + 新規 technical scope + DB schema 影響 + 工数見積 + atomic 暫定分解
+- **報告経路**: 3 部門 report → CEO 統合 WBS → trust-but-verify → review → §実装完遂デルタ → commit/push（claude-code-company workspace + PRJ-016）→ dashboard → **オーナーへ WBS 提示 + 承認要請**（個別 atomic 着手は承認後）。
+
+### §実装完遂デルタ（2026-05-05 完遂）
+
+- **3 並列 agent 着地**:
+  - research 軸 → `reports/research-phase3-runtime-readiness-investigation.md`（558 行 / 5 領域外部技術調査 + 52 項目運用 checklist + 6 failure mode + 6 競合比較）
+  - secretary 軸 → `reports/secretary-phase3-requirements-spec.md`（363 行 / 7 機能 user story + 56 Given-When-Then AC + MoSCoW + 9 オーナー判断要請）
+  - dev 軸 → `reports/dev-phase3-feasibility-and-estimation.md`（723 行 / 既存基盤充足度詳細 + 11+1 atomics / 純見積 9.85 人日 + バッファ 20% で 12 人日 / 6 migration / +7 page routes / +2 API routes / +8〜10 Server Actions / OpenAI ¥3,000/月推奨）
+- **CEO 統合**: `reports/ceo-phase3-runtime-readiness-wbs.md`（初期 269 行 → review 反映後拡充 / 12 atomics × 3 波 / 統合 10 オーナー判断要請 / 7 リスク + 対処 / 19 項目 β 開始判定基準 / Phase 3 完遂条件 / T0 詳細仕様 + DEC-006 本来意図再定義論点）
+- **Trust-but-verify**: GREEN（4 ファイル合計 1,913 行 / 罰語 grep 28 件全て self-reference exclusion 適用範囲内 / WBS 12 セクション全揃 / F-1〜F-7 全機能 atomic 展開済）
+- **独立 review（code-reviewer）**: YELLOW（修正後 GO）。RED 1 件 = T 番号 dev/CEO 系統衝突 → CEO WBS §1.1 に「dev 旧#」列併記 + 注記追加で**修正済**。YELLOW 7 件のうち重要度高 6 件を WBS に直接反映（β 開始判定 §6 を 13 → 19 項目に拡充: Sentry 実発火必須化 / cost cap 超過 UX 検証 / 退会 reauth gate 動作確認 / 退会後 null 化実演 / DB バックアップ復元 RUNBOOK + 実演 / Vercel + Supabase + OpenAI 月次予算 alert 3 件全部 / O-10 リマインド経路追加 / O-3↔O-7 依存関係明記 / T0 仕様に DEC-006 本来意図再定義追加）。残 1 件（dev report T 番号衝突注記）は本 §実装完遂デルタにて記録済。
+- **DEC-006 影響**: 本 atomic は Markdown のみ / コード変更ゼロ = DEC-006 完全不変。**Phase 3 実装着手は T0 atomic で DEC-006 拡張（GET 10→15 / mutation 5→8 / page routes 25→32）を正式起票してから**。
+- **オーナー承認 gate**: WBS 提示 + 10 件オーナー判断要請（O-1〜O-10）でオーナー判定 → T0 atomic 着手 → 第 1 波 5.5 人日（T0+T1+T2+T3+T4+T5）→ β 開始判定 19 項目 GREEN なら β 実子使用開始。
+
 ## DEC-072: Phase 2 完遂直後 = W11 KPT 反映 knowledge 蓄積 atomic（patterns 7 + decisions 6 + pitfalls 7 = 計 20 件 / `organization/knowledge/` 横断 v2 体系明文化）GO 判定（2026-05-05 / CEO 着手判断版）
 
 - **状況**: DEC-071 完遂 / commit `25abbb3` (origin/main HANEI repo) push / Phase 2 全体 100% 完遂 / β リリース可能状態完成 / W12 atomic 7/7 完遂。オーナー継続マンデート「(B) knowledge 蓄積 atomic を進めていきましょう」受領。secretary `reports/secretary-w11-kpt.md` §6 で **knowledge 蓄積候補マッピング 20 件（patterns 7 + decisions 6 + pitfalls 7）が完全リストアップ済 = 設計骨子完全準備状態**。`organization/knowledge/` v2 体系（PAT-NNN / DEC-NNN / PIT-NNN / YAML frontmatter + Markdown / DEC-019-033 拡張ルール準拠）の README + schema 確認済。
