@@ -1,5 +1,59 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-078: W12-T4 atomic = 学習時間目標 + 日次リマインド cron 実装（`learner_study_targets` 新設 / M-3 migration + cron route `/api/cron/study-minutes-reminder` + 親設定 UI + 学習者本人 home 表示 + 新 mutation `updateLearnerStudyTarget` / Phase 3 第 1 波 3 番目 / 1.0 人日 / mutation +1 = 9/10）GO 判定（2026-05-05 / オーナー O-1 承認受領後即時 / DEC-077 effective）
+
+- **状況**: DEC-077 オーナー O-1 承認受領（2026-05-05 / CEO 推奨 A. 採択 / mutation 上限 8 → 10 正式化 / **mutation 残枠 2** 確保達成）。Phase 3 第 1 波着手順序通り T2（DEC-076 完遂）→ **T4** へ。WBS §1.2 で T4 = 1.0 人日 P0 atomic（β 開始判定 §6 「学習者の毎日継続」レイヤー実装核心 / 罰則ゼロ哲学下のリマインド = 「優しい呼びかけ」を技術的に成立させる）。
+- **判定**: **GO**（T4 = 学習時間目標 + cron atomic / **1.0 人日** / mutation **+1**（9/10 / DEC-077 拡張版枠内）/ page **+1**（25/32）/ GET **+0**（cron は POST / 10/15 不変））。
+- **判断根拠**:
+  1. **DEC-077 で T4 用 mutation 枠 +1 確保済**: `updateLearnerStudyTarget`（親による学習者の日次目標分数設定）= top-level Server Action / cron 内部から呼ばれる pure helper は対象外（DEC-006 本来意図再定義）。
+  2. **罰則ゼロ哲学の技術的成立**: 「目標分数未達 → ペナルティ」ではなく「目標分数達成 → 称賛」「未達 → 優しい呼びかけ」設計 = リマインド文言は「今日も頑張ろうね」「あと N 分で目標！」等 / 「サボった」「失敗」等の罰語ゼロ。
+  3. **dev sub-agent 委任で 1.0 人日 軽量 atomic**: T1 統合（1.25 人日 / sub-agent budget 上限到達）の経験から、本 atomic は単一 sub-agent 完遂可だが慎重なスコープ管理が必要。
+  4. **既存 cron 基盤の再利用**: PRJ-016 既存 cron route 群（`/api/cron/family-streak-update` 等）と同パターンで GET ではなく POST + cron secret 認証 / 既存 idempotency パターン継承（DEC-055）。
+- **本 atomic スコープ（含むもの）**:
+  - **DB migration M-3**: `learner_study_targets` テーブル新設（`learner_id` UNIQUE / `daily_minutes_target` integer / `reminder_enabled` boolean / `reminder_time` text HH:MM / `created_at` / `updated_at`）
+  - **drizzle schema**: `app/src/lib/db/schema.ts` に `learnerStudyTargets` table 定義追加
+  - **新 mutation**: `app/src/lib/actions/learner-study-target.ts` に `updateLearnerStudyTarget`（親 path / requireAuth + requireParent + requireLearnerOwner / DEC-074 reauth gate 適用）= **mutation +1**
+  - **既存 mutation 改修**: `recordStudyMinutes` は既存集計 fn が存在する場合は内部分岐拡張で吸収 / 純新規必要なら採用見送り（mutation 残枠 1 / 第 2 波で再判断）= **mutation 想定 +1 のみ厳守**
+  - **cron route**: `app/src/app/api/cron/study-minutes-reminder/route.ts` POST handler（既存 cron pattern 踏襲 / `learner_study_targets` 全行 SELECT → reminder_enabled=true かつ当日学習未到達 learner を抽出 → log 出力（実 push 通知は β 後の atomic で実装 / β 段階では console.log + Sentry breadcrumb 程度の足場））
+  - **UI**: 親 settings notifications page（DEC-075 既存）に「**学習時間目標**」section 追加 = 日次目標分数 + リマインド時刻 + リマインド ON/OFF（既存 `notifications-form.tsx` 拡張 or 新規 `study-target-form.tsx` 切り出し / dev 判断）
+  - **学習者本人 home 表示**: `(app)/home/page.tsx` に「今日の目標 N 分」「残り M 分」軽量表示追加（既存 examDate 表示の隣 / read-only / DEC-024 罰則ゼロ準拠）
+  - **vercel.json cron 登録**: `crons` 配列に `/api/cron/study-minutes-reminder` 毎日 1 回 schedule 追加（実 schedule 時刻は dev 判断 / 21:00 JST 推奨）
+  - **E2E**: `study-target-set.spec.ts`（親 settings から目標分数設定 → 学習者 home に表示 → 過大値ガード動作）
+  - **unit test**: `learner-study-target-validate.test.ts`（minutes range 0-180 / time HH:MM 正規表現 / 罰語ゼロチェック）
+- **本 atomic スコープ（含まないもの = 第 2 波以降 or β 後）**:
+  - 実 push 通知配信（OneSignal / FCM 等の push 基盤導入 = β 後）
+  - LINE 通知連携（DEC-074 §6 β 開始判定の 19 項目外）
+  - 学習時間自動計測の SRS / quest 連携（既存 attempts 集計再利用 / 純新規 instrumentation は β 後）
+  - 週次 / 月次 サマリー（T8 第 2 波）
+  - T6 長期目標（mutation +1 残枠 = 第 2 波）
+- **制約厳守**:
+  - DEC-024 罰則ゼロ哲学（リマインド文言全て肯定的・優しい / unit test で罰語 grep 0 確認）
+  - DEC-003 三層認可（親 mutation = requireAuth + requireParent + requireLearnerOwner / cron = secret header 認証 / 学習者本人 read = requireLearner + requireSelfLearner）
+  - DEC-006 再拡張版（page 25/32 / **mutation 9/10** / GET 10/15）
+  - DEC-055 冪等性（cron は同日 2 回叩いても重複 reminder 出さない / 集計値計算は `unixepoch()` 基準で stable）
+  - DEC-074 reauth gate（**親による目標分数変更は reauth 必須** = sensitive 操作扱い / DEC-075 `requireParentReauth` helper 再利用）
+  - DEC-075 settings 4-page 構造体維持（notifications page 内に section 追加 / 新規 page 増設は今回不要）
+  - Turbopack `"use server"` sync export ban パターン
+  - Per-row fail-soft（cron loop で 1 learner の失敗で全体停止しない / try-catch で per-learner skip + log）
+- **受入基準**:
+  - [ ] `bun run typecheck` PASS（warning 0）
+  - [ ] `bun run lint` PASS（warning 0）
+  - [ ] `bun run test` 846+ PASS（baseline 維持 / regression 0 / 新規 unit test 追加）
+  - [ ] `bun run build` PASS（page routes 24 → **25** = +1）
+  - [ ] `bun run e2e tests/e2e/study-target-set.spec.ts --workers=1` PASS（chromium + mobile-chrome）
+  - [ ] 既存 E2E regression 0（settings-smoke / learner-exam-date-self-edit / study-smoke / family-streak）
+  - [ ] 罰語 grep 0 件（実装コード + リマインド文言）
+  - [ ] DEC-006 再拡張版上限内（page 25/32 / mutation **9/10** / GET 10/15）
+  - [ ] cron route の secret header 認証動作確認
+  - [ ] cron per-row fail-soft 動作確認（1 learner DB error → 他 learner は処理続行）
+  - [ ] 親 settings から目標設定 → 学習者 home 反映の double-write 同期確認（revalidatePath 両画面）
+- **後続 atomic 候補**:
+  - **T5 リスニング音源 seed（1.5 人日 / P0 / data only / mutation +0 / 並走可）**: T4 と並走可能（CEO 判断）
+  - T6 長期目標（第 2 波 / mutation +1 = 10/10 上限ジャスト）
+  - β 開始 19 項目判定 atomic（第 1 波完遂後 / DEC-074 §6）
+- **CEO 委任先**: dev 部門 sub-agent（前回 T2 と同パターン / 1 sub-agent 直委任 / **効率化指示**: 必読ファイル一括読込・同種作業 batch 化・検証は最後にまとめて・E2E は最後の最後に 1 回だけ）
+- **報告経路**: 標準フロー継承（dev 委任 → trust-but-verify → §実装完遂デルタ → commit/push → dashboard → CEO 報告 → T5 並走判断）
+
 ## DEC-077: DEC-006 再拡張 atomic = mutation 上限 8 → 10（+2）+ T4 / T6 用 top-level Server Action 枠確保 + Phase 3 第 1 波 T4 着手前提条件確定（息子実使用前提 / 0.1 人日 / Markdown のみ / コード変更ゼロ / オーナー判断要請含む）GO 判定（2026-05-05 / CEO 単独起票版）
 
 - **状況**: DEC-076 W12-T2 完遂着地（PRJ-016 `c147936`+`99994cb` / workspace `9aefddd` / mutation 8/8 維持達成 = page 24/32 / GET 10/15）。**mutation 残枠 0** のため、第 1 波残 atomics（**T4 学習時間目標 + cron** + T6 長期目標）の着手前に DEC-006 再拡張が前提条件。オーナー「徹底的に進めて」マンデート遵守の連続着手フロー継続のため CEO 単独で起票。
@@ -59,6 +113,9 @@
 - **本 atomic は CEO 単独完遂 / コード変更ゼロ / build / typecheck / lint / vitest / E2E に regression 構造的ゼロ**
 - **次の atomic（オーナー O-1 承認受領後即時）**: T4 学習時間目標 + cron（1.0 人日 / dev 部門委任 / `learner_study_targets` 新設 + cron `/api/cron/study-minutes-reminder` + UI / 新 mutation `recordStudyMinutes` 想定）
 - **commit hash 記録**: PRJ-016 `75a7619`（DEC-077 起票本体）push 完遂（origin/main / 2026-05-05）
+- **オーナー O-1 承認受領（2026-05-05）**: オーナー directive「**CEO 推奨通り進めてください。/ceo**」受領 = CEO 推奨 **A. 承認**（mutation 上限 8 → 10 再拡張正式化 / +2 = T4 用 +1 + T6 用 +1）採択。**DEC-006 再拡張版確定数値: page 32 / mutation 10 / GET 15**（DEC-074 拡張版から +2 mutation 改訂）。本承認は DEC-077 を有効化し、T4 即時着手の構造的前提条件を満たす。
+- **DEC-006 再々拡張 trigger**: β5〜10 名規模拡大 / 新運用 KPI 追加時 / 公費 mutation 個別 helper 化困難時 = いずれか trigger で別 DEC 起票（包括承認哲学と単発承認透明性のバランス継承）。
+- **後続着手フロー（CEO 即時実行）**: (1) T4 dev 部門委任 atomic launch（1.0 人日 / `learner_study_targets` migration + cron route + UI + `recordStudyMinutes` mutation +1 / mutation 9/10）→ (2) trust-but-verify → (3) §実装完遂デルタ + commit/push + dashboard 更新 → (4) T5 並走判断（mutation +0 / data only / 1.5 人日 / 並走可否は CEO 判断）→ (5) 第 1 波完遂 → (6) β 開始 19 項目判定。
 
 ## DEC-076: W12-T2 atomic = 受験日 学習者 UI 拡充（学習者本人画面で自己編集 link 追加 + dashboard 双方向同期 + 過去日入力ガード / Phase 3 第 1 波 2 番目 / 0.5 人日 / mutation +0 想定）GO 判定（2026-05-05 / オーナー「徹底的に進めて」マンデート）
 
