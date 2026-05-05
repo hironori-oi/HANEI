@@ -67,6 +67,52 @@
 - **CEO 委任先**: dev 部門 sub-agent（T4・T5 と同パターン / 1 sub-agent 直委任 / 効率化指示継承: 必読ファイル一括読込 / 既存 cron pattern 踏襲 / Sentry mock テンプレ既存利用 / E2E 不要 / unit test のみ）
 - **報告経路**: 標準フロー継承（dev 委任 → trust-but-verify → §実装完遂デルタ → commit/push → dashboard → β 開始 GO 判定要請 → DEC-082 起票）
 
+### §実装完遂デルタ（2026-05-05 完遂）
+
+- dev sub-agent（agentId `a1ec40520f61b9f4e` / tool_uses 54 / duration 499s / T4・T5 効率化指示継承）に直委任 → 完遂着地
+- **新規 5 ファイル**:
+  - `app/src/app/api/cron/monthly-budget-alert/route.ts`（cron 二重認可 + SQL aggregate-only + 3 段階閾値 + Sentry capture + DEC-068 fail-soft 精神 / +146 行）
+  - `app/src/app/api/admin/sentry-test/route.ts`（admin role 直接検証 + level=warning|error|fatal 3 分岐 + side-effect ゼロ / +69 行）
+  - `app/tests/unit/cron.monthly-budget-alert.test.ts`（12 cases / 認可 + 閾値判定 + Sentry mock）
+  - `app/tests/unit/admin.sentry-test.test.ts`（9 cases / role 認可 + level 分岐 + Sentry mock）
+  - `projects/PRJ-016/reports/dev-w12-dec081-sentry-budget-alert-done.md`（dev 完遂報告 + オーナー実行手順 6 step）
+- **変更 2 ファイル**:
+  - `app/vercel.json`（cron 4→5 / monthly-budget-alert maxDuration 60）
+  - `docs/sentry-alert-setup.md`（§ 7 故意発火手順 + § 8 Rule 5 月次予算 alert + § 9 β 開始前 6 step チェックリスト）
+- **CEO trust-but-verify ALL GREEN**:
+  - `bun run typecheck` PASS（warning 0）
+  - `bun run lint` PASS（warning 0）
+  - `bun run test` **902 PASS / 60 files**（baseline 881 + 21 / regression 0 / dev 報告と完全一致）
+  - `bun run build` PASS（**page routes 25 不変** / cron 5 / admin 1 = `/api/admin/sentry-test`+`/api/cron/monthly-budget-alert` 認識）
+  - E2E regression 0: study-smoke **2/2** + study-listening-eiken3 **2/2** + settings-smoke **10/10** = **14/14 PASS**
+  - 罰語 grep 0 件 user-facing（DEC-024 名称引用「罰則ゼロ哲学」自己言及 + system error fallback 「失敗」3 件はコード内コメント / DEC-076 §実装完遂デルタ §3-1 で既に CEO 承認済の不変方針継承）
+- **DEC-006 再拡張版数値遵守**:
+  - page **25/32**（margin 7 / +0）
+  - mutation **9/10**（margin 1 / +0）
+  - GET **12/15**（+1 / margin 3 / 残枠 3）
+  - cron **5**（+1）
+- **DEC-024 / DEC-003 / DEC-055 / DEC-068 / DEC-079 全準拠**:
+  - cron 二重認可（streak-freeze-monthly と同一 pattern）
+  - admin endpoint は getSession() + role === "admin" 直接検証 + 401 JSON（API route で redirect 不可のため `requireAdmin()` 不採用 / 三層認可第二層は維持）
+  - cron は side-effect ゼロ + Sentry message fingerprint 集約 = 冪等
+  - admin は side-effect ゼロ = idempotent by design
+  - try/catch 二重吸収（DB error → 200 + alerted=false / Sentry capture 自体失敗 → console fallback）
+- **β 開始 19 項目判定への寄与**:
+  - 「Sentry 実発火必須化」項目（観測性 RED → **GREEN** 化）= admin/sentry-test endpoint で 1 回叩けば実発火確認可能
+  - 「月次予算 alert」項目（コスト止血 RED → **GREEN** 化）= cron で日次自動発火 / Vercel env で閾値変動可
+- **dev §7 確認事項 / §8 ブロッカー への CEO 判断記録**:
+  - `requireAdmin()` redirect 型 → API route で getSession() 直接実装 採用承認（DEC-003 第二層維持）
+  - Sentry SDK level enum 制約 → message 本文 severity 埋め込み + UI filter 採用承認（runbook §8 で明示済）
+  - DB error 二重 try/catch（DEC-068 精神）採用承認
+  - E2E 書かない判断（cron + admin = 通常 user 経路でない / unit test 21 cases で網羅）採用承認
+- **commit/push 完遂**:
+  - PRJ-016 commit `802622b`（feat(W12-DEC081) / 7 files / +898 / -2）→ push https://github.com/hironori-oi/HANEI.git main
+  - workspace dashboard 更新は 後段で記録
+- **次の CEO action**:
+  - dashboard 【最新】marker 更新（DEC-080 → DEC-081）
+  - β 実子使用開始 GO 判定要請（オーナー本人判断 / O-2 既決）
+  - β 開始後 DEC-082 起票（β 後並走 3 項目 / cost guard / DB backup / オーナー smoke / 0.4 人日）
+
 ---
 
 ## DEC-080: Phase 3 第 1 波完遂宣言 + β 開始 19 項目判定 運用方針確認 atomic（planning only / コード変更ゼロ / 0.25 人日 / オーナー判断 gate）GO 判定（2026-05-05 / DEC-079 完遂直後 / オーナー B 案承認受領）
