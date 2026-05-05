@@ -1,5 +1,68 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-079: W12-T5 atomic = β 開始用 リスニング音源 seed 投入（eiken-3 listening 20 問新規 + OpenAI TTS 自前生成 + R2 アップロード + `problems.audio_url` 反映 / Phase 3 第 1 波 4 番目 / 1.5 人日 / mutation +0 / page +0 / data only）GO 判定（2026-05-05 / DEC-078 完遂直後 / オーナー O-3 cap ¥3,000/月 既決）
+
+- **状況**: DEC-078 W12-T4（学習時間目標 + 日次リマインド cron）完遂・commit/push・dashboard 更新着地（vitest 868 / E2E 4/4 + regression 10/10 全 GREEN）。Phase 3 第 1 波着手順序通り次は **T5 リスニング音源 seed**。WBS §1.2 で T5 = 1.5 人日 P0 atomic（β 開始 19 項目判定 §6 「リスニング音源最低 1 セット seed 投入完遂」核心）/ data only / mutation +0 / page +0 で T6 以降の上限制約と完全独立。
+- **判定**: **GO**（T5 = β 開始用 eiken-3 listening 20 問 seed + TTS 生成 pipeline / **1.5 人日** / mutation **+0**（9/10 不変）/ page **+0**（25/32 不変）/ GET **+0**（11/15 不変））。
+- **判断根拠**:
+  1. **β 開始 19 項目判定（DEC-074 §6）の「リスニング音源最低 1 セット seed 投入完遂」項目を直接 GREEN 化**: WBS §6 既決の判定基準内訳を直接消し込む atomic / 第 1 波の最後の Must 機能。
+  2. **DEC-006 上限とは完全独立**: data only / mutation +0 / page +0 / GET +0 / cron +0 = DEC-006 拡張版上限内の余裕に対し全項目 0 増 / 「次の +1 は再々拡張要」の制約と非衝突 / 並走可（T4 と同時着手も可だったが順次着手で品質担保優先）。
+  3. **既存 TTS 基盤の段階再利用**: `app/scripts/generate-tts-w3.ts`（5 級 vocab / 200 問 × 3 voice / DEC-029 R2 smoke check 経由 / DRY_RUN 標準）= 既に動作実績ある pipeline / **scope filter のみ拡張**（eiken-5/vocab → eiken-3/listening）+ **voice 1 本化**（β 期は nova のみ / β + 1 ヶ月評価で多 voice 拡張判断）でコスト最小化。
+  4. **OpenAI cost 微小 + cap 内**: 20 問 × 1 voice × 平均 60 chars = 1,200 chars × $15/1M = **$0.018 ≒ ¥3**（O-3 cap ¥3,000/月の 0.1% / negligible）+ 既存 5 級 vocab の ¥40 と合算しても cap 余裕。
+  5. **著作権完全クリア**: `source_license: "ORIGINAL_AI"` で kid-safe AI 生成原稿 + OpenAI tts-1 自前生成 / WBS R-6 リスク（リスニング音源の著作権）を構造的に解消。
+  6. **既存 audio playback UI 完備**: `audio-gate.ts` の `shouldShowAudioUi` + `MAX_REPLAY = 3` 連打防止 + StudyClient `displayedView.audioUrl` 描画 = Phase 2 G-2 で実装済 / **本 atomic で UI 改修ゼロ** / data 投入のみで動作。
+  7. **冪等 seed runner 完備**: `seed-problems-runner.ts` `INSERT OR IGNORE` 経由 / `seed-id-mapper` 重複検知 / 既存 822 問 → **842 問** へ +20 / 再実行安全。
+- **本 atomic スコープ（含むもの）**:
+  - **新規 seed file**: `app/scripts/seed-problems-w5.ts`（β 開始セット = eiken-3 listening 20 問 / 既存 5 級 listening 100 問 と同型 `audio_transcript` + 4 択 / kid-safe 場面 = 学校 / 家族 / 季節 / 食事 / 趣味 / 数字 / 時間 / スポーツ etc / difficulty 1〜2 中心 / 30〜80 chars audio_transcript / 既存 5 級 L5-001..100 の作問パターン踏襲）
+  - **seed-id-mapper 拡張**: `assignW5Ids()` 新規 / `loadAllSeedIds()` に W5 bundle 追加 / **L3-001 〜 L3-020** 連番採番 / `total = 842`（200 W2 + 401 W3 + 221 W4 + 20 W5）/ 重複検知に W5 含める
+  - **seed-problems-runner 整合**: `total !== 822` warning 閾値を `842` に更新 / mapping は eiken-3/listening = listening_mcq + skillId `listening-3`（既存 mapper 完備 / 改修不要）
+  - **新規 TTS 生成 script**: `app/scripts/generate-tts-listening-3.ts`（既存 generate-tts-w3.ts を base に / scope filter `eiken-3 / listening` / **voice = nova 1 本のみ**（β 期コスト最小化）/ 入力テキスト = `audio_transcript` のみ（5 級 vocab の `word + example` パターンと差分）/ cache key `tts/v1/{problemId}-nova.mp3` 既存名前空間継承 / DRY_RUN 標準 / R2 smoke check 継承 / 実行は **オーナーが手元で実行**（Agent 環境では DRY_RUN のみ））
+  - **`audio_url` 反映 script**: `app/scripts/apply-audio-urls-eiken3-listening.ts`（TTS 生成完了後 / `problems` table の eiken-3 listening 20 行に対し `audio_url = ${R2_PUBLIC_URL}/tts/v1/L3-XXX-nova.mp3` を batch UPDATE / 冪等 / DRY_RUN 標準）
+  - **package.json scripts 追加**: `ai:generate-tts-listening-3`（generate-tts-listening-3.ts 起動）+ `db:apply-audio-urls-eiken3-listening`（audio_url 反映）
+  - **unit test**:
+    - `tests/unit/seed-id-mapper.w5.test.ts`: W5 採番 = L3-001..L3-020 / total 842 / 重複なし
+    - `tests/unit/study.audio-gate.eiken3.test.ts`: eiken-3 listening + audio_url が valid R2 URL の時 `shouldShowAudioUi = true` を確認（既存 audio-gate test の eiken-5 ケース踏襲 / 1〜2 cases 増）
+    - 罰語 grep 0 件（seed の 20 問 audio_transcript + 4 択 + 解説）
+  - **E2E**: `tests/e2e/study-listening-eiken3.spec.ts`（chromium + mobile-chrome / Phase 1 直リンク `/study/eiken-3/listening` 経路 / **audio_url が空でも テスト fixture で 1 行 audio_url 設定（playable な dummy mp3 / または既存 R2 にある eiken-5 listening の URL を流用 / dev 判断）/ `<audio>` 要素描画 + 「きく」ボタン押下 → `playCount` 1 加算 → `MAX_REPLAY` 到達でボタン disabled` を assert（実 mp3 再生は Playwright の制約で確認 best-effort / 連打防止ロジックの side-effect 検証を主軸））
+  - **dev report**: `projects/PRJ-016/reports/dev-w12-t5-listening-audio-seed-done.md`（実装サマリ + DRY_RUN 結果 + オーナー実行手順 + audio_url サンプル + コスト試算）
+- **本 atomic スコープ（含まないもの = β 後 or 別 atomic）**:
+  - 実 OpenAI API 呼び出し + 実 R2 PutObject（**オーナーが手元で実行 / Agent 環境で課金禁止 / 既存 generate-tts-w3.ts §重要 と同一規約**）
+  - eiken-3 listening 21 問目以降の追加 seed（β + 1 ヶ月評価で 3 級 listening 100 問体制へ拡張判断）
+  - 多 voice 対応（nova / alloy / shimmer 3 voice）= β + 1 ヶ月評価で UX 効果検証後判断
+  - eiken-3 vocab / grammar の TTS 化（β 後の atomic）
+  - audio playback UI 改修（既存 audio-gate.ts + StudyClient `displayedView.audioUrl` 完備のため不要）
+  - 再生回数永続化（DB `learner_audio_plays` 等）= β 後の Could
+- **制約厳守**:
+  - DEC-024 罰則ゼロ哲学（seed 20 問の問題文 / 選択肢 / 解説 + audio_transcript 全件で罰語 grep 0 件 / dev unit test で grep 検証）
+  - DEC-003 三層認可（seed runner / TTS generator は admin-only スクリプト / 一般 page route 経由なし / 認可影響ゼロ）
+  - DEC-006 再拡張版（page 25/32 / mutation 9/10 / GET 11/15 = **全項目 不変**）
+  - DEC-029 R2 smoke check（generate-tts-w3.ts と同一の HeadBucket 事前確認継承 / 課金前中断機構）
+  - DEC-055 冪等性（seed `INSERT OR IGNORE` / TTS `objectExists` skip / audio_url UPDATE は同一値再 UPDATE 安全）
+  - copyright_safe = true（全 20 問 ORIGINAL_AI / 著作権完全クリア）
+  - kid-safe genre（学校 / 家族 / 季節 / 食事 / 趣味 / 数字 / 時間 / スポーツ / 動物 / 色 / 天気 限定 / DEC-002 + PAT-005 + PAT-007 継承）
+  - voice 1 本化（β 期 nova のみ / 多 voice 拡張は β + 1 ヶ月評価後 / cost cap O-3 ¥3,000/月 余裕保持）
+  - **Agent 環境での実 API 呼び出し禁止**（DRY_RUN のみ実行 / オーナーが `npm run ai:generate-tts-listening-3` を手元で実行 / dev report に手順明記）
+- **受入基準**:
+  - [ ] `bun run typecheck` PASS（warning 0）
+  - [ ] `bun run lint` PASS（warning 0）
+  - [ ] `bun run test` 870+ PASS（baseline 868 + 新規 unit test 2〜3 cases）
+  - [ ] `bun run build` PASS（page routes 25 不変 / 新規 page なし）
+  - [ ] `DRY_RUN=1 bun run db:seed` で **total=842**（W5 +20 認識）
+  - [ ] `DRY_RUN=1 bun run ai:generate-tts-listening-3` で 20 問 × 1 voice = **20 個の `[dry-run] would generate ...`** 出力 + コスト試算 ¥3 程度を表示
+  - [ ] `bun run e2e tests/e2e/study-listening-eiken3.spec.ts --workers=1` 4 PASS（chromium 2 + mobile-chrome 2 / fixture audio_url で UI 検証）
+  - [ ] 既存 E2E regression 0（study-smoke / study-writing-smoke / settings-smoke / study-target-set / family-* / session-cumulative）
+  - [ ] 罰語 grep 0 件（seed 20 問全件 + 解説 + audio_transcript）
+  - [ ] DEC-006 再拡張版上限不変（page 25/32 / mutation 9/10 / GET 11/15）
+  - [ ] dev report に「オーナー実行手順」（`.env.local` 確認 + `npm run ai:generate-tts-listening-3` + `npm run db:apply-audio-urls-eiken3-listening` の 2 step + cost 試算）明記
+- **後続 atomic 候補**:
+  - **第 1 波完遂判定 + β 開始 19 項目判定 atomic**（DEC-074 §6 / Sentry 実発火必須化 + cost cap + reauth gate + null 化実演 + DB backup + 月次予算 alert / T5 完遂直後）
+  - T6 長期目標（第 2 波 / mutation +1 = 10/10 上限ジャスト）
+  - T7 ライティング採点 UX（第 2 波）
+- **CEO 委任先**: dev 部門 sub-agent（T4 と同パターン / 1 sub-agent 直委任 / 効率化指示継承: 必読ファイル一括読込・seed 20 問は batch 生成・DRY_RUN で完遂・E2E は最後の最後に 1 回だけ）
+- **報告経路**: 標準フロー継承（dev 委任 → trust-but-verify → §実装完遂デルタ → commit/push → dashboard → 第 1 波完遂判定 → CEO 報告）
+
+---
+
 ## DEC-078: W12-T4 atomic = 学習時間目標 + 日次リマインド cron 実装（`learner_study_targets` 新設 / M-3 migration + cron route `/api/cron/study-minutes-reminder` + 親設定 UI + 学習者本人 home 表示 + 新 mutation `updateLearnerStudyTarget` / Phase 3 第 1 波 3 番目 / 1.0 人日 / mutation +1 = 9/10）GO 判定（2026-05-05 / オーナー O-1 承認受領後即時 / DEC-077 effective）
 
 - **状況**: DEC-077 オーナー O-1 承認受領（2026-05-05 / CEO 推奨 A. 採択 / mutation 上限 8 → 10 正式化 / **mutation 残枠 2** 確保達成）。Phase 3 第 1 波着手順序通り T2（DEC-076 完遂）→ **T4** へ。WBS §1.2 で T4 = 1.0 人日 P0 atomic（β 開始判定 §6 「学習者の毎日継続」レイヤー実装核心 / 罰則ゼロ哲学下のリマインド = 「優しい呼びかけ」を技術的に成立させる）。
