@@ -71,7 +71,14 @@ export default function HomePage() {
       <footer className="mt-16 border-t pt-8 text-center text-sm text-muted-foreground">
         <p>HANEI - 小学生向け英語学習アプリ</p>
         <p className="mt-2">
-          現在クローズドβ準備中。ご利用は無料です。
+          クローズドβ公開中。ご利用は無料です（招待制）。
+        </p>
+        <p className="mt-1">
+          招待をご希望の方は{" "}
+          <a className="underline" href="mailto:support@hanei.app">
+            こちら
+          </a>
+          までご連絡ください。
         </p>
       </footer>
     </main>
