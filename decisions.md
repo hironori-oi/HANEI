@@ -79,6 +79,7 @@
 - β 開始判定 19 項目確定（WBS §6 採用）
 - 持ち越し評価 trigger 確定（β + 1 ヶ月後評価）
 - **次の atomic**: T1 統合 atomic（settings 全体 + 親パスワード reauth dialog / 1.25 人日 / dev 部門委任）に即時着手
+- **commit hash 記録**: PRJ-016 `b4949d4` push 完遂（DEC-074 起票本体）/ workspace dashboard 反映は PRJ-019 Round 24 update commit `e84982f`（2026-05-05 17:44 JST）に co-landing（DEC-074【最新】entry が dashboard line 6 に保持・PRJ-019 並行 latest line 9 と二重 latest 状態 = 競合無し / 同日両 PRJ 完遂着地併記運用）
 
 ## DEC-073: Phase 3 計画立案 atomic = 本格運用準備 WBS 徹底洗い出し（息子実使用前提 / 7 要望統合 / コード変更ゼロ / WBS atomic 0.75 人日）GO 判定（2026-05-05 / CEO 着手判断版）
 
