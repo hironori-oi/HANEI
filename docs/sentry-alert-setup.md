@@ -185,10 +185,16 @@ DEC-081 で新設した cron route `GET /api/cron/monthly-budget-alert` (毎日 
 
 ---
 
-## 9. β 開始前 6 step オーナーチェックリスト (DEC-081)
+## 9. β 開始前 7 step オーナーチェックリスト (DEC-081 / DEC-083 拡張)
 
-β 実子使用開始前に以下 6 項目をオーナー本人が実施し、Sentry → email 通電を確認する。
+β 実子使用開始前に以下 7 項目をオーナー本人が実施し、Sentry → email 通電 + DB schema 整合を確認する。
 
+- [ ] **step 0** (DEC-083 / 60 秒): `app/` 直下で **両方** 実行 → 本番 Turso + dev `local.db` の双方に migration 適用 (Next.js dev は `.env.development.local` を `.env.local` より優先するため、両 env を別コマンドで明示適用する必要がある):
+   ```powershell
+   npm run db:migrate-hotfix-0019       # → 本番 Turso (.env.local)
+   npm run db:migrate-hotfix-0019:dev   # → dev local.db (.env.development.local)
+   ```
+   出力に `✓ done (CREATE TABLE 完了)` または `✓ done (no-op / 既存 table 確認)` が出れば成功 (冪等保証)。
 - [ ] Rule 1〜4 (§ 2〜§ 5) を Sentry UI で設定 (10〜15 分)
 - [ ] Rule 5 (§ 8) を Sentry UI で設定 (5 分)
 - [ ] Vercel Production env `MONTHLY_BUDGET_JPY=3000` 設定確認 (§ 6 + § 8)
@@ -196,7 +202,17 @@ DEC-081 で新設した cron route `GET /api/cron/monthly-budget-alert` (毎日 
 - [ ] Sentry email 到達確認 + issue resolve (§ 7 step 4-5)
 - [ ] β 実子使用開始 GO 報告 (CEO 経由)
 
-合計所要時間目安: **20〜25 分**。
+合計所要時間目安: **20〜26 分** (step 0 = +60 秒 / DEC-083 追加)。
+
+**step 0 を最優先する理由 (DEC-083)**:
+DEC-078 W12-T4 で `0019_w12_t4_learner_study_targets.sql` を追加した際、trust-but-verify は
+vitest mock + E2E fixture (in-memory) で完結し、Turso remote / dev local.db の双方へ apply する工程が暗黙化していた。
+さらに `drizzle/meta/_journal.json` 不在のため `drizzle-kit migrate` は silent no-op で機能していなかった。
+2026-05-06 にオーナー手元で `bun run dev` 時に `SqliteError: no such table: learner_study_targets` が再現し、
+libsql client 直接 DDL hotfix script で本番 Turso + dev local.db の双方に適用して復旧。
+本 step 0 を β 開始前 checklist 先頭に固定することで、今後の Phase 3 第 2 波以降でも migration drift を
+未然に防ぐ (再発防止 / 制度化)。drizzle workflow 本体の修復 (`_journal.json` 再生成 + `__drizzle_migrations`
+メタ同期) は β 後 0.3 人日 atomic で別途実施予定 (DEC-083 §後続)。
 
 ---
 

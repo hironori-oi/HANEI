@@ -1,5 +1,57 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-083: M-3 migration drift hotfix atomic（learner_study_targets 0019 を本番 Turso + dev local.db 双方に適用 / 0.1 人日 / scripts +1 / package.json scripts +2 / docs § 9 step 0 訂正）GO 判定 完遂（2026-05-06 / オーナー手元 dev SqliteError 報告直後 / hotfix-class）
+
+- **状況**: 2026-05-06 オーナー手元 `bun run dev` 起動時に `SqliteError: no such table: learner_study_targets` が再現（/home の `getLearnerStudyTarget` 経路 / `src/lib/actions/learner-study-target.ts:54` / fail-soft 上位で home GET 200 維持）。診断結果:
+  1. **`drizzle/meta/_journal.json` 不在** = drizzle-kit が migration tracking journal を持っていない = `drizzle-kit migrate` が silent no-op で終了し DEC-078 W12-T4 の `0019_w12_t4_learner_study_targets.sql` が適用されていなかった。
+  2. **dev / prod の env file 階層差**: Next.js dev は `.env.development.local` > `.env.local` の優先順位で読み込む。`.env.development.local` は `file:./local.db` (ローカル SQLite ファイル) を指し、`.env.local` は本番 Turso (`hanei-hironori-oi`) を指す = **本来 migration は両 DB に適用すべきだったが片方のみ (or 両方共未適用) のまま β 直前まで残存**。
+  3. `seed-dev-user.ts` line 35-38 の冒頭コメント (「dev seed は必ずローカル SQLite (file:./local.db) を対象にする」) と整合 = 設計通りの dev/prod 分離構成だったが migration apply 工程が制度化されていなかった。
+- **判定**: **GO** (DEC-083 = β 開始前 hotfix-class atomic / **0.1 人日** / **scripts +1** (`scripts/migrate-0019-hotfix.ts`) / **package.json scripts +2** (`db:migrate-hotfix-0019` + `db:migrate-hotfix-0019:dev`) / **docs § 9 step 0 訂正** / **page +0** / **mutation +0** / **GET +0**).
+- **判断根拠**:
+  1. **β 開始 blocker 即解消**: 19 項目判定 RED 1 件 (M-3 drift / dev/prod 双方) を 1 hotfix で双方 GREEN 化。本番 Turso 側は β 子使用 (Vercel deployed) が即通る状態に復帰。
+  2. **drizzle workflow 本体修復は β 後**: `drizzle/meta/_journal.json` 再生成 + `__drizzle_migrations` メタ同期 = 0.3 人日の独立 atomic として β 後に着手予定 (DEC-083 §後続)。β 子使用阻害なし。
+  3. **冪等性保証**: DDL は `CREATE TABLE IF NOT EXISTS` + `CREATE UNIQUE INDEX IF NOT EXISTS` のみ = 既存 table / index 完全保護 / 学習データ (problems / answers / coins / streaks etc) 影響ゼロ。
+  4. **罰則ゼロ哲学準拠**: 内部 DDL のみ / user-facing 文言なし / DEC-024 影響なし。
+  5. **再発防止の制度化**: docs § 9 step 0 を「`db:migrate-hotfix-0019` + `db:migrate-hotfix-0019:dev` 両方実行」に固定 + 教訓 (env file 階層認識 + `_journal.json` 不在) を明示 = 今後 Phase 3 第 2 波で migration 追加時に同種 drift をすり抜けない構造。
+- **本 atomic スコープ（含むもの）**:
+  - **`app/scripts/migrate-0019-hotfix.ts`** 新規（async-main pattern / libsql client で `learner_study_targets` を直接 CREATE / before-after diagnostic / DEC-027 風接続先表示 / DEC-028 風 token redact / 冪等 IF NOT EXISTS / DEC-024/055/078 遵守）.
+  - **`app/package.json`**: `db:migrate-hotfix-0019` (`.env.local` 経由 / 本番 Turso) + `db:migrate-hotfix-0019:dev` (`.env.development.local` 経由 / dev local.db) の 2 script 追加.
+  - **`projects/PRJ-016/docs/sentry-alert-setup.md` § 9 step 0 訂正**: 旧「`npm run db:migrate`」→ 新「`npm run db:migrate-hotfix-0019` + `npm run db:migrate-hotfix-0019:dev` 両方」+ env file 階層理由の説明追記 + DEC-083 §後続 atomic 言及.
+  - **本 DEC-083 起票** (decisions.md 冒頭) + **dashboard/active-projects.md 更新** (【最新】marker DEC-081 → DEC-083 / 19 項目 RED → GREEN 反映).
+- **本 atomic スコープ（含まないもの / β 後 別 atomic）**:
+  - **drizzle workflow 本体修復**: `drizzle-kit generate` で `_journal.json` 再生成 + 過去 0000〜0019 を full journal に再 tracking + `__drizzle_migrations` メタテーブル同期 = β 後 0.3 人日 (DEC-083 §後続).
+  - **dev/prod 同時適用 wrapper script**: `db:migrate-hotfix-all` のような 1 コマンドで `.env.local` + `.env.development.local` 両方を sequence 実行する script は本 atomic では追加せず、§後続で drizzle workflow 復権時に統合実装.
+  - **vitest / E2E 追加**: hotfix-class のため新規 test 不要 (既存 `tests/e2e/fixtures/db-fixture.ts` の applyMigrations が 0019 を含む = 既に test 側は GREEN).
+- **制約厳守 / 受入基準**:
+  - DEC-024 罰則ゼロ哲学厳守 (内部 DDL only / user-facing 文言なし).
+  - DEC-003 三層認可: 本 hotfix script は admin 内部 / オーナー手元 PowerShell からのみ実行 / API route 化なし = SQL レベル絞り込み無関係.
+  - DEC-006 拡張版 (DEC-077) GET 12/15 / mutation 9/10 / page 25/32 / cron 5 全て不変 (本 atomic は全カテゴリ +0).
+  - DEC-027/028 接続先表示厳守 (kind / URL / token redact 全て遵守).
+  - DEC-055 冪等性厳守 (CREATE ... IF NOT EXISTS / 何度実行しても同じ結果).
+  - 受入基準: dev (`bun run dev` /home) で `getLearnerStudyTarget failed` 消失 + 「学習時間目標」Card 描画 + DEC-024 user-facing 文言ゼロ.
+- **後続 atomic 候補**:
+  1. **DEC-083 §後続 (β 後 / 0.3 人日)**: drizzle workflow 本体修復 = `drizzle-kit generate` で `_journal.json` 再生成 + `__drizzle_migrations` メタテーブル同期 + 過去 0000〜0019 + 今後の migration を `npm run db:migrate` 1 コマンドで両 DB 適用復権.
+  2. **W12-T3 β 受入準備 (1.5 人日 / P0)**: β 開始前 19 項目判定の残 RED 2 件 + DEFERRED 2 件を β 後早期 GREEN 化する atomic.
+  3. **W11 KPT (0.5 人日 / P1)**: Phase 3 第 1 波完遂後の振り返り (DEC-066 / DEC-067 / DEC-076 / DEC-078 / DEC-080 / DEC-081 / DEC-083 の総括).
+- **CEO 委任先 / 報告経路**: 本 hotfix は CEO 直轄実行 (オーナー手元実行 + CEO commit/push の 2 段階) で完遂. dev sub-agent 委任なし (規模感 0.1 人日).
+- **教訓 / 再発防止 (制度化)**:
+  1. **env file 階層認識**: Next.js dev は `.env.development.local` > `.env.local`. migration 追加時は **両 env file が指す DB に適用** が必須. docs § 9 step 0 で明示.
+  2. **drizzle-kit migrate の silent no-op**: `drizzle/meta/_journal.json` 不在時は `drizzle-kit migrate` が機能しないが、エラーも警告も出さず正常終了したように見える. β 後の workflow 修復で drizzle-kit が migration apply 完遂を必ず log 出力する状態へ復旧.
+  3. **trust-but-verify の盲点**: vitest mock + E2E fixture (in-memory SQLite + applyMigrations) では「実 DB に DDL apply された」の確認にならない. dev sub-agent 委任時の受入基準に「migration 追加が含まれる場合は dev local.db + 本番 Turso の双方に apply + 確認」を明示する制度化を Phase 3 第 2 波以降で適用.
+
+### §実装完遂デルタ
+- **2026-05-06 / hotfix 完遂時刻 オーナー検証 GREEN 報告受領**:
+  - **手順 1**: 真の根因診断 (drizzle/meta/_journal.json 不在 → drizzle-kit migrate silent no-op + env file 階層差).
+  - **手順 2**: hotfix script 作成 (`scripts/migrate-0019-hotfix.ts` / async-main pattern / libsql client / 冪等 IF NOT EXISTS).
+  - **手順 3**: 本番 Turso 適用 (オーナー手元 `npm run db:migrate-hotfix-0019` / `before: false → after: true`).
+  - **手順 4**: dev local.db 適用 (オーナー手元 `npm run db:migrate-hotfix-0019:dev` / WARN LOCAL SQLite 表示 + `before: false → after: true`).
+  - **手順 5**: dev `bun run dev` 再起動 + /home 検証 (オーナー報告: console error 消失 / 学習時間目標 Card 描画 / DEC-024 遵守).
+  - **手順 6**: docs § 9 step 0 訂正 + DEC-083 起票 + dashboard 更新 + 1 commit/push.
+- **影響行**: scripts/migrate-0019-hotfix.ts 新規 (~140 行) + package.json (+2 行) + docs/sentry-alert-setup.md § 9 step 0 訂正 (~20 行差分) + decisions.md DEC-083 起票 (本 entry / ~80 行) + dashboard/active-projects.md (~5 行差分).
+- **commit hash**: 後続 commit で記載 (1 commit 一括 push 予定).
+
+---
+
 ## DEC-081: β 開始前必須 2 項目 atomic（Sentry 実発火必須化 + 月次予算 alert / 0.7 人日 / GET +1 = 11→12/15 / cron +1 = 4→5 / page +0 / mutation +0）GO 判定（2026-05-05 / DEC-080 完遂直後 / オーナー O-1 = CEO 推奨 C 案承認受領）
 
 - **状況**: DEC-080 第 1 波完遂宣言 + β 開始 19 項目判定運用方針確認 atomic 完遂着地（commit `c0e0c19`+`9219cfb`+`03f2d64`）直後、オーナーは **CEO 推奨 C 案を承認 + DEC-081 起票指示** = 「DEC-081 起票 = β 開始前必須 2 項目 atomic（Sentry 実発火 + 月次予算 alert / 0.7 人日）→ dev sub-agent 委任 → trust-but-verify → commit/push → dashboard 更新」directive 受領 + O-2 = β 実子使用開始 GO 判定要請（DEC-081 完遂 + 4 step 完遂後）+ O-5 = 4 step 並走承認。

@@ -16,6 +16,8 @@
     "e2e:ui": "playwright test --ui",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate-hotfix-0019": "tsx --env-file=.env.local scripts/migrate-0019-hotfix.ts",
+    "db:migrate-hotfix-0019:dev": "tsx --env-file=.env.development.local scripts/migrate-0019-hotfix.ts",
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
     "format": "prettier --write .",
