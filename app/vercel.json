@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/streak-freeze-monthly",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/study-minutes-reminder",
+      "schedule": "0 12 * * *"
     }
   ],
   "functions": {
@@ -22,6 +26,9 @@
       "maxDuration": 300
     },
     "src/app/api/cron/streak-freeze-monthly/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/study-minutes-reminder/route.ts": {
       "maxDuration": 60
     },
     "src/app/api/ai/coach/route.ts": {

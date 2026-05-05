@@ -72,6 +72,8 @@ import {
   type CountdownVariant,
 } from "@/lib/study/countdown-variant";
 import { loadAccessoriesPageData } from "@/lib/actions/accessories";
+import { getTodayLearningSeconds } from "@/lib/actions/study-sessions";
+import { getLearnerStudyTarget } from "@/lib/actions/learner-study-target";
 import {
   getMessagesForLearner,
   markMessageRead,
@@ -273,6 +275,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     accessoriesPageData,
     messages,
     questSummary,
+    studyTarget,
+    todayStudySeconds,
   ] = await Promise.all([
     getCurrentStreak(db, learner.id),
     getDailySkillCounts(db, learner.id),
@@ -304,6 +308,15 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       console.error("[home] getOrGenerateTodayQuests failed:", err);
       return null;
     }),
+    // W12-T4 / DEC-078: 学習時間目標 + 今日の累計学習秒数 (「今日の目標 N 分」表示用)
+    getLearnerStudyTarget(learner.id).catch((err) => {
+      console.error("[home] getLearnerStudyTarget failed:", err);
+      return { dailyMinutesTarget: 15, reminderEnabled: true, reminderTime: "19:00" };
+    }),
+    getTodayLearningSeconds(learner.id).catch((err) => {
+      console.error("[home] getTodayLearningSeconds failed:", err);
+      return 0;
+    }),
   ]);
 
   const xp = xpRows[0] ?? { totalXp: 0, level: 1 };
@@ -322,6 +335,18 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const questClaimableCount = questSummary
     ? questSummary.quests.filter((q) => q.isClaimable).length
     : 0;
+
+  // W12-T4 / DEC-078: 今日の学習時間目標 + 達成状況
+  // 罰則ゼロ哲学 (DEC-024): 未達でも「失敗」「サボった」等の罰語ゼロ。優しい呼びかけのみ。
+  const todayStudyMinutes = Math.floor(todayStudySeconds / 60);
+  const studyTargetMinutes = studyTarget.dailyMinutesTarget;
+  const studyTargetAchieved = studyTargetMinutes === 0
+    ? null
+    : todayStudyMinutes >= studyTargetMinutes;
+  const studyTargetRemainingMinutes = Math.max(
+    0,
+    studyTargetMinutes - todayStudyMinutes,
+  );
 
   // 6. todaysMission target 配分 (1 分 = 1 問換算 / 4 スキル均等)
   const totalDailyMinutes = learner.dailyMinutesTarget ?? 60;
@@ -456,6 +481,29 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* W12-T4 / DEC-078: 今日の学習時間目標 (読み取り専用 / 罰則ゼロ哲学)
+          編集経路は親 settings (/parent/settings/notifications) に集約 */}
+      {studyTargetMinutes > 0 ? (
+        <section
+          className="mt-6"
+          data-testid="home-study-target-display"
+          data-target-minutes={studyTargetMinutes}
+          data-today-minutes={todayStudyMinutes}
+          data-achieved={studyTargetAchieved ? "true" : "false"}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">きょうの学習時間目標</CardTitle>
+              <CardDescription>
+                {studyTargetAchieved
+                  ? `目標の ${studyTargetMinutes} 分を達成しました。きょうも すばらしい がんばりです。`
+                  : `目標 ${studyTargetMinutes} 分のうち、いま ${todayStudyMinutes} 分。あと ${studyTargetRemainingMinutes} 分でゴールです。`}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </section>
+      ) : null}
 
       {/* W8-T5: 今日のゴール プログレスリング */}
       <section className="mt-8">

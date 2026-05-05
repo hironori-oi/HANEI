@@ -36,6 +36,7 @@ import {
 import { getLearnersForParent } from "@/lib/learner/repository";
 import { resolveActiveLearner } from "@/lib/study/learner-switch";
 import { getLearnerSettings } from "@/lib/actions/learner-settings";
+import { getLearnerStudyTarget } from "@/lib/actions/learner-study-target";
 import { NotificationsForm } from "./notifications-form";
 
 export const metadata = {
@@ -71,7 +72,10 @@ export default async function ParentSettingsNotificationsPage({
   }
 
   await requireLearnerOwner(session.userId, activeId);
-  const settings = await getLearnerSettings(activeId);
+  const [settings, studyTarget] = await Promise.all([
+    getLearnerSettings(activeId),
+    getLearnerStudyTarget(activeId),
+  ]);
 
   return (
     <main
@@ -107,6 +111,9 @@ export default async function ParentSettingsNotificationsPage({
             initialNotificationsEnabled={settings.notificationsEnabled}
             initialDailyReminderTime={settings.dailyReminderTime}
             initialSoundEnabled={settings.soundEnabled}
+            initialDailyMinutesTarget={studyTarget.dailyMinutesTarget}
+            initialStudyTargetReminderEnabled={studyTarget.reminderEnabled}
+            initialStudyTargetReminderTime={studyTarget.reminderTime}
           />
         </CardContent>
       </Card>

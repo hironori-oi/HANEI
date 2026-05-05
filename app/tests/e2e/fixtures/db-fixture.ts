@@ -75,6 +75,8 @@ export async function applyMigrations(client: Client): Promise<void> {
     "0017_w12_beta_invite.sql",
     // W12-T1 (Phase 3 第 1 波 / DEC-074 / M-1): learner_settings テーブル新設
     "0018_w12_t1_learner_settings.sql",
+    // W12-T4 (Phase 3 第 1 波 / DEC-078 / M-3): learner_study_targets テーブル新設
+    "0019_w12_t4_learner_study_targets.sql",
   ];
   for (const f of files) {
     const fp = path.join(migrationsDir, f);
@@ -135,6 +137,8 @@ export async function seedFixture(client: Client): Promise<{
 
   // 既存 seed を全削除 (冪等)
   for (const tbl of [
+    // W12-T4 (DEC-078): learner_study_targets も flush
+    "learner_study_targets",
     // W10-T5: study_sessions も flush (signup 起点の E2E は learner_id 別なので必須ではないが安全側)
     "study_sessions",
     // W10-T3: Daily Quest 行も flush (signup 起点の E2E は learner_id 別なので必須ではないが安全側)

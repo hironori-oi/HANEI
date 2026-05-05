@@ -54,6 +54,30 @@
 - **CEO 委任先**: dev 部門 sub-agent（前回 T2 と同パターン / 1 sub-agent 直委任 / **効率化指示**: 必読ファイル一括読込・同種作業 batch 化・検証は最後にまとめて・E2E は最後の最後に 1 回だけ）
 - **報告経路**: 標準フロー継承（dev 委任 → trust-but-verify → §実装完遂デルタ → commit/push → dashboard → CEO 報告 → T5 並走判断）
 
+### §実装完遂デルタ（2026-05-05 完遂）
+
+- dev sub-agent（agentId `ab4733aba1eba5acb` / tool_uses 101 / duration 869s / T1 sub-agent budget exhaustion 経験を踏まえた効率化指示が奏功 → 期限内完遂）に直委任 → 完遂着地
+- **新規 6 ファイル**: `drizzle/0019_w12_t4_learner_study_targets.sql` / `lib/study/learner-study-target-validate.ts` / `lib/actions/learner-study-target.ts`（mutation `updateLearnerStudyTarget` 新規 +1）/ `app/api/cron/study-minutes-reminder/route.ts` / `tests/unit/study.learner-study-target-validate.test.ts`（22 cases）/ `tests/e2e/study-target-set.spec.ts`（2 シナリオ × chromium + mobile-chrome）
+- **既存変更 6 ファイル**: `lib/db/schema.ts`（learnerStudyTargets table 定義 + 型 export）/ `vercel.json`（crons + functions 追加）/ `notifications-form.tsx`（学習時間目標 section 追加）/ `notifications/page.tsx`（getLearnerStudyTarget Promise.all fetch）/ `(app)/home/page.tsx`（「きょうの学習時間目標」 Card 読み取り表示追加）/ `tests/e2e/fixtures/db-fixture.ts`（migration + DELETE 追加）
+- **CEO trust-but-verify 直接実行 結果**:
+  - `bun run typecheck` PASS（warning 0 / error 0）
+  - `bun run lint` PASS（warning 0 / error 0）
+  - `bun run test` **868 PASS / 56 files**（baseline 846 + 新規 22 / regression 0 / 完全一致）
+  - `bun run build` PASS（page routes 24 → 25 / cron route 認識 / dev 報告通り）
+  - `bun run e2e tests/e2e/study-target-set.spec.ts --workers=1` **4/4 PASS**（chromium 2 + mobile-chrome 2）
+  - `bun run e2e tests/e2e/settings-smoke.spec.ts --workers=1` **10/10 PASS**（regression 0 確認 / notifications-form.tsx 変更影響なし）
+- **DEC-006 再拡張版数値遵守**: page **25/32**（margin 7）/ mutation **9/10（+1 / DEC-077 確保枠を予定通り消費）**（margin 1）/ GET API **11/15**（margin 4）= 全項目 within 上限 / mutation 残枠 1 = 次 atomic で消費すれば上限到達 → DEC-006 再々拡張要
+- **罰語 grep 0 件（user-facing）**: hit は全て (1) DEC-024 self-reference comment（DEC-074 §自己言及・引用は除外規定通り）/ (2) 既存 PRJ-016 で承認済 system error fallback「保存に失敗しました…」（5 既存 form と同一文字列 / 罰則ではない / DEC-076 §実装完遂デルタ §3-1 で既に CEO 承認済の不変方針継承）
+- **dev §7 確認事項 5 件への CEO 判断記録**:
+  1. **cron schedule `0 12 * * *` UTC = JST 21:00 適否**: **承認**（β 段階「夕食後 / 寝る前」timing は息子の生活リズムに整合 / β 開始後の微調整は別 DEC で対応）
+  2. **罰語 grep `失敗` 既存承認継続**: **承認**（DEC-076 §実装完遂デルタの判断を継承 / codebase 全体的な文言改修は将来 polish atomic 候補 / 本 atomic 不変）
+  3. **β tester 周知 = β 段階 push 通知未実装の事前周知**: **採用**（β 招待メール DEC-069 / W12-T3-A の文言 polish atomic に「β 段階ではアプリ内表示のみ。push 通知は近日対応予定」追加 / β 開始 19 項目判定の T3 atomic 着手時に夫婦明文化）
+  4. **mutation 9/10 と次回 atomic の制約**: **明確化済**（T5 = data only / mutation +0 / 並走可 / T6 以降の mutation +1 atomic は別 DEC で再々拡張前提 / DEC-077 §「次の +1 は限界」と整合）
+  5. **commit 単位**: **採用**（feat(W12-T4) パターン 1 commit / 12 ファイル一括 / 本 §実装完遂デルタ含む）
+- **β 開始 19 項目判定（DEC-074 §6）への寄与**: 「学習者の毎日継続」レイヤー = リマインド基盤完成（log only / β 段階で十分）+ 親が目標分数を可視・編集可（settings 統合）+ 学習者本人が「今日の目標 / 残り分数」を home で確認可 = β 開始判定の核心レイヤー実装着地。
+- **commit hash 記録（後段）**: 実装本体 + DEC-078 §実装完遂デルタ + dashboard 更新を本セクション記述後に commit/push。
+- **次の atomic（CEO 判断）**: T5 リスニング音源 seed（1.5 人日 / data only / mutation +0 / 並走可）→ T1 統合 + T2 + T4 完遂の連続着手フロー継続 / β 開始 19 項目判定 atomic（DEC-074 §6）が第 1 波完遂後に控える。
+
 ## DEC-077: DEC-006 再拡張 atomic = mutation 上限 8 → 10（+2）+ T4 / T6 用 top-level Server Action 枠確保 + Phase 3 第 1 波 T4 着手前提条件確定（息子実使用前提 / 0.1 人日 / Markdown のみ / コード変更ゼロ / オーナー判断要請含む）GO 判定（2026-05-05 / CEO 単独起票版）
 
 - **状況**: DEC-076 W12-T2 完遂着地（PRJ-016 `c147936`+`99994cb` / workspace `9aefddd` / mutation 8/8 維持達成 = page 24/32 / GET 10/15）。**mutation 残枠 0** のため、第 1 波残 atomics（**T4 学習時間目標 + cron** + T6 長期目標）の着手前に DEC-006 再拡張が前提条件。オーナー「徹底的に進めて」マンデート遵守の連続着手フロー継続のため CEO 単独で起票。

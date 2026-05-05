@@ -1276,6 +1276,55 @@ export const learnerSettings = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// 34. learner_study_targets (W12-T4 / Phase 3 第 1 波 / M-3 / DEC-078)
+//
+// 1 学習者 1 行 (learner_id UNIQUE).
+//
+// 親が parent settings (/parent/settings/notifications) から「学習時間目標」section で編集する.
+// 既存 learner_profiles.dailyMinutesTarget (home todaysMission の target 配分用 / 60 分既定) と
+// 別概念として並走する (本テーブルは「今日の目標 N 分」軽量表示 + 日次リマインド cron 用 /
+// 15 分既定 / 0-180 分 range).
+//
+// フィールド:
+//   - daily_minutes_target: 0-180 分の整数 (default 15 分)
+//   - reminder_enabled:     目標達成リマインドを送るか (default true)
+//   - reminder_time:        'HH:MM' 24h (default '19:00')
+//
+// 三層認可 (DEC-003):
+//   - 第二層: 親 settings page で requireAuth + requireParent + requireLearnerOwner.
+//   - 第三層: learner_id 経由で family_id 間接 scope.
+//
+// 罰則ゼロ哲学 (DEC-024): リマインド文言は「今日も少しずつ頑張ろうね」等の優しい呼びかけのみ.
+// 冪等性 (DEC-055): learner_id UNIQUE で upsert 結果が同一入力で同一. cron 同日 2 回叩いても安定.
+// ---------------------------------------------------------------------------
+export const learnerStudyTargets = sqliteTable(
+  "learner_study_targets",
+  {
+    id: text("id").primaryKey(),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learnerProfiles.id, { onDelete: "cascade" }),
+    /** 0-180 分の整数 (default 15 分) */
+    dailyMinutesTarget: integer("daily_minutes_target").notNull().default(15),
+    /** 目標達成リマインドを送るか (default true) */
+    reminderEnabled: integer("reminder_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    /** リマインド時刻 'HH:MM' (24h) (default '19:00') */
+    reminderTime: text("reminder_time").notNull().default("19:00"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    uniqLearner: uniqueIndex("learner_study_targets_learner_idx").on(t.learnerId),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Drizzle inferred types
 // ---------------------------------------------------------------------------
 export type User = typeof users.$inferSelect;
@@ -1349,3 +1398,7 @@ export type NewBetaInviteCode = typeof betaInviteCodes.$inferInsert;
 // W12-T1 / Phase 3 第 1 波 / learner_settings (DEC-073 / DEC-074 / M-1)
 export type LearnerSettings = typeof learnerSettings.$inferSelect;
 export type NewLearnerSettings = typeof learnerSettings.$inferInsert;
+
+// W12-T4 / Phase 3 第 1 波 / learner_study_targets (DEC-078 / M-3)
+export type LearnerStudyTarget = typeof learnerStudyTargets.$inferSelect;
+export type NewLearnerStudyTarget = typeof learnerStudyTargets.$inferInsert;
