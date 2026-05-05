@@ -1,5 +1,74 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-081: β 開始前必須 2 項目 atomic（Sentry 実発火必須化 + 月次予算 alert / 0.7 人日 / GET +1 = 11→12/15 / cron +1 = 4→5 / page +0 / mutation +0）GO 判定（2026-05-05 / DEC-080 完遂直後 / オーナー O-1 = CEO 推奨 C 案承認受領）
+
+- **状況**: DEC-080 第 1 波完遂宣言 + β 開始 19 項目判定運用方針確認 atomic 完遂着地（commit `c0e0c19`+`9219cfb`+`03f2d64`）直後、オーナーは **CEO 推奨 C 案を承認 + DEC-081 起票指示** = 「DEC-081 起票 = β 開始前必須 2 項目 atomic（Sentry 実発火 + 月次予算 alert / 0.7 人日）→ dev sub-agent 委任 → trust-but-verify → commit/push → dashboard 更新」directive 受領 + O-2 = β 実子使用開始 GO 判定要請（DEC-081 完遂 + 4 step 完遂後）+ O-5 = 4 step 並走承認。
+- **判定**: **GO**（DEC-081 = β 開始前必須 2 項目 atomic / **0.7 人日** / **page +0**（25/32 不変）/ **mutation +0**（9/10 不変）/ **GET +1**（11/15 → 12/15 / margin 3）/ **cron +1**（4 → 5））。
+- **判断根拠**:
+  1. **β 開始 19 項目判定 RED 5 件のうち 2 件を直接 GREEN 化**: Sentry 実発火必須化（観測性 RED → GREEN）+ 月次予算 alert（コスト止血 RED → GREEN）= β 実子使用開始の最低限の運用基盤完成。
+  2. **既存基盤の段階拡張**: `sentry.{client,server,edge}.config.ts` (DEC-071 env 化済 / 4 ファイル) + `docs/sentry-alert-setup.md` (4 ルール手順既存) = SDK 設定 + UI 手順は完備、本 atomic は **故意発火 endpoint + 月次予算 alert cron + runbook 拡張** で実発火可能化に絞れる。
+  3. **DEC-006 上限内余裕**: GET 11/15（margin 4）+ cron 4 (上限なし) → +1 で 12/15（margin 3）= mutation 残枠 1（9/10）と独立軸 / page 不変 = β 後の T6 長期目標（mutation +1 = 10/10）と非衝突。
+  4. **オーナー手元 4 step（リスニング音源投入）並走可**: DEC-081 = コード変更（cron / endpoint / runbook）+ DEC-082 (β 後並走) = 別 atomic / 4 step = データ投入 = 完全独立 = O-5 推奨通り並走実行可能（DEC-081 着手と同時に 4 step を別ターミナルで実行可）。
+  5. **既存 cron pattern 完全踏襲**: `streak-freeze-monthly` / `study-minutes-reminder` の `x-vercel-cron-signature` + Bearer CRON_SECRET 二重認可 + per-row fail-soft + JST 境界判定パターンを `monthly-budget-alert` で完全継承 = 規模感 0.4 人日。
+  6. **罰則ゼロ哲学準拠**: admin 専用 / cron 専用 endpoint = user-facing 文言なし / DEC-024 影響なし。
+- **本 atomic スコープ（含むもの）**:
+  - **月次予算 alert cron route 新規**: `app/src/app/api/cron/monthly-budget-alert/route.ts`
+    - schedule: `0 0 * * *` UTC = JST 9:00 毎日（vercel.json 設定）
+    - 認可: `x-vercel-cron-signature` または `Bearer CRON_SECRET` 二重認可（既存 pattern）
+    - 集計: `ai_coach_messages.cost_jpy` 当月 SUM（UTC 月初〜現在 / sql aggregate-only / DEC-076・DEC-078 継承）
+    - 閾値判定: `MONTHLY_BUDGET_JPY` env（default 3000）の **80% (¥2,400) / 100% (¥3,000) / 120% (¥3,600)** 3 段階
+    - Sentry capture: `Sentry.captureMessage("HANEI monthly budget alert: <pct>", "warning")` + log
+    - DB write 0 / log + Sentry のみ / 1 day 1 alert（同日重複通知防止 = sentry message 重複は Sentry 側で fingerprint 集約）
+    - per-row fail-soft 不要（1 query で集計）
+  - **故意発火 admin endpoint 新規**: `app/src/app/api/admin/sentry-test/route.ts`
+    - GET handler / クエリ `?level=error|warning|fatal` で 3 分岐
+    - 認可: `requireAdminAuth()`（Better Auth admin role / オーナーのみ通る）/ parent / learner は 401
+    - 動作: `Sentry.captureException(new Error("[sentry-test] level=<level> at <ISO>"))` + 200 OK 応答（オーナーが 1 回叩いて email 到達確認 → 即 resolve / β 前最終 smoke）
+    - 罰則ゼロ準拠（admin 専用 / user-facing 文言なし / message は admin 内部用）
+  - **vercel.json cron 追加**: `monthly-budget-alert` schedule + functions maxDuration 60
+  - **runbook 拡張**: `docs/sentry-alert-setup.md`
+    - § 7. 故意発火による実発火確認手順（5 step / `/api/admin/sentry-test?level=warning` 経由 / Sentry UI で issue 確認 / email 到達確認 / resolve / β 前必須）
+    - § 8. 月次予算 alert ルール（Sentry UI 側設定 / `event.message` contains "monthly budget alert" → email / `event.level` = warning）
+    - § 9. β 開始前 4 ルール + 月次予算 alert + 故意発火 = 6 step オーナーチェックリスト
+  - **unit test**:
+    - `tests/unit/cron.monthly-budget-alert.test.ts`: 閾値判定（¥0 / ¥2,399 / ¥2,400 / ¥3,000 / ¥3,600 の 5 cases）+ cron secret 認可（401 / 200）+ Sentry mock 検証 + sql aggregate-only
+    - `tests/unit/admin.sentry-test.test.ts`: admin 認可 PASS / parent 401 / learner 401 / level クエリ 3 分岐 / Sentry mock 検証
+  - **dev report**: `projects/PRJ-016/reports/dev-w12-dec081-sentry-budget-alert-done.md`（実装サマリ + オーナー実行手順 6 step + 環境変数追加 `MONTHLY_BUDGET_JPY` + Sentry UI 設定追加 ルール 5）
+- **本 atomic スコープ（含まないもの = β 後 DEC-082）**:
+  - DB backup RUNBOOK（DEC-082 / Turso CLI snapshot 手順 + 復元手順 + 月次実行頻度）
+  - cost guard 超過テスト（DEC-082 / `isOverDailyLimit` 単体テスト + E2E で実超過模擬）
+  - オーナー本人 smoke 実施（DEC-082 / β + 14 日内 / フル経路通し / SEV-1 候補洗い出し）
+  - Sentry UI alert rule 4 件設定 + 月次予算 alert UI 設定 + 故意発火実発火確認（オーナー作業 / docs 手順完備 / 本 atomic 範囲外）
+  - 退会系 reauth gate / null 化実演（第 2 波 T10 / β 段階で機能なし = N/A）
+- **制約厳守**:
+  - DEC-024 罰則ゼロ哲学（admin / cron route のみ / user-facing 文言なし / 既存 4 ルールは admin email 通知 = 露出なし）
+  - DEC-003 三層認可（cron = secret 二重認可 / admin = `requireAdminAuth()` / parent + learner は 401）
+  - DEC-006 再拡張版（page **25/32** 不変 / mutation **9/10** 不変 / GET **11→12/15** + 1 / cron **4→5** + 1）
+  - DEC-055 冪等性（cron 1 day 1 run / Sentry message fingerprint で重複集約 / admin endpoint は side-effect なし = idempotent by design）
+  - DEC-068 per-row fail-soft（集計は 1 query / per-row 不要だが try/catch で Sentry capture 自体の失敗を 200 で吸収）
+  - DEC-074 reauth gate 不要（admin endpoint は β 前 smoke / 通常運用なし / オーナー本人のみアクセス）
+  - SQL aggregate-only（DEC-076 / DEC-078 継承 / `cost_jpy` の row data 直接取得なし）
+  - 罰語 grep 0 件（runbook + cron route + endpoint + test 全件）
+- **受入基準**:
+  - [ ] `bun run typecheck` PASS（warning 0）
+  - [ ] `bun run lint` PASS（warning 0）
+  - [ ] `bun run test` 890+ PASS（baseline 881 + 新規 unit test 5+3=8 cases / regression 0）
+  - [ ] `bun run build` PASS（page routes **25 不変** / cron route 5 認識）
+  - [ ] DEC-006 再拡張版上限不変（page 25/32 / mutation 9/10 / GET 12/15 = 上限内）
+  - [ ] 既存 E2E regression 0（study-smoke / study-writing-smoke / study-listening-eiken3 / study-target-set / settings-smoke / family-* / session-cumulative）
+  - [ ] 罰語 grep 0 件（cron route + admin endpoint + runbook + unit test）
+  - [ ] `docs/sentry-alert-setup.md` § 7-9 追記完備（故意発火手順 + 月次予算 alert UI 設定 + β 開始前 6 step チェックリスト）
+  - [ ] dev report に「オーナー実行手順 6 step」（4 alert rule UI 設定 + 月次予算 alert UI 設定 + 故意発火 1 回実発火確認 + email 到達確認 + resolve + β 開始 GO 報告）明記
+- **後続 atomic 候補**:
+  - **DEC-081 完遂 + オーナー手元 4 step 完遂直後**: β 実子使用開始 GO 判定要請（オーナー本人判断 / O-2 既決）
+  - **β 開始後 DEC-082**: β 後並走 3 項目 atomic（cost guard 超過テスト + DB backup RUNBOOK + オーナー本人 smoke / 0.4 人日 / β + 14 日内完遂目安）
+  - 第 2 波 T6（長期目標 / mutation +1 = 10/10 上限ジャスト / β + 14 日 KPT 後）
+  - 第 2 波 T10（退会系 / DEFERRED 解消 / β + 30〜60 日）
+- **CEO 委任先**: dev 部門 sub-agent（T4・T5 と同パターン / 1 sub-agent 直委任 / 効率化指示継承: 必読ファイル一括読込 / 既存 cron pattern 踏襲 / Sentry mock テンプレ既存利用 / E2E 不要 / unit test のみ）
+- **報告経路**: 標準フロー継承（dev 委任 → trust-but-verify → §実装完遂デルタ → commit/push → dashboard → β 開始 GO 判定要請 → DEC-082 起票）
+
+---
+
 ## DEC-080: Phase 3 第 1 波完遂宣言 + β 開始 19 項目判定 運用方針確認 atomic（planning only / コード変更ゼロ / 0.25 人日 / オーナー判断 gate）GO 判定（2026-05-05 / DEC-079 完遂直後 / オーナー B 案承認受領）
 
 - **状況**: DEC-079 W12-T5 リスニング音源 seed atomic 完遂着地（vitest 881 / E2E 14/14 + DRY_RUN seed 842 + DRY_RUN tts ¥3.30 全 GREEN）= **Phase 3 第 1 波 5.5 人日のうち 4.25 人日完遂**（T1 統合 + T2 + T4 + T5）。残 1.25 人日 = **β 開始 19 項目判定 運用系 atomic**。CEO は T5 完遂報告で A 案（残運用系を CEO 単独判断で一括 atomic 化）/ B 案（一旦オーナーへ第 1 波完遂報告 + 運用方針確認）を比較提示し、オーナーは **B 案承認** = 「一旦オーナーへ第 1 波完遂報告 + β 開始判定の運用方針確認 / 推奨通り進めてください」directive 受領。
