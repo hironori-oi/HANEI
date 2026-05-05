@@ -1,5 +1,88 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-072: Phase 2 完遂直後 = W11 KPT 反映 knowledge 蓄積 atomic（patterns 7 + decisions 6 + pitfalls 7 = 計 20 件 / `organization/knowledge/` 横断 v2 体系明文化）GO 判定（2026-05-05 / CEO 着手判断版）
+
+- **状況**: DEC-071 完遂 / commit `25abbb3` (origin/main HANEI repo) push / Phase 2 全体 100% 完遂 / β リリース可能状態完成 / W12 atomic 7/7 完遂。オーナー継続マンデート「(B) knowledge 蓄積 atomic を進めていきましょう」受領。secretary `reports/secretary-w11-kpt.md` §6 で **knowledge 蓄積候補マッピング 20 件（patterns 7 + decisions 6 + pitfalls 7）が完全リストアップ済 = 設計骨子完全準備状態**。`organization/knowledge/` v2 体系（PAT-NNN / DEC-NNN / PIT-NNN / YAML frontmatter + Markdown / DEC-019-033 拡張ルール準拠）の README + schema 確認済。
+- **判定**: **GO**（knowledge 蓄積 atomic / 0.75 人日 / **secretary §6 マッピング表完全流用 / コード変更 0 / Markdown 文書 20 件のみ = DEC-006 完全不変 / 既存 dev/review report 20+ 件を引用源に活用**）。
+- **判断根拠**:
+  1. **オーナー指示**: 「(B) knowledge 蓄積 atomic を進めていきましょう」= Phase 3 着手前の組織知定着フェーズに入る GO サイン。
+  2. **secretary §6 完全準備**: マッピング表に「候補ファイル / 由来 / PII redaction 必要性」が 3 サブディレクトリで合計 20 件揃っており、各 atomic ファイルの位置情報 + 引用源 dev/review report が一意に確定済。
+  3. **既存 v2 format 確立**: `_meta/schema.yaml` + 各 README.md + 既存 PAT-001 / DEC-001 / PIT-001 / PIT-002 が format 確立済 = テンプレ流用で frontmatter / セクション構成は固定化。
+  4. **DEC-006 完全不変 + コード変更 0**: 本 atomic はコード（src/`, app/`）に一切触れず `organization/knowledge/` 配下のみ Markdown 追加 = build / typecheck / lint / vitest / E2E 全てに影響ゼロ = regression risk 構造的ゼロ。
+  5. **横展開価値**: PRJ-017 ホメコト Phase 2 / PRJ-019 Open Claw 提案生成（HITL 第 9 種 dev_kickoff_approval 直前）で即座に retrieval 活用可能 = Phase 2 完遂直後の最良タイミング。
+  6. **3 並列着手戦略**: patterns 7 件（research 部門委任 / 技術パターン文献化）+ decisions 6 件（secretary 部門委任 / 設計判断ログ整理）+ pitfalls 7 件（dev 部門委任 / 技術詳細・症状・対処の正確性）= 異なる subdirectory への書込で衝突ゼロ + 並列実行で時間短縮。
+- **本 atomic スコープ（CEO 確定）**:
+  - **含む（必須）**:
+    - **patterns/ 7 件 (PAT-002 〜 PAT-008)**:
+      1. `PAT-002-turbopack-use-server-export-isolation.md` — 純関数 + server-only helper + Server Component 直 import の三層分離（W10-T5 / W11-T1 / T3 / T2 / T5 で 5 度連続成功 / 11 度目組織知化 = T3-C 含む）
+      2. `PAT-003-family-scope-sql-coppa-guarantee.md` — SQL `learner_profiles.family_id = ?` を WHERE 必須化することで COPPA 構造保証（W11-T3 / T2 / T5 適用）
+      3. `PAT-004-promise-all-per-task-fail-soft.md` — `Promise.all` + per-task try/catch fallback で 1 部分の失敗が dashboard 全体を落とさない fail-soft 設計（W11-T3 / T5 / DEC-067 monthly cron 適用）
+      4. `PAT-005-atomic-update-where-race-safe.md` — 純関数 `shouldUpdate=false` 時の DB UPDATE 短絡 + SQL `WHERE id=? AND (last IS NULL OR last <> ?)` の二重保証（W11-T1 / DEC-060 適用）
+      5. `PAT-006-answered-view-snapshot.md` — Next.js 16 auto-revalidation × `key={problem.id}` 衝突回避の prevProblemId pattern + answeredView snapshot（W11-followup / DEC-064 適用）
+      6. `PAT-007-no-emoji-children-ui-icons-only.md` — Heroicons + KotodamaWakatoriSvg のみで絵文字ゼロ（W11 全体 / 子供向け UI トーン担保）
+      7. `PAT-008-db-direct-insert-readpath-e2e.md` — preexisting write-path regression 回避時の戦略 = DB 直 INSERT → 親 dashboard 訪問 → 表示属性 assert（W11-T1 戦略転換から W11-T5 まで継続）
+    - **decisions/ 6 件 (DEC-002 〜 DEC-007)**:
+      1. `DEC-002-structural-no-punishment-philosophy.md` — DEC-024 罰則ゼロの構造的封鎖（純関数戻り値設計 / catalog pre-curated / 1224 ranking / E2E `not.toContain` 機械化）
+      2. `DEC-003-existing-foundation-reuse-priority.md` — DEC-062 trust-but-verify による工数 50% 削減（既存基盤検索を DEC 起票必須プロセスに格上げ）
+      3. `DEC-004-actual-scope-correction-via-diag.md` — DEC-064 atomic 着手前 DIAG spec で実態スコープ訂正（草案 vs 実態のズレ早期発見）
+      4. `DEC-005-template-vs-custom-moderation-split.md` — DEC-062 テンプレ送信 moderation skip / custom body のみ通す（UX 自己矛盾回避）
+      5. `DEC-006-leaderboard-coppa-1224-rank-no-loser.md` — DEC-061 COPPA + 1224 ranking で「最下位」概念を構造的に持たない型システム保証
+      6. `DEC-007-encouragement-copy-deterministic-seed.md` — DEC-063 ISO 週 + familyId codePoint sum mod N で deterministic 選択
+    - **pitfalls/ 7 件 (PIT-003 〜 PIT-009)**:
+      1. `PIT-003-nextjs-16-server-action-key-unmount.md` — auto-revalidation × `key={problem.id}` で StudyClient unmount → setFeedback 値破棄（DEC-064 由来）
+      2. `PIT-004-turbopack-use-server-sync-export-ban.md` — `"use server"` 配下に sync export を置くと Turbopack build error（W10-T5 起源 / W11 全体で再適用）
+      3. `PIT-005-sqlite-busy-fully-parallel-flaky.md` — `fullyParallel=true` + file: SQLite で SQLITE_BUSY 多発（W11-T1 〜 T5 横断）
+      4. `PIT-006-openai-api-key-leaking-into-e2e.md` — `.env.local` の本番 API key が E2E webServer に漏れて flaky 化（DEC-064 追補 / **PII redaction 要 = API key 例示部分を `sk-...REDACTED` 化**）
+      5. `PIT-007-seed-too-few-causes-component-unmount.md` — writing-3 が 1 問で次問 null → page.tsx branch 切替 → snapshot 失効（DEC-064 追補）
+      6. `PIT-008-preexisting-regression-mid-atomic-discovery.md` — 着手中盤に発覚する preexisting regression と E2E 戦略転換（W11-T1 起源 / DEC-064 修復）
+      7. `PIT-009-empty-foundation-search-before-dec.md` — 既存基盤未検索による DEC 草案の工数過大見積（DEC-062 起源 / 工数 -50% 機会損失リスク）
+    - **format 厳守**: 各ファイルは README.md / `_meta/schema.yaml` 準拠の YAML frontmatter + Markdown セクション構成で起票。
+  - **含まない（持ち越し）**:
+    - `organization/knowledge/INDEX.md` への 20 件追記（次 atomic / 0.1 人日 / 任意）
+    - `organization/rules/atomic-estimation.md` 新規（T-7 工数バッファ規約 / 別 atomic / 0.25 人日）
+    - PRJ-017 ホメコト / PRJ-019 Open Claw への retrieval 統合実装（別案件 / 0.5 人日）
+    - 既存 v1 ファイル（P-{DOMAIN}-NNN）からの v2 再起票（必要時のみ）
+- **制約厳守 (継承)**:
+  - DEC-024 罰則ゼロ哲学（全 20 文書で「不具合」「失敗」「無効」「不正」「だめ」「やる気」「クレーム」grep 0 件 / 自己言及・引用は除外）
+  - DEC-006 GET 10 / mutation 5 / 25 routes 構造完全不変（コード変更 0）
+  - DEC-019-033 拡張ルール準拠（YAML frontmatter / 3 サブディレクトリ構造 / PII redaction 明示）
+  - PII 自動 redaction（API key / 個人 email / 顧客名）は PIT-006 のみ該当 = `sk-...REDACTED` 化
+- **受入基準**:
+  - 20 ファイル新規作成（patterns/ 7 + decisions/ 6 + pitfalls/ 7）
+  - 各ファイル frontmatter が `_meta/schema.yaml` 準拠（id / type / title / source_prj / source_dec or source_decisions / tags / confidence / last_validated / hitl_pii_reviewed の 8 必須）
+  - patterns/ は 5 セクション (Context / Structure / Examples / Trade-offs / Related) 厳守
+  - decisions/ は 6 セクション (Context / Alternatives Considered / Rationale / Consequences / Validation Hypothesis / Related) 厳守
+  - pitfalls/ は 4 要素 (Symptom / Root Cause / Mitigation / Prevention) + 任意 Detection / Related 厳守
+  - 各ファイル 800〜5,000 字目安（空文書ゼロ）
+  - DEC-024 罰語 grep 0 件
+  - 既存 PAT-001 / DEC-001 / PIT-001 / PIT-002 と同等以上の品質
+  - 連番衝突なし（PAT-002〜008 / DEC-002〜007 / PIT-003〜009）
+  - review APPROVE
+- **CEO 委任先（3 並列）**:
+  - 軸-1 **research 部門**: patterns/ 7 件起草（技術パターン文献化 / 構造図 + コード例 + トレードオフが得意領域）
+  - 軸-2 **secretary 部門**: decisions/ 6 件起草（設計判断ログ整理 / Context + Alternatives + Rationale + Consequences の整理が得意領域 / KPT 起草実績あり）
+  - 軸-3 **dev 部門**: pitfalls/ 7 件起草（技術詳細・症状・対処の正確性 / 実装現場経験を活かした 4 要素テンプレ / PIT-006 PII redaction 注意）
+- **報告経路**: 3 部門 report → trust-but-verify → review → §実装完遂デルタ → commit/push（claude-code-company workspace repo）→ dashboard → CEO 報告 + Phase 3 移行準備視野。
+- **§実装完遂デルタ（2026-05-05 / Trust-but-Verify + 独立 review GREEN 後追記）**:
+  - **3 並列委任完遂**: research（patterns 7 件 / 約 32,700 字）+ secretary（decisions 6 件 / 約 28,533 字）+ dev（pitfalls 7 件 / 約 46,304 字）= **計 20 ファイル / 約 107,500 字** が `organization/knowledge/` 配下に新規作成。subdirectory 衝突ゼロ、並列実行で時間短縮達成。
+  - **Trust-but-verify GREEN**:
+    - 20 ファイル全て存在確認（patterns/PAT-002〜008 / decisions/DEC-002〜007 / pitfalls/PIT-003〜009）
+    - frontmatter spot-check 3 件（PAT-002 / DEC-005 / PIT-006）= schema.yaml 8 必須フィールド + type 別必須（pattern: applicable_to / adr: status+superseded_by / pitfall: severity）全件準拠
+    - DEC-024 罰語 grep 結果 = DEC-002 line 20 / 55 のみで、いずれも禁止語リスト定義文脈（self-reference / quotation）= 仕様通り除外。他 19 ファイルは罰語ゼロ。
+    - PIT-006 PII redaction 確認: `sk-[A-Za-z0-9]{10,}` 厳密 grep 0 件 / `hitl_pii_external_publish: false` + `hitl_pii_reviewed: true` 設定済 / 冒頭 + 末尾の二重防御注意書き完備
+  - **独立 review (code-reviewer agent) = GREEN**:
+    - 5 軸（schema 準拠 / セクション構造 / 罰則ゼロ / PII 保護 / 内容質）全 GREEN
+    - 致命的問題（RED）= 該当なし
+    - 任意改善（YELLOW）3 件提示（PAT 群の related 多様性 / DEC-002 罰語リスト machine-marker / PIT-006 detection regex 強化）= Phase 3 移行を阻害しない範囲、後続 atomic で吸収可
+    - 全体総評: **Phase 3 移行可**
+  - **DEC-006 完全不変確認**: コード変更ゼロ（src / app / migrations 一切無変更）= build / typecheck / lint / vitest / E2E に regression 構造的ゼロ。
+  - **横展開準備完了**: PRJ-017 ホメコト Phase 2 / PRJ-019 Open Claw 提案生成（HITL 第 9 種 dev_kickoff_approval 直前）で即 retrieval 活用可能な v2 構造化ナレッジが完備。
+  - **次の atomic 候補**:
+    1. **W12-T4 ストレステスト atomic**（β 招待者 5〜10 名想定 / Sentry alert 実発火検証 / 0.5 人日）
+    2. **Phase 3 計画立案 atomic**（広告マネタイズ + 招待コード expansion + 段階的 GA 移行 / 0.5 人日）
+    3. **knowledge/INDEX.md 整備 atomic**（v1 + v2 統合 INDEX / 検索性向上 / 0.1 人日 / 軽量）
+    4. **PRJ-019 Open Claw 提案生成への knowledge retrieval 統合**（別案件 / 0.5 人日）
+
 ## DEC-071: Phase 2 W12 第 7 atomic = W12-T3-C 緊急 hotfix 体制 + Sentry alert 強化 + α→β 移行アナウンス（W12 / Phase 2 完遂 atomic）GO 判定（2026-05-05 / CEO 着手判断版）
 
 - **状況**: DEC-070 完遂 / commit `cb0eacf` (origin/main HANEI repo) push / E2E **beta-feedback 4 + admin-kpi 4 + shop 6 = 14 PASS** / vitest **55 files / 846 PASS** / next build **25 routes** / Phase 2 進捗 **98.5% → 99%** / W12 進捗 **90% → 95%（5/5 + T3-A + T3-B 完遂 / 残 T3-C のみ）**。並列軸-2 research が `reports/research-w12-t3-c-design-skeleton.md` (507 行) を提出済 = 設計骨子完全準備状態。オーナー「CEO 推奨で進めて / どんどん進めていきましょう」継続マンデート受領。
