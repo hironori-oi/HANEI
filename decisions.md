@@ -1,5 +1,85 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-074: T0 = Phase 3 前提整備 atomic = DEC-006 拡張正式起票 + オーナー判断 10 件決議記録 + 第 1 波着手順序確定（息子実使用前提 / 0.1 人日 / Markdown のみ / コード変更ゼロ）GO 判定（2026-05-05 / CEO 着手判断版）
+
+- **状況**: DEC-073 完遂着地（PRJ-016 commit `f485c49` + `68538ae` / workspace `7e182cd` / dashboard 反映 / push 完遂）+ **オーナー Phase 3 全体 WBS 提示への即時 10 件判断受領**: O-1〜O-10 全件 A 採択（O-4 は「CEO にお任せ」= 推奨 Better Auth reauth で確定 / O-7 は CEO 推奨 100 ターン/月 → **オーナー 500 ターン/月 採択** = 5 倍拡大）+ 「続きを進めてください」明示 directive。
+- **判定**: **GO**（T0 = 前提整備 atomic / **0.1 人日** / decisions.md + dashboard 更新のみ / コード変更ゼロ / DEC-006 完全不変）。
+- **判断根拠**:
+  1. **オーナー全 10 件確定 + 「速やかに」明示**: T0 atomic 即時着手 GO + 第 1 波 atomics（T1〜T5）連続着手準備完了。
+  2. **本 atomic = Markdown のみ**: build / typecheck / lint / vitest / E2E 全てに regression 構造的ゼロ。
+  3. **DEC-006 完全不変**: 本 atomic は「DEC-006 拡張」を**正式起票するだけ**であり、実装によって route が増えるのは T1〜T11 atomic の段階で起こる。本 atomic 段階では DEC-006 は文書上で拡張された状態になるが、コード上の route 数は 25 のまま。
+  4. **第 1 波 atomic 起票・dispatch 可能状態**: 10 件 A 採択により blocker 解消 = T1 atomic（settings 全体 + reauth dialog 統合）を即時 dev 委任可能。
+- **本 atomic スコープ（CEO 確定）**:
+  - **(a) DEC-006 拡張正式起票**:
+    - page routes: 25 → **32**（+7）
+    - GET API routes: 10 → **15**（+5）
+    - Server Actions / mutation: 5 → **8**（+3）
+    - 既存「不変条件としての厳守」哲学は維持（拡張版を新基準として継承）
+  - **(b) DEC-006 本来意図再定義**:
+    - 「mutation 5 / 拡張後 8」= **page route から直接呼ばれる top-level Server Action 数**であり、helper / private fn は対象外。
+    - dev report §3.3-§3.4 で確認済の「現状 38 個 Server Action 既存」事実との整合性確保（38 個は helper / private fn を含む / top-level mutation は 5 個維持）。
+  - **(c) オーナー判断 10 件決議記録**:
+
+    | # | 項目 | 決議 |
+    |---|---|---|
+    | O-1 | DEC-006 拡張承認（routes 25→32 / GET 10→15 / mutation 5→8） | **A. 承認** |
+    | O-2 | 段階配信 vs 一括 release | **A. 段階配信**（第 1 波完遂後即 β 開始） |
+    | O-3 | OpenAI 月次予算上限 | **A. ¥3,000/月** |
+    | O-4 | 親パスワード再入力方式 | **CEO お任せ → A. Better Auth reauth（5 分有効）** |
+    | O-5 | 辞書 API 採用 | **A. Free Dictionary API + 自前 glossary 併用** |
+    | O-6 | TTS 段階導入 | **A. Web Speech API → OpenAI TTS 段階移行** |
+    | O-7 | AI チャット月次回数上限 | **A. 500 ターン/月**（CEO 推奨 100 から 5 倍拡大採択） |
+    | O-8 | 退会時データ削除粒度 | **A. 論理削除 + 個人情報 null 化** |
+    | O-9 | β 開始 deadline | **A. 第 1 波完遂直後（2026-05 月内 / 完成次第速やかに）** |
+    | O-10 | リマインド経路 | **A. email 先行 / Web Push は β + 1 ヶ月評価で再検討** |
+
+  - **(d) O-7 500 ターン/月 拡大によるコスト再試算**:
+    - **旧試算**（CEO 推奨 100 ターン）: 100 × ¥3 = ¥300/月
+    - **新試算**（オーナー採択 500 ターン）: 500 × ¥3 = **¥1,500/月（5 倍）**
+    - **1 ユーザー月次総計**: writing ¥30 + TTS ¥150（cache hit 後 0）+ moderation ¥10 + AI チャット ¥1,500 = **¥1,690/月**（cache hit 後 ¥1,540）
+    - **O-3 cap ¥3,000/月 内**: マージン **44%**（β1 名運用 = 余裕あり）
+    - **β5〜10 名規模拡大 trigger**: 同時 5 名で ¥1,690 × 5 = ¥8,450/月 → cap 超過 = **規模拡大時に O-3 cap 再評価必須化**（W12-T4 ストレステスト並走 + cost monitoring 検証で trigger 化）
+    - **構造的 cost guard**: 既存 `¥10/user/日` cap（rate limit + per-day quota）= 1 ユーザー × 30 日 = ¥300/月の hard limit。500 ターン 1 ヶ月で ¥1,500 想定だが、`¥10/user/日` cap が成立すれば実コストは ¥300/月で頭打ち = 構造的に O-3 ¥3,000/月 cap を遵守。**T11 着手前に hard limit 動作を実機で確認必須**。
+  - **(e) 第 1 波 5 atomics 着手順序確定**:
+    1. **T1 統合 atomic**（T1 settings 全体 + T3 親パスワード reauth dialog 統合 / **1.25 人日** / CEO WBS §1.1 で「T1 統合可」表記の通り）
+    2. T2 受験日学習者 UI（0.5 人日）
+    3. T4 学習時間目標 + cron（1.0 人日）
+    4. T5 リスニング音源 seed（1.5 人日）
+    - 計 4.25 人日 + バッファ = **約 5.5 人日**で β 実子使用開始可能
+  - **(f) β 開始判定基準 19 項目確定**: CEO WBS §6 内容を採用（基本 13 項目 + Sentry 実発火必須化 + cost cap 超過 UX 検証 + 退会 reauth gate 動作確認 + 退会後 null 化実演 + DB バックアップ復元 RUNBOOK + 実演 + Vercel/Supabase/OpenAI 月次予算 alert 3 件）
+  - **(g) 持ち越し評価 trigger 確定**:
+    - **dev T6.5（OpenAI TTS 切替）**: β + 1 ヶ月運用後の Web Speech API cache hit 率 + 子の発音再生回数次第で着手判断
+    - **dev T5b（辞書検索履歴 + `dictionary_lookup_history`）**: 親 dashboard で「子の検索 top 10 単語」価値検証後に着手判断
+    - **M-5（同上 / dev T5b 連動）**: dev T5b と同タイミング着手
+- **制約厳守 (継承)**:
+  - DEC-024 罰則ゼロ哲学（本 DEC 起票文書 grep 0 件 / 自己言及・引用は除外規定通り）
+  - DEC-003 三層認可（個別 atomic 着手時に展開）
+  - **DEC-006 拡張版**: routes 32 / GET 15 / mutation 8 を以後の不変条件として確立（本 atomic は文書上の起票のみ / 実装で route 増加するのは T1〜T11 段階）
+  - DEC-055 idempotency
+- **受入基準**:
+  - decisions.md 冒頭に DEC-074 が起票されている
+  - DEC-006 拡張版の数値（GET 15 / mutation 8 / page routes 32）が記述されている
+  - DEC-006 本来意図再定義（mutation = top-level Server Action）が記述されている
+  - オーナー判断 10 件が table 形式で記録されている
+  - O-7 500 ターン/月 のコスト再試算が記録されている（マージン 44% + 規模拡大時 trigger）
+  - 第 1 波 5 atomics 着手順序確定（T1 統合 → T2 → T4 → T5）
+  - β 開始判定 19 項目確定（WBS §6 採用）
+  - 持ち越し評価 trigger 確定（dev T6.5 / T5b / M-5）
+  - 罰語 grep 0 件
+- **CEO 委任先**: なし（CEO 単独完遂 atomic / Markdown のみ）
+- **報告経路**: trust-but-verify（罰語 grep + structure 確認 / 軽量）→ §実装完遂デルタ → commit/push → dashboard → **T1 統合 atomic dev 委任に即時着手**（オーナー「速やかに」マンデート遵守）。
+
+### §実装完遂デルタ（2026-05-05 完遂）
+
+- decisions.md 冒頭に DEC-074 起票完遂（DEC-073 の上 / append-only）
+- DEC-006 拡張版（routes 32 / GET 15 / mutation 8）+ 本来意図再定義（top-level Server Action のみカウント）を文書化
+- オーナー判断 10 件 table 形式で全件記録
+- O-7 500 ターン/月 採択によるコスト再試算: ¥1,690/月（マージン 44%）+ 規模拡大時 trigger + `¥10/user/日` hard limit 動作確認必須化
+- 第 1 波 5 atomics 着手順序確定 = T1 統合（1.25 人日）→ T2（0.5）→ T4（1.0）→ T5（1.5）= 4.25 人日 + バッファ = 約 5.5 人日
+- β 開始判定 19 項目確定（WBS §6 採用）
+- 持ち越し評価 trigger 確定（β + 1 ヶ月後評価）
+- **次の atomic**: T1 統合 atomic（settings 全体 + 親パスワード reauth dialog / 1.25 人日 / dev 部門委任）に即時着手
+
 ## DEC-073: Phase 3 計画立案 atomic = 本格運用準備 WBS 徹底洗い出し（息子実使用前提 / 7 要望統合 / コード変更ゼロ / WBS atomic 0.75 人日）GO 判定（2026-05-05 / CEO 着手判断版）
 
 - **状況**: DEC-072 完遂（commit `b6c03f7` workspace + `d3126fc` PRJ-016 / dashboard `b7ceae6` push 完遂 / Phase 2 100% 完遂 + v2 ナレッジ 20 件着地 GREEN）。オーナーから **本格運用準備マンデート受領** =「本格的に私の息子にこのアプリを使わせたいと思います / 運用開始に向けて徹底的に必要なタスクを洗い出してください」+ 7 機能要望明示:
