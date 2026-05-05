@@ -1,5 +1,64 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-070: Phase 2 W12 第 6 atomic = W12-T3-B β feedback 収集動線（Sentry User Feedback 活用 / 完全 client-only / DEC-006 構造不変）GO 判定（2026-05-05 / CEO 着手判断版）
+
+- **状況**: DEC-069 完遂 / commit `eea5448` (origin/main HANEI repo) push / E2E **signup-beta-invite 8 + admin-kpi 4 + admin-kpi-experiment 2 + shop 6 = 20 PASS** / vitest **54 files / 835 PASS** / next build **25 routes** / Phase 2 進捗 **98% → 98.5%** / W12 進捗 **80% → 90%（5/5 + T3-A complete）**。オーナー「続きの実装を進めてほしい / 並列で進められるところはエージェントを並列で実行」継続マンデート受領。CEO 投資調査で `@sentry/nextjs ^10.0.0` 既インストール + `sentry.client.config.ts` / `sentry.server.config.ts` / `sentry.edge.config.ts` / `instrumentation.ts` 完備 + PII 自動 strip (sendDefaultPii:false / beforeSend で email/IP 削除) を確認。
+- **判定**: **GO**（W12-T3-B = β feedback 収集動線最小構成 / 0.5 人日 / **Sentry SDK 既存基盤完全流用** = 新規 DB schema 0 / 新規 Server Action 0 / 新規 API route 0 / DEC-006 mutation 5 GET 10 構造完全不変）。
+- **判断根拠**:
+  1. **オーナー指示**: 「続きの実装を進めて / 並列で進められるところは並列で」= CEO 推奨 W12-T3-B 採用 + research/secretary 並列起動可。
+  2. **Sentry 既存基盤完全流用**: `@sentry/nextjs` が W2 (T-8) で既導入済み = SDK ロード済み = `Sentry.captureFeedback({ message, name?, email? })` を呼ぶだけで feedback がチケット化 + Sentry プロジェクト alert/email 通知に自動連携。新規 DB table / Server Action / API route 不要 = DEC-006 完全不変。
+  3. **β 短期運営想定**: feedback はリリース前検証期間 (~2-4 週) のみ重視。Sentry user_feedback Issue は人間運用 (CEO/オーナー が Sentry UI で読む) で十分。本格化は β 後 GA で再評価。
+  4. **PII 取り扱い構造一貫**: 既存 `beforeSend` は error event の PII を strip するが Sentry SDK 8+ の `captureFeedback` は user_feedback envelope = beforeSend 経路と分離 = ユーザーが任意提供したメール/名前は保持される (返信運用可能)。子ども向けサービスでも feedback 送信は本人意思 = 同意ベースで OK。
+  5. **DEC-024 罰則ゼロ**: 「ご意見」「気になったこと」等の中立文言で誘導 / 「不具合報告」「クレーム」表記は使わない。
+- **本 atomic スコープ**:
+  - **含む**:
+    - `src/components/feedback/feedback-button.tsx` (新規 / client component / shadcn `Dialog` ベース / `Sentry.captureFeedback()` 呼出)
+    - `/home` (`src/app/(app)/home/page.tsx`) と `/settings/accessories` (or `/settings` トップ追加) に小さな「ご意見を送る」ボタン配置 — 親 (parent role) のみ可視 / learner UI には出さない
+    - `data-testid="beta-feedback-button"` / `data-testid="beta-feedback-textarea"` / `data-testid="beta-feedback-submit"` で E2E 安定化
+    - `data-testid="beta-feedback-thanks"` で送信完了の中立 toast / inline 表示確認
+    - unit test: feedback-button の textarea required / submit 時 `Sentry.captureFeedback` mock が正しい引数で呼ばれること / cancel 時に dialog が閉じること
+    - E2E (1 spec / chromium + mobile-chrome): 親 owner で /home → ボタンクリック → textarea 入力 → 送信 → 完了表示 / mock Sentry SDK で確実化
+    - `BETA_FEEDBACK_ENABLED` env flag (default true) — 緊急時の構造的 kill switch
+  - **含まない (持ち越し)**:
+    - DB persistence / admin viewer (T3-C 以降 or β 後再評価)
+    - Sentry プロジェクト側 alert ルール / Slack integration (T3-C で run-book 化)
+    - learner 直接送信 (子ども側 UI には出さない / 親が代弁する設計)
+    - スクリーンショット添付 / 詳細ログ送付 (β 短期は textual で十分)
+- **制約厳守 (継承)**:
+  - DEC-024 罰則ゼロ哲学
+  - DEC-003 三層認可 (middleware / page server check / parent role gate)
+  - DEC-006 GET 10 / mutation 5 不変 (Sentry SDK は外部送信 = Next.js mutation budget 対象外)
+  - DEC-055 idempotency (Sentry 側 dedupe を信頼 / クライアント二重送信は submitting state で抑止)
+  - Turbopack `"use server"` sync export ban (10 度目 / pure logic は `src/lib/feedback/` にも置くなら隔離)
+- **受入基準**:
+  - typecheck 0 / lint 0
+  - vitest baseline 54/835 → +α (regression 0)
+  - next build 25 routes 不変
+  - E2E feedback flow chromium + mobile-chrome 2 PASS
+  - 既存 E2E regression 0 (signup-beta-invite 8 / admin-kpi 4 / admin-kpi-experiment 2 / shop 6 = 20)
+- **CEO 委任先**: dev (実装 atomic 完遂)。並行で research (T3-C 設計骨子) / secretary (W11 KPT 整理) を background 並列起動。
+- **報告経路**: dev report → trust-but-verify → review → §実装完遂デルタ → commit/push → dashboard → CEO 報告。
+
+### 実装完遂デルタ（2026-05-05 / CEO 終局報告）
+
+- **HEAD**: `eea5448..657db9c` (HANEI repo / origin/main)
+- **実装ファイル (4 新規 / 1 修正)**:
+  - 新規 `app/src/lib/feedback/submit.ts` (92 行 / 純関数 / Turbopack `"use server"` sync export ban パターン **10 度目** 構造定着)
+  - 新規 `app/src/components/feedback/feedback-button.tsx` (173 行 / shadcn Dialog client component / 4 種 `data-testid`)
+  - 新規 `app/tests/unit/feedback.submit.test.ts` (178 行 / vitest 11 cases / `vi.mock("@sentry/nextjs")`)
+  - 新規 `app/tests/e2e/beta-feedback.spec.ts` (168 行 / 2 spec × 2 browser = 4 PASS)
+  - 修正 `app/src/app/(app)/home/page.tsx` (+21 / -2 / `BETA_FEEDBACK_ENABLED !== "false"` gate + footer 配置)
+- **検証**:
+  - typecheck **0 errors** / lint **0 warnings**
+  - vitest **55 files / 846 PASS** (baseline 54/835 → +1 file / +11 件 / regression 0)
+  - next build **25 routes** (DEC-006 GET 10 / mutation 5 構造完全不変 / 新規 route 0 / 新規 server action 0 / 新規 API route 0)
+  - E2E beta-feedback **4 PASS** (chromium 2 + mobile-chrome 2 / 35.1s)
+  - E2E regression **10 PASS** (admin-kpi 4 + shop 6 / 59.4s) — signup-beta-invite は env flag 限定なので CI で別系統
+- **review 判定**: APPROVE-WITH-MINOR (Critical 0 / Major 1 持ち越し可 / Minor 5 / Nit 3 / commit/push GO)
+  - Major-1: `userEmail={session.email}` の自動付与は DialogDescription 告知で射程内だが β 後 GA で opt-in 化推奨 (持ち越し)
+  - Minor 5 件 / Nit 3 件: T3-C 以降に持ち越し許容 (本 atomic 阻害しない)
+- **DEC 厳守確認**: DEC-024 罰則ゼロ (UI 文言 7 種すべて中立) / DEC-003 三層認可 (parent only / learner UI 出さず) / DEC-006 構造完全不変 / DEC-055 idempotency (submitting state 二重抑止) / Turbopack pattern 10 度目定着。
+
 ## DEC-069: Phase 2 W12 第 5 atomic = W12-T3-A β invite flow（招待コード生成 + redeem 動線）GO 判定（2026-05-03 / CEO 着手判断版）
 
 - **状況**: DEC-068 完遂 / commit `bfd2c55` (origin/main HANEI repo) push / E2E **admin-kpi 4 + admin-kpi-experiment 2 + shop 6 = 12 PASS** / vitest **53 files / 815 PASS** / next build **25 routes** / Phase 2 進捗 **97.5% → 98%** / W12 進捗 **60% → 80%（4/5）**。オーナー「続きの実装を進めて」継続マンデート受領（CEO 推奨 = W12-T3 着手 = Phase 2 完遂前最大障壁 = β ユーザー受入準備）。
