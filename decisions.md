@@ -59,6 +59,7 @@
   2. **denormalize 同期 silent bug 修正の DEC 記録方式**: DEC-076 §実装完遂デルタ（本記録）の「副次効果」セクションで明記 = 補足 DEC 起票は不要 / 本 atomic 完遂デルタの一部として記録。
   3. **T4 着手前 DEC-006 再拡張 atomic 起票前提**: **CEO 確認 = YES** / T2 完遂直後に **DEC-077 = DEC-006 再拡張 atomic（mutation 8 → 10 想定 / T4 cron + T6 長期目標 用 +2）+ オーナー判断要請** を CEO 単独で起票する方針 / オーナー「徹底的に進めて」マンデート遵守の連続着手フロー継続。
 - **次の atomic（即時着手）**: **DEC-077 = DEC-006 再拡張 atomic（CEO 単独起票 / Markdown のみ / 0.1 人日）→ オーナー判断受領 → T4 学習時間目標 + cron（1.0 人日）着手**。並走可候補: T5 リスニング音源 seed（1.5 人日 / data only / mutation +0）。
+- **commit hash 記録**: PRJ-016 `c147936`（feat(W12-T2) / 8 files / +1,119 / -23）push 完遂（origin/main / 2026-05-05）
 
 ## DEC-075: W12-T1 統合 atomic = settings 全体 page（4 routes 新設 / 親 (parent) layer）+ 親パスワード reauth dialog 統合（5 分グレース / Better Auth 自前実装）+ `learner_settings` 新設（M-1 migration）+ top-level Server Action +2（mutation 6→8 / DEC-006 拡張版上限ジャスト到達）= Phase 3 第 1 波最初の実装 atomic（1.25 人日）GO 判定 + 完遂着地（2026-05-05 / オーナー「速やかに」マンデート）
 
