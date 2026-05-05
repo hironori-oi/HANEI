@@ -105,6 +105,7 @@
 - **独立 review（code-reviewer）**: YELLOW（修正後 GO）。RED 1 件 = T 番号 dev/CEO 系統衝突 → CEO WBS §1.1 に「dev 旧#」列併記 + 注記追加で**修正済**。YELLOW 7 件のうち重要度高 6 件を WBS に直接反映（β 開始判定 §6 を 13 → 19 項目に拡充: Sentry 実発火必須化 / cost cap 超過 UX 検証 / 退会 reauth gate 動作確認 / 退会後 null 化実演 / DB バックアップ復元 RUNBOOK + 実演 / Vercel + Supabase + OpenAI 月次予算 alert 3 件全部 / O-10 リマインド経路追加 / O-3↔O-7 依存関係明記 / T0 仕様に DEC-006 本来意図再定義追加）。残 1 件（dev report T 番号衝突注記）は本 §実装完遂デルタにて記録済。
 - **DEC-006 影響**: 本 atomic は Markdown のみ / コード変更ゼロ = DEC-006 完全不変。**Phase 3 実装着手は T0 atomic で DEC-006 拡張（GET 10→15 / mutation 5→8 / page routes 25→32）を正式起票してから**。
 - **オーナー承認 gate**: WBS 提示 + 10 件オーナー判断要請（O-1〜O-10）でオーナー判定 → T0 atomic 着手 → 第 1 波 5.5 人日（T0+T1+T2+T3+T4+T5）→ β 開始判定 19 項目 GREEN なら β 実子使用開始。
+- **commit/push**: PRJ-016 repo `f485c49` (origin/main) + workspace repo `7e182cd` (origin/main / dashboard) 両 push 完遂。
 
 ## DEC-072: Phase 2 完遂直後 = W11 KPT 反映 knowledge 蓄積 atomic（patterns 7 + decisions 6 + pitfalls 7 = 計 20 件 / `organization/knowledge/` 横断 v2 体系明文化）GO 判定（2026-05-05 / CEO 着手判断版）
 
