@@ -58,6 +58,7 @@
 - 罰語 grep 0 件
 - **本 atomic は CEO 単独完遂 / コード変更ゼロ / build / typecheck / lint / vitest / E2E に regression 構造的ゼロ**
 - **次の atomic（オーナー O-1 承認受領後即時）**: T4 学習時間目標 + cron（1.0 人日 / dev 部門委任 / `learner_study_targets` 新設 + cron `/api/cron/study-minutes-reminder` + UI / 新 mutation `recordStudyMinutes` 想定）
+- **commit hash 記録**: PRJ-016 `75a7619`（DEC-077 起票本体）push 完遂（origin/main / 2026-05-05）
 
 ## DEC-076: W12-T2 atomic = 受験日 学習者 UI 拡充（学習者本人画面で自己編集 link 追加 + dashboard 双方向同期 + 過去日入力ガード / Phase 3 第 1 波 2 番目 / 0.5 人日 / mutation +0 想定）GO 判定（2026-05-05 / オーナー「徹底的に進めて」マンデート）
 
