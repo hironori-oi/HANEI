@@ -1,5 +1,104 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-071: Phase 2 W12 第 7 atomic = W12-T3-C 緊急 hotfix 体制 + Sentry alert 強化 + α→β 移行アナウンス（W12 / Phase 2 完遂 atomic）GO 判定（2026-05-05 / CEO 着手判断版）
+
+- **状況**: DEC-070 完遂 / commit `cb0eacf` (origin/main HANEI repo) push / E2E **beta-feedback 4 + admin-kpi 4 + shop 6 = 14 PASS** / vitest **55 files / 846 PASS** / next build **25 routes** / Phase 2 進捗 **98.5% → 99%** / W12 進捗 **90% → 95%（5/5 + T3-A + T3-B 完遂 / 残 T3-C のみ）**。並列軸-2 research が `reports/research-w12-t3-c-design-skeleton.md` (507 行) を提出済 = 設計骨子完全準備状態。オーナー「CEO 推奨で進めて / どんどん進めていきましょう」継続マンデート受領。
+- **判定**: **GO**（W12-T3-C = W12 最終 atomic / 0.5 人日 / **research 設計骨子完全流用 / コード変更極小 / Markdown ドキュメント主体 = DEC-006 完全不変**）。
+- **判断根拠**:
+  1. **オーナー指示**: 「CEO 推奨で進めて」= CEO 推奨 W12-T3-C 採択（β リリース可能状態の完成最終段）。
+  2. **research 骨子完全準備**: A. RUNBOOK 8 章骨子 / B. Sentry alert 4 ルール + env flag 3 件 / C. α→β アナウンス文面 3 種 / D. 1 atomic 完遂可（0.5 人日 = 4.0h） — 全項目を dev が即流用可。
+  3. **Phase 2 完遂視野**: T3-C 完遂で W12 5/5 atomic 達成 = Phase 2 全体 100% 視野（正式完遂宣言は CEO 判断で別途実施）。
+  4. **DEC-006 構造完全不変**: コード変更は (a) `sentry.{client,server,edge}.config.ts` × 3 の env 化（hardcode → process.env / default 値同値で挙動互換）+ (b) `src/app/page.tsx` LP footer 1〜2 行更新 + mailto 追加 = **新規 server action 0 / 新規 API route 0 / 新規 migration 0 / build 25 routes 不変**。
+  5. **CEO 軽承認 4 項目を推奨デフォルト採択**:
+     - α 実ユーザー 0 名前提（research §1.3 grep 結果 0 件）
+     - 招待メール差出人「HANEI 開発チーム」（個人開発でも組織体裁推奨）
+     - LP に「招待をご希望の方は {mailto:}」リンク追加（招待希望者流入経路確保）
+     - Sentry alert 通知先 = オーナー個人 email（既存 sentry config 整合）
+- **本 atomic スコープ（CEO 確定 / W12-T3-C minimal）**:
+  - **含む（必須）**:
+    - **A. `app/RUNBOOK.md` 新規（200〜300 行）**: research §2.2 章立て準拠の 8 章 = (0) 使い方 / (1) 連絡先・on-call / (2) Severity 区分 4 段（SEV-1 30 分 / SEV-2 2h / SEV-3 当日 / SEV-4 翌営業日）/ (3) Critical Path 一覧（payment 系は DEC-006/012 で構造除外明示）/ (4) Incident Response 5 ステップ / (5) Vercel Rollback 手順（UI + CLI fallback）/ (6) Hotfix 手順 / (7) 既知 incident playbook 3 件（invite redeem 競合 / Sentry quota 超過 / OpenAI 障害）/ (8) SEV-1 連絡テンプレ inline。
+    - **B. Sentry config env 化**:
+      - `app/sentry.client.config.ts` / `sentry.server.config.ts` / `sentry.edge.config.ts` 3 ファイル
+      - `tracesSampleRate` を `Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.1")` 化（client）+ server/edge は `SENTRY_TRACES_SAMPLE_RATE` 化
+      - `replaysOnErrorSampleRate` を `Number(process.env.NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0")` 化（client only）
+      - `enabled` に `process.env.NEXT_PUBLIC_SENTRY_ENABLED !== "false"` (client) / `SENTRY_ENABLED !== "false"` (server/edge) 追加
+      - default 値は既存 hardcode と同値 = 既存挙動完全互換 = regression risk 構造的ゼロ
+    - **C. `app/.env.local.example` 追加**: 3 件 env 例（`NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` / `NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE` / `NEXT_PUBLIC_SENTRY_ENABLED`）+ server/edge 用 3 件 (NEXT_PUBLIC 不要) を既存 §Sentry セクション末尾に追記。
+    - **D. `projects/PRJ-016/docs/beta-invite-email-template.md` 新規（80〜120 行）**: research §C-1 文面準拠（件名 + 本文 + 招待コード placeholder + 4 step 開始手順 + ご利用無料 + 「ご意見を送る」ボタン誘導 + お問い合わせ）= **DEC-024 罰則ゼロ厳守 + DEC-005 「目指す」基調 + DEC-006 「無料継続予定」明記**。
+    - **E. `src/app/page.tsx` LP footer 文言更新**:
+      - 「現在クローズドβ準備中。ご利用は無料です。」→「クローズドβ公開中。ご利用は無料です（招待制）。」
+      - 隣接行に「招待をご希望の方は <a href="mailto:...">こちら</a>」リンク追加（mailto: のみ / 新規 route 0）
+      - 既存 LP E2E が無いため手動 smoke で十分（typecheck / build で構造保証）
+    - **F. `projects/PRJ-016/docs/sentry-alert-setup.md` 新規（60〜100 行 / 運営者向け checklist）**: research §3.2 ルール 4 件を Sentry プロジェクト UI で設定する手順をテキストで列挙（Rule 1 Error Spike 5/5min / Rule 2 New Issue / Rule 3 Regression / Rule 4 User Feedback Received）+ 通知先 email 設定 + Vercel Production env `SENTRY_AUTH_TOKEN` 確認チェックリスト。
+    - **G. SEV-1 incident 連絡テンプレ**: research §C-2 を RUNBOOK §8 inline で取り込み。
+  - **含まない（持ち越し）**:
+    - Sentry プロジェクト UI 側の実設定（`docs/sentry-alert-setup.md` checklist のみ用意 / 実 UI 操作はオーナーが Sentry web で実施 = コード対象外）
+    - 実 alert 発火検証（W12-T4 ストレステスト atomic で実施 = 設計と実発火検証の役割分離）
+    - 専用 invite 希望 form route（DEC-006 mutation/route +1 抵触 → Phase 3 候補 / 本 atomic は mailto: のみ）
+    - Slack integration / Phase 3 候補
+    - LP 多言語化 / Phase 3 候補
+- **制約厳守 (継承)**:
+  - DEC-024 罰則ゼロ哲学（RUNBOOK / メールテンプレ / LP 文言 / SEV-1 テンプレ 全文書 grep 検証）
+  - DEC-003 三層認可（本 atomic は認可面に触れず / 既存維持）
+  - DEC-006 GET 10 / mutation 5 / 25 routes 構造完全不変
+  - DEC-013 Vercel Pro 単一前提（rollback 手順は Pro UI 前提）
+  - DEC-055 idempotency（本 atomic は I/O 面に触れず / 既存維持）
+  - DEC-066/067/068/069/070 既存 polish 維持
+- **受入基準**:
+  - typecheck 0 / lint 0
+  - vitest baseline 55/846 維持（regression 0 / sentry config env 化での test 影響あれば追加可）
+  - next build 25 routes 不変
+  - E2E regression 0（beta-feedback 4 + admin-kpi 4 + admin-kpi-experiment 2 + shop 6 + signup-beta-invite 8 = 24 PASS の系統で env なし条件下 14〜16 PASS 維持）
+  - `app/RUNBOOK.md` 新規 / `app/.env.local.example` env 6 行追加 / `sentry.*.config.ts` × 3 env 化 / `src/app/page.tsx` LP 文言更新 + mailto / `projects/PRJ-016/docs/beta-invite-email-template.md` 新規 / `projects/PRJ-016/docs/sentry-alert-setup.md` 新規
+  - 全 Markdown 文書で **DEC-024 罰語ゼロ grep** 確認（「不具合」「失敗」「無効」「不正」「だめ」「やる気」「クレーム」等）
+  - review APPROVE
+- **CEO 委任先**: dev (実装 atomic 完遂 / 単独で十分 / research 骨子完全流用)。
+- **報告経路**: dev report → trust-but-verify → review → §実装完遂デルタ → commit/push → dashboard → CEO 報告 + Phase 2 完遂視野。
+
+### §実装完遂デルタ（2026-05-05 / CEO 完遂宣言）
+
+- **dev 完遂報告**: `reports/dev-w12-t3-c-hotfix-sentry-announce-done.md`
+- **review 判定**: `reports/review-w12-t3-c-hotfix-sentry-announce.md` = **APPROVE-WITH-MINOR**（Critical 0 / Major 0 / Minor 4 / Nit 3 / commit 直前 polish 4 件吸収済）
+- **8 ファイル変更（NEW 3 + MODIFIED 5 / +471 → +480 lines / Minor polish 込）**:
+  - NEW: `app/RUNBOOK.md` (240 lines / 8 章: 使い方 / 連絡先 / Severity / Critical Path / Incident Response 5step / Vercel Rollback / Hotfix / 既知 incident playbook / SEV-1 連絡テンプレ)
+  - NEW: `docs/beta-invite-email-template.md` (114 lines / 件名 / 本文 / プレースホルダ表 / 配布方法 / 招待コード発行手順 / 設計判断補助メモ)
+  - NEW: `docs/sentry-alert-setup.md` (120 lines / Sentry UI で設定する 4 alert ルール checklist + Vercel env チェックリスト)
+  - MODIFIED: `app/sentry.client.config.ts` (+29/-7) — env 化 (NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE / NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE / NEXT_PUBLIC_SENTRY_ENABLED) + NaN ガード + kill switch
+  - MODIFIED: `app/sentry.server.config.ts` (+20/-3) — 同上 (server 側 / NEXT_PUBLIC prefix なし / SENTRY_TRACES_SAMPLE_RATE / SENTRY_ENABLED)
+  - MODIFIED: `app/sentry.edge.config.ts` (+20/-3) — 同上 (edge ランタイム)
+  - MODIFIED: `app/.env.local.example` (+7/0) — Sentry runtime tuning 6 entries
+  - MODIFIED: `app/src/app/page.tsx` (+9/-2) — LP footer 「クローズドβ公開中。ご利用は無料です（招待制）。」+ mailto:support@hanei.app
+- **CEO commit polish 4 件吸収（review Minor 全件 / コード変更ゼロ / Markdown のみ）**:
+  - Minor-1: RUNBOOK §6.1 hotfix 手順 `bun run` → `npm run` 統一（DEPLOYMENT.md と整合 / `npm run e2e -- ...` の `--` 慣用記法注記追加）
+  - Minor-2: RUNBOOK §5.2 自己参照 `§5.2 の出力から` → `上の出力から`
+  - Minor-3: beta-invite-email-template §3 placeholder 表に「LP footer の `mailto:` は `support@hanei.app`、特段の理由がなければ同一値に揃える」注記追加
+  - Minor-4: RUNBOOK §7.2 に「`replaysOnErrorSampleRate` は client (browser) 専用 / server / edge 側に同等 env なし」一行注記追加
+- **検証 GREEN**:
+  - typecheck warning 0 / lint warning 0 (CEO 抜き打ち確認)
+  - vitest **55 files / 846 PASS** (dev 報告 / regression 0 / env 化は default 値同値で test 影響なし設計)
+  - next build **25 routes** (dev 報告 / 新規 route 0 = 構造不変)
+  - E2E **14 PASS / regression 0** (dev 報告)
+  - beta-feedback E2E **4 PASS** (CEO 抜き打ち確認 / chromium 2 + mobile-chrome 2 / T3-B regression 0)
+  - 罰語 grep **0 件** (DEC-024 自己言及のみ許容 / review 独立検証で確認)
+- **DEC 厳守確認**:
+  - DEC-024 罰則ゼロ: 文言全 PASS（「障害」「復旧」「対応」を中立技術用語と RUNBOOK §2 で宣言した上で使用 / 「申し訳ございません」は SEV-1 連絡テンプレのマナー文言として正当化済）
+  - DEC-003 三層認可: server-side mutation 触らず invariance PASS
+  - DEC-006 GET 10 / mutation 5: 新規 route 0 / 新規 mutation 0 invariance PASS（25 routes 不変）
+  - DEC-013 Vercel Pro: RUNBOOK §5.3 で明記
+  - DEC-055 idempotency: mutation 触らず invariance PASS
+  - DEC-070 連動: RUNBOOK §3.2 / §1 で feedback button の SEV-2 受信経路として記載 + sentry-alert-setup.md §5 (Rule 4) で User Feedback alert を独立ルール化
+  - DEC-071 (本 atomic): 含む / 含まない厳密分離と完全一致 PASS
+- **既知 carryover (本 atomic 範囲外 / Phase 3 候補)**:
+  - Nit-1: server/edge config の DSN だけ `NEXT_PUBLIC_` prefix 維持（Next.js + Sentry SDK の慣行 / 動作正しい）
+  - Nit-2: env パース処理 3 ファイル重複（`src/lib/sentry/parse-env.ts` への helper 抽出は Sentry 公式テンプレ「3 ファイル分離」前提のため本 atomic では切り出さない判断 = 妥当）
+  - Nit-3: RUNBOOK §1「オーナー連絡不能時」記述未着手（個人開発単独運用前提 / 有料化検討時に再評価）
+  - M-2 carryover: Sentry プロジェクト UI での 4 alert rule 実設定（コード対象外 / sentry-alert-setup.md checklist で運営者が UI 操作）
+  - M-3 carryover: Turbopack `disableLogger` / `automaticVercelMonitors` deprecation warning（既存 / Sentry SDK upgrade で解消予定 / 本 atomic 範囲外）
+- **Phase 2 完遂状態（2026-05-05 時点）**:
+  - W12 atomic = 5/5 達成（W12-T1 / T1.5 / T2 / T2.5 / T3-A / T3-B / T3-C 全完遂 = 計 7 atomic 全完遂）
+  - Phase 2 全体 = **99% → 100%**（β リリース可能状態完成）
+  - β リリース GO 判断は本 §実装完遂デルタ着地後にオーナーが招待コード発行 + メール配信で開始可能
+
 ## DEC-070: Phase 2 W12 第 6 atomic = W12-T3-B β feedback 収集動線（Sentry User Feedback 活用 / 完全 client-only / DEC-006 構造不変）GO 判定（2026-05-05 / CEO 着手判断版）
 
 - **状況**: DEC-069 完遂 / commit `eea5448` (origin/main HANEI repo) push / E2E **signup-beta-invite 8 + admin-kpi 4 + admin-kpi-experiment 2 + shop 6 = 20 PASS** / vitest **54 files / 835 PASS** / next build **25 routes** / Phase 2 進捗 **98% → 98.5%** / W12 進捗 **80% → 90%（5/5 + T3-A complete）**。オーナー「続きの実装を進めてほしい / 並列で進められるところはエージェントを並列で実行」継続マンデート受領。CEO 投資調査で `@sentry/nextjs ^10.0.0` 既インストール + `sentry.client.config.ts` / `sentry.server.config.ts` / `sentry.edge.config.ts` / `instrumentation.ts` 完備 + PII 自動 strip (sendDefaultPii:false / beforeSend で email/IP 削除) を確認。
