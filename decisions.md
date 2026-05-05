@@ -1,5 +1,57 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-080: Phase 3 第 1 波完遂宣言 + β 開始 19 項目判定 運用方針確認 atomic（planning only / コード変更ゼロ / 0.25 人日 / オーナー判断 gate）GO 判定（2026-05-05 / DEC-079 完遂直後 / オーナー B 案承認受領）
+
+- **状況**: DEC-079 W12-T5 リスニング音源 seed atomic 完遂着地（vitest 881 / E2E 14/14 + DRY_RUN seed 842 + DRY_RUN tts ¥3.30 全 GREEN）= **Phase 3 第 1 波 5.5 人日のうち 4.25 人日完遂**（T1 統合 + T2 + T4 + T5）。残 1.25 人日 = **β 開始 19 項目判定 運用系 atomic**。CEO は T5 完遂報告で A 案（残運用系を CEO 単独判断で一括 atomic 化）/ B 案（一旦オーナーへ第 1 波完遂報告 + 運用方針確認）を比較提示し、オーナーは **B 案承認** = 「一旦オーナーへ第 1 波完遂報告 + β 開始判定の運用方針確認 / 推奨通り進めてください」directive 受領。
+- **判定**: **GO**（DEC-080 = planning atomic / **コード変更ゼロ** / **0.25 人日** / 報告書 1 ファイル + dashboard 更新 + commit/push のみ / オーナー判断 gate 設置）。
+- **判断根拠**:
+  1. **構造実装層は完遂**: T0（DEC-074 + DEC-077）+ T1 統合 + T2 + T4 + T5 = 5 atomic 全 GREEN / 19 項目判定の構造側 12 項目（T0 + T1〜T5 機能 + vitest / E2E / build / 罰語 / DEC 厳守）が full GREEN。
+  2. **運用系 5〜7 項目は CEO 単独判断不可**: Sentry alert 実発火 / OpenAI cost guard 超過テスト / DB backup RUNBOOK / 月次予算 alert 設定 3 件 / オーナー本人 smoke 実施 = いずれも **オーナーの実環境アクセス + 実運用での意思** を要する項目 / β 開始前 必須 vs 並走可 vs β 後 評価まちまち / **CEO が単独で「進め方」を確定するのは越権**。
+  3. **退会系 2 項目（reauth / null 化）= 第 2 波 T10**: DEC-074 §6 当初は 19 項目だが β 開始時点では退会機能を出さない方針で第 2 波（T10 / Could）= **β 開始時点では機能なし = 構造的に N/A 扱い**（GO 判定影響なし）/ オーナー再確認要。
+  4. **オーナー判断 gate を明示的に設置**: 第 1 波完遂宣言の正式記録 + β 実子使用開始 GO 判断要請を **報告書 1 本に集約** = オーナーが 1 回の判断で β 開始 / 並走運用 atomic 起動 / 修正指示が可能。
+  5. **planning atomic / コード変更ゼロ**: DEC-006 上限影響ゼロ / 既存 vitest / E2E 影響ゼロ / Markdown のみ。
+- **本 atomic スコープ（含むもの）**:
+  - **報告書生成**: `projects/PRJ-016/reports/ceo-phase3-wave1-completion-and-beta-readiness.md`（11 sections / 19 項目判定マトリクス + 残項目 atomic 候補 3 案比較 + オーナー判断要請 5 件 + オーナー手元実行 4 step + 制約遵守確認 + 参照ファイル）
+  - **dashboard 更新**: 【最新】marker DEC-079 → DEC-080 + 第 1 波完遂宣言 + オーナー判断 gate 設置記録
+  - **commit/push**: PRJ-016 + workspace 両 repo 更新
+  - **本 §実装完遂デルタ**: 報告書生成 + dashboard 更新を記録（コード変更ゼロのため typecheck / lint / vitest / E2E は不要 = trust-but-verify は報告書整合性のみ）
+- **本 atomic スコープ（含まないもの = 別 atomic）**:
+  - 運用系 5 項目（Sentry / cost guard / DB backup / 月次予算 alert / オーナー smoke）の実装 = オーナー判断後の別 atomic
+  - 退会系 2 項目（T10）= 第 2 波（DEC-074 §6 既決）
+  - オーナー手元 TTS 実行（4 step / ¥3.30）= オーナー本人作業（CEO 報告書に明記のみ）
+  - β 実子使用開始 GO 判定 = オーナー本人判断（CEO 単独不可）
+- **制約厳守**:
+  - DEC-024 罰則ゼロ哲学（報告書全文 grep 0 件 / 自己言及・引用は除外規定通り）
+  - DEC-006 完全不変（page 25/32 / mutation 9/10 / GET 11/15）
+  - DEC-003 / DEC-055 / DEC-068 / DEC-074 / DEC-075 / DEC-077 / DEC-078 / DEC-079 全継承
+  - 個人情報非記載（オーナー名 / 息子情報は仮名・型のみ）
+  - 絵文字ゼロ
+  - 19 項目判定マトリクスは DEC-074 §6 オリジナル 19 項目を全件保持（再解釈・並べ替え許容 / 削除禁止）
+- **受入基準**:
+  - [ ] 報告書 11 sections 完備（§1 第 1 波完遂宣言 / §2 19 項目判定マトリクス / §3 残項目 atomic 候補 3 案 / §4 atomic 候補別の人日見積 / §5 オーナー手元実行 4 step / §6 オーナー判断要請 5 件 / §7 リスク + 対処 / §8 β 後 第 2 波予告 / §9 進捗 KPI / §10 制約遵守確認 / §11 参照ファイル）
+  - [ ] 19 項目判定マトリクスで全項目に「GREEN / RED / DEFERRED」のいずれかを明示
+  - [ ] 残項目 atomic 候補は最低 3 案（A 一括 / B 個別 / C 並走 / それぞれ pros/cons）
+  - [ ] オーナー判断要請は CEO 推奨デフォルト付きで 5 件以下
+  - [ ] dashboard【最新】marker 更新（DEC-079 → DEC-080）
+  - [ ] commit/push 完遂（PRJ-016 + workspace）
+  - [ ] 罰語 grep 0 件
+- **後続 atomic 候補（オーナー判断後）**:
+  - **A 案採用時**: β 開始前運用系一括 atomic（残 5 項目を 1 atomic で完遂 / 1.25 人日）→ β 実子使用開始 GO
+  - **B 案採用時**: 個別 atomic 5 件（各 0.25 人日 / 順次完遂 / 1.25 人日合計）→ β 実子使用開始 GO
+  - **C 案採用時**: β 開始前必須 2 項目（Sentry alert + 月次予算 alert）= 0.5 人日先行 + β 開始 + 並走 3 項目（cost guard / DB backup / オーナー smoke）= 0.75 人日 → β + 1 ヶ月評価で第 2 波着手
+- **CEO 委任先**: なし（CEO 直接実行 / 報告書生成 + dashboard 更新 + commit/push）
+- **報告経路**: CEO → オーナー（最終報告 / 5 件判断要請 + 推奨デフォルト + 次 directive 待ち）
+
+### §実装完遂デルタ（2026-05-05 完遂）
+
+- 報告書生成: `projects/PRJ-016/reports/ceo-phase3-wave1-completion-and-beta-readiness.md`（11 sections / Markdown only）
+- dashboard 更新: workspace `dashboard/active-projects.md`【最新】marker DEC-079 → DEC-080
+- DEC-006 数値遵守: page 25/32 / mutation 9/10 / GET 11/15 = 全項目 不変（コード変更ゼロ）
+- 罰語 grep 0 件（報告書全文）
+- commit/push 完遂（後段で記録）
+
+---
+
 ## DEC-079: W12-T5 atomic = β 開始用 リスニング音源 seed 投入（eiken-3 listening 20 問新規 + OpenAI TTS 自前生成 + R2 アップロード + `problems.audio_url` 反映 / Phase 3 第 1 波 4 番目 / 1.5 人日 / mutation +0 / page +0 / data only）GO 判定（2026-05-05 / DEC-078 完遂直後 / オーナー O-3 cap ¥3,000/月 既決）
 
 - **状況**: DEC-078 W12-T4（学習時間目標 + 日次リマインド cron）完遂・commit/push・dashboard 更新着地（vitest 868 / E2E 4/4 + regression 10/10 全 GREEN）。Phase 3 第 1 波着手順序通り次は **T5 リスニング音源 seed**。WBS §1.2 で T5 = 1.5 人日 P0 atomic（β 開始 19 項目判定 §6 「リスニング音源最低 1 セット seed 投入完遂」核心）/ data only / mutation +0 / page +0 で T6 以降の上限制約と完全独立。
