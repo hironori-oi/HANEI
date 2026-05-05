@@ -1,5 +1,64 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-077: DEC-006 再拡張 atomic = mutation 上限 8 → 10（+2）+ T4 / T6 用 top-level Server Action 枠確保 + Phase 3 第 1 波 T4 着手前提条件確定（息子実使用前提 / 0.1 人日 / Markdown のみ / コード変更ゼロ / オーナー判断要請含む）GO 判定（2026-05-05 / CEO 単独起票版）
+
+- **状況**: DEC-076 W12-T2 完遂着地（PRJ-016 `c147936`+`99994cb` / workspace `9aefddd` / mutation 8/8 維持達成 = page 24/32 / GET 10/15）。**mutation 残枠 0** のため、第 1 波残 atomics（**T4 学習時間目標 + cron** + T6 長期目標）の着手前に DEC-006 再拡張が前提条件。オーナー「徹底的に進めて」マンデート遵守の連続着手フロー継続のため CEO 単独で起票。
+- **判定**: **GO**（再拡張 atomic / **0.1 人日** / decisions.md 1 ファイル更新のみ / コード変更ゼロ / DEC-006 文書上のみ拡張）。
+- **判断根拠**:
+  1. **第 1 波完遂のための構造的前提条件**: T4 / T6 / T10 着手に必要な top-level Server Action 枠を予め確保 = 後続 atomic で実装エンジニアが mutation 制約に阻まれるリスクをゼロ化。
+  2. **オーナー先行承認**: DEC-074 起票時のオーナー判断 O-1「DEC-006 拡張承認 A 採択」は **将来再拡張も含む包括的な「DEC-006 拡張哲学への賛同」** と解釈可能（運用 KPI が増えれば構造的に拡張する設計思想）。但し**個別の数値拡張承認は再要請が望ましい**（マネジメント透明性確保）。
+  3. **T2 mutation +0 達成の戦略的成功体験**: T2 で「既存 fn 内部分岐拡張のみで二系統認可化」= mutation 増やさない設計が可能と実証済 / 但し T4（cron / 異種 mutation context）+ T6（learner_goals CRUD / 純新規 entity）は流用困難 = 純粋に新規 top-level fn が必要。
+- **本 atomic 拡張内容**:
+  - **mutation 上限**: 8 → **10**（+2）
+    - **+1 = T4 用**: `updateLearnerStudyTarget` or `recordStudyMinutes`（cron context 内 / 学習時間集計 update / DEC-074 拡張版で「mutation = top-level Server Action」= cron API route から call される top-level fn としてカウント）
+    - **+1 = T6 用**: `updateLearnerGoal`（learner_goals CRUD のうち代表 top-level fn / 残り CRUD は helper 化で吸収検討）
+  - page routes 上限: **32 維持**（T4 で +1 = `/parent/dashboard` の sub route or 既存 page 内 form 拡張で吸収 / T6 で +2 想定 = `/parent/learner/[id]/goals` 等 / 合計 24+3 = 27 / 32 内収まる）
+  - GET API routes 上限: **15 維持**（T4 cron は GET ではなく POST / T6 は client-side fetch 不要 / 不変想定）
+- **本 atomic スコープ（含むもの）**:
+  - decisions.md 冒頭に DEC-077 起票（本記録）
+  - DEC-006 拡張版数値の改訂明記: page 32 / **mutation 10** / GET 15
+  - DEC-077 = DEC-074 拡張版の「再拡張版」として位置付け（DEC-006 本来意図再定義は不変継承）
+  - オーナー判断要請 O-1 = 「mutation 8 → 10 再拡張承認」: CEO 推奨 **A. 承認**
+  - 後続 atomic 着手順序（T4 → T5 並走可 → T6 第 2 波 → 残り）の再確認
+  - β 開始判定 19 項目の再確認（影響なし）
+- **本 atomic スコープ（含まないもの）**:
+  - 個別 mutation の実装（T4 / T6 atomic で実施）
+  - page routes / GET API 拡張（必要時に別 atomic で再起票）
+  - 第 2 波 atomic（T6 / T7 / T8 / T9 / T10 / T11）の着手
+- **オーナー判断要請（1 件）**:
+  - **O-1: mutation 上限 8 → 10 再拡張承認**
+    - **A. 承認（CEO 推奨）**: 第 1 波 T4 + T6 着手のための構造的前提 / +2 で完遂可能 / β5〜10 名規模拡大時に再々拡張可（柔軟性確保）
+    - B. 部分承認（mutation +1 のみ / T4 のみ着手 / T6 は第 2 波で再判断）
+    - C. 拒否（既存 mutation の helper 化 / refactor で対応 = +0.5 人日工数増 / 構造的不整合リスク）
+- **制約厳守（不変継承）**:
+  - DEC-024 罰則ゼロ哲学
+  - DEC-003 三層認可（追加 mutation も全て requireAuth + role guard 必須）
+  - DEC-006 拡張版数値（再拡張後: page 32 / mutation 10 / GET 15）
+  - DEC-006 本来意図（mutation = top-level Server Action / helper 対象外）
+  - DEC-055 冪等性
+  - DEC-074 reauth gate（sensitive 操作で必須化）
+  - Turbopack `"use server"` sync export ban パターン
+- **受入基準（本 atomic）**:
+  - [ ] decisions.md 冒頭に DEC-077 起票完遂
+  - [ ] DEC-006 拡張版数値の再拡張記述（page 32 / **mutation 10** / GET 15）
+  - [ ] オーナー判断 O-1（mutation 再拡張承認）が table 形式で記録されている
+  - [ ] 後続 atomic 着手順序（T4 → T5 並走 → T6 第 2 波）の再確認
+  - [ ] 罰語 grep 0 件
+  - [ ] コード変更ゼロ（build / typecheck / lint / vitest / E2E に regression 構造的ゼロ）
+- **CEO 委任先**: なし（CEO 単独完遂 atomic / Markdown のみ）
+- **報告経路**: §実装完遂デルタ → commit/push → dashboard → **DEC-076 完遂報告 + DEC-077 提案 + オーナー判断要請** を 1 ターンで報告 → 承認受領 → T4 即時着手（オーナー「徹底的に進めて」マンデート遵守）
+
+### §実装完遂デルタ（2026-05-05 完遂）
+
+- decisions.md 冒頭に DEC-077 起票完遂（DEC-076 の上 / append-only）
+- DEC-006 再拡張版（page 32 / **mutation 10** / GET 15）を文書化 / DEC-074 §本来意図再定義は不変継承
+- オーナー判断要請 O-1（mutation 8 → 10 再拡張承認）table 形式で記録 / CEO 推奨 = **A. 承認**
+- 後続 atomic 着手順序再確認: **T4 学習時間目標 + cron（1.0 人日 / 承認後即時）→ T5 リスニング音源 seed（1.5 人日 / 並走可 / mutation +0 / data only）→ 第 1 波 β 開始 GO 判定 → 第 2 波 T6 / T7 / T8 / T9 / T10**
+- β 開始判定 19 項目（DEC-074 §6）影響なし不変継承
+- 罰語 grep 0 件
+- **本 atomic は CEO 単独完遂 / コード変更ゼロ / build / typecheck / lint / vitest / E2E に regression 構造的ゼロ**
+- **次の atomic（オーナー O-1 承認受領後即時）**: T4 学習時間目標 + cron（1.0 人日 / dev 部門委任 / `learner_study_targets` 新設 + cron `/api/cron/study-minutes-reminder` + UI / 新 mutation `recordStudyMinutes` 想定）
+
 ## DEC-076: W12-T2 atomic = 受験日 学習者 UI 拡充（学習者本人画面で自己編集 link 追加 + dashboard 双方向同期 + 過去日入力ガード / Phase 3 第 1 波 2 番目 / 0.5 人日 / mutation +0 想定）GO 判定（2026-05-05 / オーナー「徹底的に進めて」マンデート）
 
 - **状況**: DEC-075 完遂着地（PRJ-016 `05af181`+`74f7486` / workspace `af855e8` / mutation 8/8 上限ジャスト到達 / page 23/32 / GET 10/15）。オーナーから「**CEO 推奨通り進めてください。徹底的に進めてください。**」明示 directive 受領 = T2 即時着手 + 第 1 波完遂までの連続着手志向マンデート。
