@@ -23,22 +23,22 @@
     }
   ],
   "functions": {
-    "src/app/api/cron/generate-problems/route.ts": {
+    "app/api/cron/generate-problems/route.ts": {
       "maxDuration": 300
     },
-    "src/app/api/cron/weekly-digest/route.ts": {
+    "app/api/cron/weekly-digest/route.ts": {
       "maxDuration": 300
     },
-    "src/app/api/cron/streak-freeze-monthly/route.ts": {
+    "app/api/cron/streak-freeze-monthly/route.ts": {
       "maxDuration": 60
     },
-    "src/app/api/cron/study-minutes-reminder/route.ts": {
+    "app/api/cron/study-minutes-reminder/route.ts": {
       "maxDuration": 60
     },
-    "src/app/api/cron/monthly-budget-alert/route.ts": {
+    "app/api/cron/monthly-budget-alert/route.ts": {
       "maxDuration": 60
     },
-    "src/app/api/ai/coach/route.ts": {
+    "app/api/ai/coach/route.ts": {
       "maxDuration": 60
     }
   }
