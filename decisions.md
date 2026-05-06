@@ -1,5 +1,73 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-095: production hotfix atomic（"use server" 非 async export 削除 / `/parent/settings/account` 500 解消 / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-094 直後 / オーナー β 試用フィードバック「目標とする英検の級を変更しようとするとエラー」由来）
+
+- **背景**: production deploy `dpl_8wLBCr1hQPz9k9fvTo2h6L3CgPw8` でオーナーが `/parent/settings/account` の「学年（目標とする英検の級）」変更を試みた際、ブラウザコンソールに `Failed to load resource: 500` + `Error: An error occurred in the Server Components render` が記録され `error.tsx` が表示されていた. β 試用 P0 阻害.
+- **判定**: **GO**（DEC-095 = 1 atomic / **page +0**（26/32 不変）/ **mutation +0**（10/10 最終枠維持）/ **GET +0**（15 不変）/ **cron +0**（5 不変）/ **deps +0** / **コード変更 -16 lines + コメント / regression E2E +1 spec**）.
+- **真の根本原因（dev sub-agent 調査確定）**:
+  - `src/lib/actions/reset-learner-study-data.ts` は `"use server"` ファイルでありながら、非 async const を 2 件 export していた:
+    - `RESET_DELETE_TABLE_NAMES: ReadonlyArray<string>` (DELETE_TABLES.map 由来)
+    - `RESET_KEEP_TABLE_NAMES: ReadonlyArray<string>` (リテラル配列)
+  - **Next.js 16 / Turbopack の production build では `"use server"` ファイルから async 関数以外の export は許可されない** (`A "use server" file can only export async functions, found object.` で module 評価が throw する).
+  - `<LearnerResetStudyDataSection>` は本ファイルから `resetLearnerStudyData` を import している. その client component を render する `/parent/settings/account/page.tsx` は production build 環境で **plain GET でも常時 module 評価エラー = 500** だった.
+  - 「学年変更をしようとすると」という症状になっていた理由: 多くの owner は最初に reauth dialog が開く挙動までは正常に見え、reauth 成功後の `router.refresh()` で初めて RSC payload 取得時に 500 が顕在化していた. dev mode (Turbopack hot eval) では module 評価エラーが緩和され DEC-090 完遂当時 vitest / build / E2E (cancel-only) が pass していた.
+  - 既存の `tests/e2e/settings-smoke.spec.ts` は reauth dialog を **キャンセル**するだけで再 render 経路をカバーしていなかった = 構造的盲点.
+  - 削除した非 async 定数の値は別ファイル `src/lib/study/reset-learner-study-data-tables.ts` に `RESET_DELETE_TABLE_NAMES_CANONICAL` / `RESET_KEEP_TABLE_NAMES_CANONICAL` として既に純データモジュールとして存在し、unit test (`tests/unit/reset-learner-study-data-tables.test.ts`) もそちらだけを参照していた → 削除した 2 export は完全に dead code だった.
+- **判断根拠**:
+  1. **β 阻害最優先**: 本変更を入れない限り、production で「目標英検級 / nickname / 学習時間目標 / 受験日 / 学習やり直し」全てが触れない. β 試用継続不可.
+  2. **dead code 削除のみ**: 非 async const 2 件は内部で参照されておらず、純データモジュールに canonical 版が存在. 業務ロジック / API surface / DEC 不変条件 すべて変化なし.
+  3. **DEC-006 拡張版（DEC-077）全部位 +0**: page 26/32 / mutation 10/10 / GET 15 / cron 5 すべて維持.
+  4. **構造的再発防止 = 新規 regression spec**: `tests/e2e/account-level-change-smoke.spec.ts` で signup → onboarding → /parent/settings/account → level 5→4 → reauth 成功 → 再 render が 200 で返ることまでを assert. 今回の構造的盲点（cancel-only の settings-smoke）を埋める.
+  5. **DEC-024 罰則ゼロ哲学**: 既存挙動維持. error.tsx も「やさしい中立メッセージ」に既出.
+- **本 atomic スコープ（A-D）**:
+  - **A. `src/lib/actions/reset-learner-study-data.ts`**: 非 async export 2 件を削除. 削除箇所には DEC-095 / Next.js 16 / canonical 純データモジュールへの参照誘導コメントを残す. resetLearnerStudyData 関数本体・DELETE_TABLES const は無変更.
+  - **B. `tests/e2e/account-level-change-smoke.spec.ts`** 新規: signup → onboarding (level 5) → /parent/settings/account → level 5→4 select → submit → reauth dialog でパスワード入力 → submit → dialog 閉じる + 再 render で `[data-testid="account-level-select"]` が "4" を保持することを assert.
+  - **C. 検証 5 ゲート 全 GREEN 維持**: typecheck / lint / vitest 67 files 990 tests / build (26 page + 5 cron) / E2E settings-smoke 6 + new account-level-change-smoke 2 / regression 0.
+  - **D. decisions.md DEC-095 起票 (本 entry)**.
+- **本 atomic スコープに含まないもの（別 atomic）**:
+  - **他 19 ファイルの "use server" 非 async export 監査**: dev sub-agent が範囲外と判断 / 必要なら別 atomic で repo-wide grep 監査. (CEO 評価: 本 hotfix の優先度を維持し follow-up issue 化を推奨 / W12-T3 受入準備で扱う候補.)
+  - **error.tsx の Sentry digest 表示改善**: production の minified error message から digest が `2494272498@E352` と取れたが、本 atomic では UX 改善 scope out.
+- **制約厳守 / 受入基準**:
+  - **DEC-006 拡張版 不変条件**: page **26**/32（+0）/ mutation **10**/10（+0 最終枠維持）/ GET **15**（+0）/ cron **5**（+0）.
+  - **DEC-003 三層認可**: 本 hotfix は dead code 削除のみ / 認可経路は無変更.
+  - **DEC-024 罰則ゼロ哲学**: error/success メッセージ既存維持 / 罰語追加なし.
+  - **DEC-055 idempotency**: 本 hotfix は無関係（idempotent 概念該当なし）.
+  - **vitest 977 baseline 維持 → 990 PASS**（67 files / +0 / regression 0）.
+  - **typecheck pass / lint warning 0 / `next build` 26 page + 5 cron 完遂**.
+  - **E2E**: settings-smoke 6 (chromium 5 + 1 + mobile-chrome 5 + 1 = 12) + 新 account-level-change-smoke 2 (chromium 1 + mobile-chrome 1) **全 PASS**.
+- **CEO 委任先 / 報告経路**: dev sub-agent (a54b1919318b810b8) 委任（規模 0.3 人日 / 1 atomic）→ CEO trust-but-verify (typecheck / lint / vitest / build / E2E 5 gate 再走) → §実装完遂デルタ → CEO 1 commit/push → Vercel auto-deploy → オーナーが production で再現確認.
+- **教訓 / 設計方針（DEC-095 設計の心）**:
+  1. **`"use server"` ファイルの export 制約は Next.js 16 で厳格化**: 純データ / 型 / sync helper は必ず別ファイル（"use server" 不付与）に分離する. 既存パターン: `exam-date-validation.ts` / `reset-learner-study-data-tables.ts`.
+  2. **dev mode pass = production safe ではない**: Turbopack hot reload は module 評価エラーを緩和することがある. production build に近い検証 = `next build` + production server preview を E2E webServer に組み込む選択肢を将来検討（W12-T3 受入準備で議論候補）.
+  3. **構造的盲点を E2E で埋める**: settings-smoke が cancel-only だったため reauth 成功 → 再 render 経路の regression を捕えられなかった. **以後 sensitive 操作の E2E は dialog 開く + キャンセル + 成功後 router.refresh まで** を 2 spec で必ずカバーする方針.
+  4. **dead code 削除は最小サーフェスの hotfix**: 業務挙動を一切変えず production 500 を解消できる場合、最初に検討すべき選択肢.
+
+### §実装完遂デルタ
+
+- **完遂日時**: 2026-05-06（DEC-094 完遂直後 / 同日内 / β 試用緊急 hotfix）
+- **担当**: dev sub-agent (a54b1919318b810b8) → CEO trust-but-verify
+- **commit**: 本 commit で適用予定（CEO 1 commit / 1 push）
+- **検証 5 ゲート（CEO 再走 GREEN）**:
+  - typecheck PASS（warning 0）
+  - lint warning 0
+  - **vitest 990 passed / 67 files PASS**（DEC-094 baseline 維持 / 失敗 0 / regression 0 / Duration 5.34s）
+  - **next build SUCCESS**（Compiled in 8.7s / 26 app pages + 5 cron API routes / DEC-006 26/32 不変）
+  - **E2E**: settings-smoke 12 + account-level-change-smoke 2 = **14/14 PASS**（chromium 7 + mobile-chrome 7 / Duration 37.3s / 新 spec が pre-fix で再現していた事を dev sub-agent が確認済）
+- **DEC-006 拡張版（DEC-077）不変条件 全部位 +0 達成**:
+  - page **26**/32（+0）/ mutation **10**/10（+0 最終枠維持）/ GET **15**（+0）/ cron **5**（+0）/ deps **0**（+0）
+- **変更ファイル (2 件)**:
+  - `app/src/lib/actions/reset-learner-study-data.ts` (modified / -16 lines + 説明コメント)
+  - `app/tests/e2e/account-level-change-smoke.spec.ts` (new / +106 lines / regression 永続化)
+- **本番反映 / オーナー再現確認手順**:
+  1. CEO push → Vercel auto-deploy 完了を Vercel dashboard で確認
+  2. オーナー production で `/parent/settings/account` を開き「学年（目標とする英検の級）」を変更 → reauth dialog → パスワード入力 → 保存 → page が再 render され select 値が更新されることを確認
+  3. 同時に「表示名 / 学習時間目標 / 受験日 / 学習やり直し」のいずれかも保存ボタンを押し reauth dialog → 成功までを再現確認（dead code 削除なので全形式が同時復旧する）
+- **follow-up（CEO 判断）**:
+  - 他 `"use server"` ファイルの非 async export 監査（W12-T3 受入準備内で扱う候補 / 規模 0.1 人日）
+  - sensitive E2E のカバレッジ拡張方針: 各 sensitive 操作 (account / nickname / 学習目標 / 受験日 / やり直し) で「dialog cancel」+「dialog success → 再 render」の 2 spec をペアで持つ方針（DEC-095 教訓 §3）
+
+---
+
 ## DEC-094: β 阻害解消最終ピース atomic（W6 シード 60 問追加 / 3 級 grammar 30 + 3 級 listening 30 / cron 起動原因 §F 記録 / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-093 直後 / オーナー β 試用 真の阻害 = production grammar-3 / listening-3 問題 0 件）
 
 - **背景**: DEC-093 §β で「β 阻害解消は UI 救済 (preparing) で即時 / seed pipeline 修復は別 atomic」と分離した宣言の **後者**. CEO の `scripts/check-missing-skills.ts` で production Turso DB を直接調査した結果、12 area combo のうち以下 2 combo に問題が **0 件**:

@@ -131,24 +131,16 @@ const DELETE_TABLES = [
   },
 ] as const;
 
-/**
- * テスト用 export: 削除対象 / 保持対象 テーブル名一覧.
- * vitest unit test の構造的検証で使用する.
- */
-export const RESET_DELETE_TABLE_NAMES: ReadonlyArray<string> = DELETE_TABLES.map(
-  (t) => t.name,
-);
-
-export const RESET_KEEP_TABLE_NAMES: ReadonlyArray<string> = [
-  "learnerProfiles",
-  "learnerSettings",
-  "learnerStudyTargets",
-  "examDates",
-  "parentMessages",
-  "families",
-  "familyMembers",
-  "users",
-] as const;
+// HOTFIX (DEC-090 follow-up): "use server" ファイルからは async 関数のみ export 可能なため
+// (Next.js 16 / "Invalid use server value" runtime error)、削除対象 / 保持対象テーブル名の
+// canonical 一覧は `@/lib/study/reset-learner-study-data-tables` に分離済 (純データモジュール).
+// 本ファイルからは非 async export を一切しない.
+//
+// 経路: 本 server action を import する `<LearnerResetStudyDataSection>` 経由で
+// `/parent/settings/account` page.tsx が module 評価する際、非 async export
+// (RESET_DELETE_TABLE_NAMES / RESET_KEEP_TABLE_NAMES) が production build で 500 エラー
+// (`A "use server" file can only export async functions, found object.`) を発生させ、
+// 結果として「目標とする英検の級を変更しようとするとエラー」という症状になっていた.
 
 /**
  * 学習者の学習履歴系データを「やり直し」状態に戻す.
