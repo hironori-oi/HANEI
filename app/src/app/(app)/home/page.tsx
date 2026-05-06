@@ -28,6 +28,7 @@ import {
   CalendarDaysIcon,
   ChartBarIcon,
   EnvelopeIcon,
+  MapIcon,
   PencilSquareIcon,
   ShoppingBagIcon,
   SparklesIcon,
@@ -798,14 +799,58 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               がくしゅうを はじめる
             </Link>
           </Button>
+          {/* DEC-095 follow-up (案 A): 4 skill 並列 CTA に拡張.
+              既存 vocab/grammar 2 button (Phase 1 暫定 hardcoded) に reading/listening を追加.
+              空問題セットは DEC-093「じゅんびちゅう」救済で誘導先が dead link にならない. */}
           <Button asChild size="lg" variant="outline" className="min-h-tap-cta">
-            <Link href={`/study/eiken-${levelId}/vocab`}>
+            <Link
+              href={`/study/eiken-${levelId}/vocab`}
+              data-testid="home-start-skill-vocab"
+            >
               語彙(英検{levelId}級)をはじめる
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="min-h-tap-cta">
-            <Link href={`/study/eiken-${levelId}/grammar`}>
+            <Link
+              href={`/study/eiken-${levelId}/grammar`}
+              data-testid="home-start-skill-grammar"
+            >
               文法(英検{levelId}級)
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="min-h-tap-cta">
+            <Link
+              href={`/study/eiken-${levelId}/reading`}
+              data-testid="home-start-skill-reading"
+            >
+              読解(英検{levelId}級)
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="min-h-tap-cta">
+            <Link
+              href={`/study/eiken-${levelId}/listening`}
+              data-testid="home-start-skill-listening"
+            >
+              リスニング(英検{levelId}級)
+            </Link>
+          </Button>
+        </div>
+        {/* DEC-095 follow-up (案 C): /adventure-map (DEC-089 Plan C 既存資産) を home から発見可能化.
+            4 skill ノードを 1 画面で俯瞰できる導線が、これまで study Result 画面からのみだった構造盲点を解消. */}
+        <div className="mt-4 flex justify-center">
+          <Button
+            asChild
+            size="lg"
+            variant="secondary"
+            className="min-h-tap-cta"
+          >
+            <Link
+              href={`/adventure-map?learner=${encodeURIComponent(activeId)}`}
+              data-testid="home-adventure-map-link"
+              className="inline-flex items-center gap-2"
+            >
+              <MapIcon className="h-5 w-5" aria-hidden="true" />
+              冒険マップを ひらく
             </Link>
           </Button>
         </div>

@@ -145,6 +145,23 @@ test.describe("MVP 学習コアループ ハッピーパス (G-6)", () => {
     });
     await expect(startVocabCta).toBeVisible();
 
+    // DEC-095 follow-up (案 A + C): 4 skill 並列 CTA + 冒険マップ link が露出していること
+    await expect(
+      page.locator('[data-testid="home-start-skill-vocab"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="home-start-skill-grammar"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="home-start-skill-reading"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="home-start-skill-listening"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="home-adventure-map-link"]'),
+    ).toBeVisible();
+
     // -----------------------------------------------------------------------
     // 4. /study/eiken-5/vocab (4 択問題)
     // -----------------------------------------------------------------------

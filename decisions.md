@@ -1,5 +1,71 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-096: home 下部 CTA 4 skill 並列化 + 冒険マップ露出 atomic（案 A + 案 C / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-095 直後 / オーナー β 試用フィードバック「ここに読解とリスニングが出てこないのはなぜか」由来）
+
+- **背景**: オーナーが /home の screenshot を提示し「きょうのミッションをはじめましょう」section に **読解・リスニング**の CTA が無いことを指摘. CEO 調査により 3 つの構造的欠落を確定:
+  1. /home 下部 CTA section (`src/app/(app)/home/page.tsx:791-811`) は **vocab + grammar 2 button + 「がくしゅうを はじめる」 1 button = 計 3 button hardcoded**. 25254ff 初期 commit から ecf92cc (W10-T4) で「がくしゅうを はじめる」追加されたまま読解・リスニング未追加.
+  2. `/study` フロントドアも `studyTargetPath = /study/eiken-${level}/vocab` で **vocab 強制**. line 72 コメント「将来 skill picker を入れる場合は…」TODO のまま.
+  3. `/adventure-map` (DEC-089 Plan C 既存資産) は **vocab/grammar/reading/listening の 4 ノード横並び**で構造的に全 skill 提示可能だが、home から `/adventure-map` への導線が存在しない (study Result 画面からのみ発見可能 = 構造的盲点).
+- **判定**: **GO**（DEC-096 = 1 atomic / **page +0**（26/32 不変）/ **mutation +0**（10/10 最終枠維持）/ **GET +0**（15 不変）/ **cron +0**（5 不変）/ **deps +0** / **UI 拡張のみ +30 lines + import 1 件 (MapIcon Heroicons)**）.
+- **判断根拠（CEO 推奨「A + C」採用）**:
+  1. **A 案（下部 CTA に読解・リスニング 2 button 追加 = 4 skill 並列化）**: screenshot の不満を直接解消. 既存 hardcoded URL `/study/eiken-${levelId}/{skill}` 流用 = 最小変更.
+  2. **C 案（home に「冒険マップを ひらく」 1 button 追加 / DEC-089 既存資産活用）**: 4 skill ノード俯瞰 UI が DEC-089 で既に実装済だが home から発見不可能だった構造的盲点を解消. DRY 性能最高.
+  3. **A + C 同時 = 0.15 人日 / 1 atomic**: A は flat fast access (4 button 横並び), C は immersive 俯瞰 (game-like adventure-map) → 2 系統並立で UX 厚みが増す.
+  4. **B 案（/study skill picker）は scope out**: 別 atomic で扱う候補 / DRY を A の 4 button が代替するため当面不要.
+  5. **空問題セット dead link 不安は DEC-093 救済で解消済**: 読解・リスニング CTA から問題 0 件 page に到達しても「じゅんびちゅう」UI 表示のため UX 安全.
+  6. **罰則ゼロ哲学 (DEC-024)**: ボタン文言は中立 / 既存パターン踏襲.
+  7. **Heroicons 1 件追加 (MapIcon)**: 既存 9 件と同じ outline 系 / 冒険マップ button の視認性向上.
+- **本 atomic スコープ（A-C）**:
+  - **A. `src/app/(app)/home/page.tsx`** (modified):
+    - **A-1.** Heroicons `MapIcon` import 追加 (既存 9 icons の alphabetical 位置).
+    - **A-2.** 下部 CTA section に **読解 + リスニング 2 button 追加** (vocab/grammar と同じ outline variant / `/study/eiken-${levelId}/{reading,listening}` href / 各 button に `data-testid="home-start-skill-{vocab,grammar,reading,listening}"` 付与で構造的 selector 化 / 既存 vocab/grammar には新 testid 追加のみで text label 変更なし = 既存 E2E 後方互換).
+    - **A-3.** `<section>` 末尾に **「冒険マップを ひらく」secondary variant 1 button 追加** / MapIcon 同梱 / `data-testid="home-adventure-map-link"` / href = `/adventure-map?learner=${activeId}`.
+  - **B. `tests/e2e/study-smoke.spec.ts`** (modified): 既存 G-6 ハッピーパス内 line 142-146 に **5 件の testid visible assertion 追加** (4 skill button + adventure-map link) / 既存 vocab CTA click 動線・assertion はそのまま維持.
+  - **C. decisions.md DEC-096 起票（本 entry）**.
+- **本 atomic スコープに含まないもの（別 atomic）**:
+  - **B 案（/study skill picker）**: A の 4 button が代替するため scope out / 必要なら別 atomic で 0.4 人日.
+  - **冒険マップ自体の UI 拡張**: DEC-089 / DEC-091 / DEC-092 / DEC-093 で着地済 / 本 atomic では home 露出のみ.
+  - **listening-3 audio 投入**: DEC-094 後オーナーローカル `npm run ai:generate-tts-listening-3` + `npm run db:apply-audio-urls-eiken3-listening` で別途実行 / 未実行なら DEC-093 の「じゅんびちゅう」救済が UX を保護.
+- **制約厳守 / 受入基準**:
+  - **DEC-006 拡張版（DEC-077）不変条件**: page **26**/32（+0）/ mutation **10**/10（+0 最終枠維持）/ GET **15**（+0）/ cron **5**（+0）/ deps **0**（+0 / Heroicons は既存依存）.
+  - **DEC-003 三層認可**: 本 atomic は UI 拡張のみ / 既存 `/study/eiken-${levelId}/{skill}` および `/adventure-map` 自身の認可経路継承.
+  - **DEC-024 罰則ゼロ哲学**: ボタン文言・付随コメント全件で罰語 0.
+  - **DEC-055 idempotency**: UI 変更 / idempotency 概念該当なし.
+  - **typecheck pass / lint warning 0 / vitest 990 PASS（67 files / +0 / regression 0）/ next build 26 page + 5 cron 完遂**.
+  - **E2E**: study-smoke.spec.ts 2/2 PASS (chromium + mobile-chrome / 既存 G-6 ハッピーパス + 5 件 testid 追加 assertion 全 GREEN / 32.2s).
+- **CEO 委任先 / 報告経路**: CEO 直轄実装 (規模 0.15 人日 / 1 atomic) → 5 ゲート GREEN 確認 → 1 commit/push → Vercel auto-deploy → オーナー production 確認.
+- **教訓 / 設計方針 (DEC-096 設計の心)**:
+  1. **「Phase 1 暫定実装」が長期残存するパターンを解消**: home page に「将来 skill picker 入れる」TODO コメントが ~6 ヶ月放置されていた事実から、暫定実装は決断時に「いつまでに完了か / 完了しないリスクは何か」を decisions.md に明記する方針を提示 (W12-T3 受入準備で議論候補).
+  2. **既存資産の発見可能性を常に再評価**: DEC-089 で実装済の `/adventure-map` が 1 リンクからしか辿れない構造盲点が β 試用で初めて顕在化. **新 page 実装後は必ず「どこから辿れるか / 主要動線に出ているか」を decisions.md にチェック項目として残す**.
+  3. **構造的 testid を最初から付ける**: 既存 vocab/grammar button は text label 依存の selector しか無く脆弱. 本 atomic で 5 件 `data-testid="home-start-skill-*"` + `home-adventure-map-link` を追加し将来 i18n / コピー変更にも耐える assertion 基盤を確立.
+
+### §実装完遂デルタ
+
+- **完遂日時**: 2026-05-06（DEC-095 完遂直後 / 同日内 / オーナー β 試用フィードバック対応 第 2 波）
+- **担当**: CEO 直轄
+- **commit**: 本 commit で適用予定（CEO 1 commit / 1 push）
+- **検証 5 ゲート GREEN**:
+  - typecheck PASS（warning 0）
+  - lint warning 0
+  - **vitest 990 passed / 67 files PASS**（DEC-095 baseline 維持 / regression 0 / Duration 5.41s）
+  - **next build SUCCESS**（Compiled in 8.1s / 26 app pages + 5 cron API routes / DEC-006 26/32 不変）
+  - **E2E**: study-smoke 2/2 PASS（chromium + mobile-chrome / 既存 G-6 + 5 件 testid 追加 assertion / Duration 32.2s / regression 0）
+- **DEC-006 拡張版（DEC-077）不変条件 全部位 +0 達成**:
+  - page **26**/32（+0）/ mutation **10**/10（+0 最終枠維持）/ GET **15**（+0）/ cron **5**（+0）/ deps **0**（+0）
+- **変更ファイル (2 件 / +30 lines + import 1 / +14 lines E2E)**:
+  - `app/src/app/(app)/home/page.tsx` (modified / MapIcon import + 読解 + リスニング 2 button + 冒険マップ secondary button + 既存 vocab/grammar に testid 付与)
+  - `app/tests/e2e/study-smoke.spec.ts` (modified / 5 件 testid visible assertion 追加 / 既存 vocab CTA click 動線維持)
+- **本番反映 / オーナー再現確認手順**:
+  1. CEO push → Vercel auto-deploy 完了を Vercel dashboard で確認
+  2. オーナー production で /home に来訪 → 「きょうのミッションをはじめましょう」section に **がくしゅうを はじめる + 4 skill 並列 button (語彙 / 文法 / 読解 / リスニング) + 冒険マップを ひらく**の計 6 button が見えることを確認
+  3. 各 button から /study/eiken-{level}/{skill} (4 skill) と /adventure-map に遷移できること
+  4. 読解・リスニングは既存 R3-001..050 / L3-001..050 (DEC-094 後 db:seed 実行済前提) で問題が出題される / 未実行なら「じゅんびちゅう」UI が DEC-093 救済で表示される
+- **follow-up（CEO 判断）**:
+  - **B 案 (/study skill picker)** は scope out 維持. A 案の 4 button + C 案の冒険マップで UX が完結するなら不要 / 必要なら別 atomic で 0.4 人日.
+  - **/adventure-map ノードのプログレス可視化強化**: DEC-091 / DEC-092 で trail/halo/CTA 拡張済だが、4 skill ノードのうち listening-3 が audio 未投入時の表示を再確認する余地あり (W12-T3 受入準備候補).
+
+---
+
 ## DEC-095: production hotfix atomic（"use server" 非 async export 削除 / `/parent/settings/account` 500 解消 / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-094 直後 / オーナー β 試用フィードバック「目標とする英検の級を変更しようとするとエラー」由来）
 
 - **背景**: production deploy `dpl_8wLBCr1hQPz9k9fvTo2h6L3CgPw8` でオーナーが `/parent/settings/account` の「学年（目標とする英検の級）」変更を試みた際、ブラウザコンソールに `Failed to load resource: 500` + `Error: An error occurred in the Server Components render` が記録され `error.tsx` が表示されていた. β 試用 P0 阻害.
