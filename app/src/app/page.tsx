@@ -12,17 +12,25 @@ import { getSession } from "@/lib/auth/guards";
  * DEC-090 項目 2: 右上ヘッダ context-aware (認証コンテキスト対応).
  *
  * - 未認証: 既存の「無料ではじめる」+「ログイン」2 件 (LP 訪問パス完全保持)
- * - 認証済 / parent: 「ダッシュボードに戻る」CTA 1 件 (→ /parent)
+ * - 認証済 / parent: 「ダッシュボードに戻る」CTA 1 件 (→ /parent/dashboard)
  * - 認証済 / learner: 「ホームに戻る」CTA 1 件 (→ /home)
  *
  * 認証情報取得は既存 `getSession()` (Better Auth) を流用 (新規 API 0).
+ *
+ * DEC-090 hotfix (2026-05-06): parent CTA href を `/parent` → `/parent/dashboard` に修正.
+ * `/parent` は route group `(parent)/parent/` 配下に page.tsx を持たず 404 になるため,
+ * canonical な保護者ホーム `/parent/dashboard` (既存 layout.tsx の Logo link と同一) に揃える.
  */
 export default async function HomePage() {
   const session = await getSession();
   const isAuthenticated = session !== null;
   const isParent = session?.role === "parent";
   const isLearner = session?.role === "learner";
-  const homeHref = isLearner ? "/home" : isParent ? "/parent" : null;
+  const homeHref = isLearner
+    ? "/home"
+    : isParent
+      ? "/parent/dashboard"
+      : null;
   const homeLabel = isLearner
     ? "ホームに戻る"
     : isParent

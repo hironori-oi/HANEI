@@ -172,7 +172,18 @@
     - `app/src/components/study/answer-feedback-effects.tsx`（spring stiffness 220→320 + damping 16→17 + rotate 0.9s→0.5s + 不正解 stiffness 200→300 + confetti particleCount 90→70 + ticks 220→140 + gravity 0.7→0.75）
 - **latency 推定 (β 子モバイル中位機 / Wi-Fi)**: click → 次問表示 ~700-1100ms → ~250-400ms（**短縮率 50-65%** / DEC-090 受入条件「50% 短縮以上」達成見込 / 真値は β 子端末 console 値で観測継続）.
 - **DEC-006 不変条件チェック**: page **26**/32（26 不変 / 設定拡張は既存 page 拡張 / page +0）+ GET **15** + mutation **10**/10（**最終枠到達 / 以降 mutation 追加は DEC-077 拡張議論前提**）+ cron 5 不変.
-- **commit hash**: 直後 push 予定（HANEI repo origin/main / Vercel auto redeploy）.
+- **commit hash**: `ee445f4` (HANEI repo origin/main / push 完了 / Vercel auto redeploy 進行中).
+- **2026-05-06 / DEC-090 hotfix（`/parent` 404 修正 / オーナー β 試用フィードバック由来）**:
+  - **症状**: 認証済 parent が LP 訪問 → 「ダッシュボードに戻る」CTA クリック → `/parent` で **404** 表示（オーナー実機スクリーンショット報告 / Vercel production `hanei-beta.vercel.app/parent`）.
+  - **根本原因**: `/parent` は route group `(parent)/parent/` 配下に直接 `page.tsx` を持たない（canonical な保護者ホームは `/parent/dashboard` / `(parent)/layout.tsx` の Logo link も `/parent/dashboard`）. DEC-090 atomic で `app/src/app/page.tsx` の context-aware CTA href を `/parent` に設定したが該当ルートが存在しなかった = β 阻害バグ.
+  - **修正 (2 ファイル / 2 行差分相当)**:
+    - `app/src/app/page.tsx` line 25: `homeHref = isParent ? "/parent" : null` → **`"/parent/dashboard"`**（コメント line 15 + 修正注記追加）.
+    - `app/src/lib/actions/reset-learner-study-data.ts` line 256: `revalidatePath("/parent")` を **削除**（非存在 path / 残置は no-op だが冗長）. `/parent/dashboard` + `/home` + `/parent/settings/account` の 3 件は維持.
+  - **検証 GREEN**: typecheck PASS / lint 0 warning / vitest **977 PASS** / 66 files / next build 26 page + 5 cron SUCCESS / 既存 unit test リグレッション 0.
+  - **DEC-006 不変条件**: 影響 0（page +0 / mutation +0 / GET +0 / cron +0）.
+  - **罰則ゼロ哲学（DEC-024）**: 影響 0（ナビゲーション修正のみ）.
+  - **未認証 LP CTA 確認**: signup + login 2 件 CTA は **設計通り表示**（`hero-cta-anonymous` data-testid）. `/login` + `/signup` page 自体は `(auth)` route group 配下に存続 / 直 URL navigation 可能. オーナー質問「ログイン画面がなくなりましたが、こちらは設計通りですか？」への回答: **認証済時にのみ login/signup CTA を非表示にする DEC-090 仕様通り**.
+  - **commit hash**: 直後 push 予定（HANEI repo origin/main / Vercel auto redeploy）.
 
 ---
 

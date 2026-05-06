@@ -251,9 +251,10 @@ export async function resetLearnerStudyData(
   }
 
   // 関連 path を revalidate (キャッシュ整合)
+  // DEC-090 hotfix: `/parent` は route group (parent)/parent/ 配下に page.tsx を持たないため
+  // revalidatePath 対象外. canonical な `/parent/dashboard` のみを revalidate する.
   try {
     revalidatePath("/home");
-    revalidatePath("/parent");
     revalidatePath("/parent/dashboard");
     revalidatePath("/parent/settings/account");
   } catch {
