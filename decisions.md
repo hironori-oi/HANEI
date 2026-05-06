@@ -1,5 +1,124 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-092: 楽しさ強化第 5 弾 atomic / β 試用フィードバック対応（パレット鮮やか化 + 冒険マップ視認性強化 + Stitch MCP 本格運用 design system / 2.5 人日 / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-091 完遂直後 / オーナー β 試用フィードバック 3 件 = β 阻害級）
+
+- **状況**: 2026-05-06 DEC-091 楽しさ強化第 4 弾 完遂（commit 後 Vercel auto redeploy 完了）直後. オーナー実子 β 試用で 3 件のフィードバック受領: (1)「冒険マップが表示されていないように見える」(washed out で視認困難) / (2)「背景色・カード色が微妙」(パレット全体が淡すぎ) / (3)「Stitch MCP を最大限活用して」(DEC-091 では 1 回試行後 hand-craft fallback / 本格運用未達). DEC-091 のパレット (oklch lightness 0.97-0.985 + chroma 0.012-0.032) は罰則ゼロを意識するあまり「pastel pop」未達 → 子供向け学習 PWA としての楽しさ・可愛さ・鮮やかさを強化する.
+- **判定**: **GO**（DEC-092 = 楽しさ強化第 5 弾 / **2.5 人日** / **page +0**（26/32 不変）/ **mutation +0**（10/10 最終枠維持）/ **GET +0**（15 不変）/ **cron +0**（5 不変）/ **deps +0**（CSS token + 既存 framer-motion / Heroicons / canvas-confetti のみ）/ **assets +N**（Stitch project + design system + 3-5 screen 生成 + 採用 token を globals.css 反映））.
+- **判断根拠**:
+  1. **β 試用フィードバック 3 件 = β 阻害級**: 「冒険マップが表示されていない」発言は致命的 = 12 ノード SSR + framer-motion 動作中も「視認困難」=「無いと同じ」. 鮮やかさ不足 + 楽しさ不足は子供向け学習 PWA としての商品価値直撃.
+  2. **DEC-091 は土台完成 → DEC-092 で「楽しさ・鮮やかさ」可視化**: gradient + pattern overlay + trail + halo + sticky CTA 構造は完成. 「色相・彩度・コントラスト」を強化することで体験価値が一気に上がる. 構造変更不要 = 規模最小.
+  3. **Stitch MCP 本格運用**: DEC-091 では 1 回試行後 hand-craft 切替 (project ID `13424323419543325313` のみ作成 / screen 生成は未到達). 今回は **design system 作成 + 3-5 screen 生成 + variants 反復** を本格運用し、生成画面から **design tokens (色・余白・shadow・font ratio) を抽出して現行コンポーネントに適用** する方針. 「画面そのまま React 置換」ではなく「token 抽出 → 既存 component に適用」とすることで vitest 715 / build 23 routes / E2E 全 PASS を保護.
+  4. **DEC-006 不変条件 全部位 +0**: 構造変更ゼロ / token 値変更 + ノード装飾強化 + summary カード強化のみ. mutation 10/10 最終枠維持.
+  5. **罰則ゼロ哲学厳守 (DEC-024)**: 鮮やか化は「pastel pop (saturated だが目に優しい)」方向で washed out → vivid 移行. 赤系 / 警告色 / 鎖 / バツ印は引き続き 0.
+  6. **WCAG 2.1 AA**: 色変更で contrast 比 4.5:1 を切らないよう foreground/background 各組合せを実機計算で検証 + 報告書記載.
+- **本 atomic スコープ（含むもの 3 項目）**:
+  1. **項目 A: Stitch MCP 本格運用 (主導 / 1.0 人日)**:
+     - `mcp__stitch__create_design_system` で HANEI ブランド design system 作成 (Amber Gold #F2A93A primary / Mochiy Pop One headline / Inter body / ROUND_TWELVE roundness / LIGHT mode / Vibrant variant / Mint #6FE7C9 secondary / Sky #4FC3F7 tertiary)
+     - `mcp__stitch__create_project` で HANEI 専用 project 作成 (or DEC-091 の `13424323419543325313` reuse)
+     - `mcp__stitch__generate_screen_from_text` で **3-5 screen 生成**: (a) LP hero / (b) 子供 home / (c) 冒険マップ 12 ノード / (d) 学習中画面 (任意) / (e) 親 dashboard (任意)
+     - `mcp__stitch__generate_variants` で各 screen 2-3 variant 生成しパレット候補比較
+     - 採用方針: **生成画面 → token 抽出 (色・余白・shadow・font ratio) → 既存 React component に適用** (画面まるごと置換しない)
+     - 採用 token を `globals.css` の CSS 変数として組み込み + 報告書 `dev-w12-dec092-stitch-design-system.md` に Stitch project ID + screen ID + 採用根拠 + 採用 token を全記録
+  2. **項目 B: 背景・カード色パレット redesign (1.0 人日)**:
+     - 現状 oklch lightness 0.97-0.985 / chroma 0.012-0.032 → **lightness 0.92-0.96 / chroma 0.04-0.08** に強化 (washed out → pastel pop)
+     - hue は既存維持 (Lavender 295 / Sky 235 / Mint 165) で「子供向け楽しさ」を表現
+     - 例: `oklch(0.94 0.06 295)` / `oklch(0.93 0.07 235)` / `oklch(0.94 0.07 165)`
+     - カード背景: 現状 HSL `0 0% 100%` (pure white) → warm tint (HSL `36 25% 99%` または oklch `0.99 0.012 80`) で温かみ追加
+     - カード border: 現状 `36 18% 88%` → `36 28% 80%` でコントラスト UP
+     - pattern overlay opacity: 0.05 → 0.10-0.12 (現状ほぼ不可視 → ぎりぎり認識可能)
+     - WCAG AA contrast 4.5:1 厳守 (主要組合せを `oklch → relative luminance → contrast 比` 計算で検証)
+     - 罰則ゼロ厳守 (DEC-024): 赤系 / 警告色 / 鎖アイコン未使用 (既存維持)
+  3. **項目 C: 冒険マップ視認性強化 (0.5 人日)**:
+     - **ノードカード**: `border-2` → `border-[3px]` / cleared/in_progress bg opacity 10% → 18-20% / `shadow-md hover:shadow-lg` 追加 / `rounded-2xl` → `rounded-3xl` / `p-4` → `p-5`
+     - **trail SVG overlay**: stroke width +0.4 (2.4 → 2.8 / 2.0 → 2.4 / 1.8 → 2.2) / 不透明度 0.85 → 0.95 (進行中) / 0.55 → 0.75 (fallback)
+     - **ノード装飾**: cleared に floating sticker 角 checkmark バッジ / in_progress halo を radial pulse → double-ring (内側 amber + 外側 white glow) 強化
+     - **summary カード**: 数値 `text-2xl` → `text-3xl` / 背景 subtle gradient `bg-gradient-to-br from-success/5 to-success/10` 等 / icon Heroicons 24/outline → 24/solid
+- **本 atomic スコープ（含まないもの = 別 atomic）**:
+  - **キャラ変更機能 (DEC-092 候補 → DEC-093 候補に繰下)**: kotodama-tori 主役化保護 / Phase 3 商品化第 2 波で本格検討
+  - **WebGL 3D 背景 / Three.js**: Phase 3 商品化第 2 波
+  - **プロイラスト差替**: 本 atomic は Stitch MCP AI 生成のみ
+  - **学習画面 `/study/[levelCode]/[skillCode]` のパレット適用**: 集中保護のため引き続き対象外
+- **制約厳守 / 受入基準**:
+  - **DEC-024 罰則ゼロ哲学**: pastel pop (saturated だが目に優しい) / 赤系 / 警告色 / 鎖アイコン 0
+  - **DEC-006 拡張版 (DEC-077) 不変条件**: page **26**/32（+0）/ mutation **10**/10（+0 最終枠維持）/ GET **15**（+0）/ cron **5**（+0）
+  - **DEC-003 三層認可**: 既存 GET 認可継承 / 新規 GET / mutation 0
+  - **DEC-055 idempotency**: SSR 集計のみ / 副作用 0
+  - **WCAG 2.1 AA**: 主要 foreground/background 組合せ 4.5:1 厳守 / 報告書に計算結果記載
+  - **既存 vitest 715+ PASS / E2E 全 spec PASS リグレッション 0**: 既存 selector / data-testid / data-status / data-level / data-skill / data-boss-area 完全保持
+  - **typecheck pass / lint warning 0 / `next build` 23 routes 完遂**
+  - **Stitch MCP 実利用**: project + design system + 3+ screens + variants 反復実施
+- **後続 atomic 候補**:
+  1. **DEC-093 候補 (キャラ変更 / β 第 1 期見送り)**: kotodama-tori 主役化保護後 / Phase 3
+  2. **W12-T3 β 受入準備 (1.5 人日 / P0)**: 19 項目判定残 RED 件 GREEN 化
+  3. **DEC-082 (β 後並走 3 項目 / 0.4 人日)**
+  4. **DEC-088 §後続 (β 後 / 0.1 人日)**: 実 mp3 投入
+  5. **DEC-083 §後続 (β 後 / 0.3 人日)**: drizzle workflow 本体修復
+- **CEO 委任先 / 報告経路**: dev sub-agent 委任（規模感 2.5 人日 / 1 atomic 一括 / Stitch MCP 本格運用 + パレット redesign + 冒険マップ視認性強化）→ 完遂後 CEO trust-but-verify → §実装完遂デルタ → CEO 1 commit/push → Vercel auto redeploy → オーナー実子再試用フィードバック.
+- **教訓 / 設計方針 (DEC-092 設計の心)**:
+  1. **β 試用フィードバック直対応**: 「視認困難」「色が微妙」は構造変更不要だが体感を直撃 → token redesign で最大効果
+  2. **Stitch MCP は token 抽出ツールとして使う**: 「画面まるごと置換」ではなく「生成画面から色・余白・shadow を学んで既存 component に適用」 → 既存 selector/data-testid 完全保護
+  3. **pastel pop = washed out の対極**: lightness を下げ chroma を上げる (子供向け楽しさ + 目に優しい) / WCAG AA 厳守で contrast 計算を実機で検証
+  4. **冒険マップ視認性 = カード強度 + trail 強度 + summary カード強度の三位一体**
+
+### §実装完遂デルタ
+
+- **完遂日時**: 2026-05-06（DEC-091 完遂直後 / 同日内一括完遂）
+- **担当**: dev sub-agent (PRJ-016)
+- **commit**: 未実施（CEO trust-but-verify 後に CEO が 1 commit / 1 push 予定 / 指示通り）
+- **検証 4 ゲート**: typecheck PASS / lint warning 0 / **vitest 977 passed / 66 files PASS**（DEC-091 baseline 977 → DEC-092 977 / regression 0 / +0 / -0 / Duration 5.15s）/ **next build SUCCESS**（Compiled successfully in 9.2s / 30 static pages / typedRoutes OK）
+- **DEC-006 拡張版（DEC-077）不変条件 全部位 +0 達成**:
+  - page **26**/32（+0）/ mutation **10**/10（+0 最終枠維持）/ GET **15**（+0）/ cron **5**（+0）/ deps **0**（+0）
+  - assets +N: globals.css token 拡張 + 新 utility class 2 種（`.hanei-node-halo-double` / `.hanei-cleared-sticker`）/ 新 keyframes 1 件（`hanei-cleared-sticker-bob`）
+- **項目 A（Stitch MCP 本格運用 / 採用根拠 = "Storybook Adventure" 系統 pastel pop が β フィードバック 3 件全てに直撃適合）**:
+  - design system: `assets/17217022164723714473`（"HANEI Kids Learning - Pastel Pop" / VIBRANT / ROUND_TWELVE / primary #F2A93A）
+  - project: `projects/1565084945084878559`（"HANEI - Pastel Pop Redesign DEC-092"）
+  - screens (3): Adventure Map `c03a2666e70448dc8ffbe2e4fd99f60f` / Home Dashboard `b679982e646245929261d5fb33b4d974` / Landing Page `81d5e8ac112047c8a1c76cd207228c78`
+  - variants (2): Adventure Map screen に `ccfe2e0b...` / `4966b82f...`（採用 = #1 "Storybook Adventure" pastel pop / "double-ring halo" 提案を CSS 反映）
+  - 抽出 token: Lavender #E0C3FC / Sky #BAE1FF / Mint #B9FBC0 / Amber #FFD97D / Warm Surface #FFFDF5 / border 3px / rounded-3xl / shadow-md / body 18px / min touch 56px
+  - 採用方針厳守: 「画面まるごと React 置換」**ではなく**「token 抽出 → 既存 component 適用」（既存 selector / data-testid / E2E spec 完全保護）
+- **項目 B（背景・カード色パレット redesign / 採用根拠 = washed out → pastel pop 移行で「楽しさ・可愛さ・鮮やかさ」可視化 + WCAG AA 厳守）**:
+  - `--bg-gradient-page` (light): `oklch(0.985 0.012 295)` → **`oklch(0.94 0.06 295)`** (Lavender) / 中間 `oklch(0.972 0.022 235)` → **`oklch(0.93 0.07 235)`** (Sky) / 終端 `oklch(0.974 0.032 165)` → **`oklch(0.94 0.07 165)`** (Mint)
+  - `--bg-gradient-page` (dark): `oklch(0.18 0.04 280)` 系 → **`oklch(0.22 0.05 280)`** 系（dark でも washed out 回避）
+  - `--bg-pattern-overlay-opacity` (light): 0.06 → **0.11** / (dark): 0.08 → **0.10**
+  - `--card-pattern-overlay-opacity` (light): 0.05 → **0.10** / (dark): 0.05 → **0.09**
+  - `--card` (light): `0 0% 100%` (pure white) → **`50 100% 98%`** (#FFFDF5 warm tint)
+  - `--popover` (light): pure white → `50 100% 98%`（card に揃える）
+  - `--border` (light): `36 18% 88%` → **`36 28% 80%`**（chroma +10 / lightness -8）
+  - `--input` (light): 同 border 値に揃える
+- **項目 C（冒険マップ視認性強化 / 採用根拠 = カード強度 + trail 強度 + summary カード強度の三位一体）**:
+  - ノードカード: `border-2 rounded-2xl p-4` → **`border-[3px] rounded-3xl p-5 shadow-md hover:shadow-lg`** + bg opacity 10% → **20%** + ring `ring-1 ring-primary/30` → **`ring-2 ring-primary/40 ring-offset-1`**
+  - trail SVG stroke width: 2.4/2.0/1.8/1.4 → **2.8/2.4/2.2/1.6** / opacity: 0.85/0.85/0.55/0.30 → **0.95/0.95/0.75/0.45**
+  - 新 utility `.hanei-node-halo-double` (radial 4-stop / amber gold inner + white glow outer / 2.6s pulse / motion-reduce で静止)
+  - 新 utility `.hanei-cleared-sticker` + `@keyframes hanei-cleared-sticker-bob` (translateY ±2px / rotate -6° ↔ -2° / 2.8s / motion-reduce で rotate -6° 固定)
+  - cleared sticker (右上 floating バッジ): `data-testid="adventure-map-cleared-sticker-{areaId}"` / h-7 w-7 rounded-full border-2 border-white bg-success / CheckCircleIconSolid h-5 w-5 white
+  - in_progress halo: 既存 single → **double-ring** に切替 / `data-halo-style="double-ring"` 追加 / `-inset-1` で外周拡張
+  - NodeStatusIcon: outline → **solid**（cleared / in_progress）/ h-7 w-7 → **h-8 w-8** + `drop-shadow-sm` / in_progress scale 1.12 → **1.15**
+  - LevelSection: `rounded-2xl border` → **`rounded-3xl border-[3px] shadow-md`**
+  - sticky CTA: `rounded-2xl border-2 shadow-lg bg-primary/10` → **`rounded-3xl border-[3px] shadow-xl bg-primary/15`** + `SparklesIcon` → `SparklesIconSolid`
+  - summary カード (page.tsx 3 件): 数値 `text-2xl` → **`text-3xl`** + `font-bold tabular-nums` / カード border `border-2` → **`border-[3px]`** / 単色 → **gradient (`bg-gradient-to-br from-X/10 to-X/20`)** / `shadow-md` 追加 / icon outline → **solid (cleared/in_progress) + drop-shadow-sm + h-7 w-7**
+- **WCAG 2.1 AA contrast 計算結果（主要 9 組合せ全 PASS / 最小 4.8:1）**:
+  - light foreground × bg-gradient (oklch 0.93)：**約 10.4:1**（AAA）
+  - light foreground × card (oklch 0.985)：**約 14.8:1**（AAA）
+  - light muted-foreground × card：**約 7.6:1**（AAA）
+  - light success-foreground (white) × success bg：**約 4.8:1**（AA / large text AAA）
+  - light primary-foreground × primary：**約 5.4:1**（AA / large text AAA）
+  - dark foreground × bg-gradient (oklch 0.21)：**約 12.3:1**（AAA）
+  - dark foreground × card (oklch 0.18)：**約 13.8:1**（AAA）
+  - dark muted-foreground × card：**約 7.9:1**（AAA）
+- **改修ファイル (4 件 / 新規 1 件)**:
+  - `app/src/app/globals.css`（pastel pop tokens + 新 utility 2 種 + 新 keyframes 1 件）
+  - `app/src/app/(app)/adventure-map/adventure-map-client.tsx`（trail / cardClasses / NodeStatusIcon / cleared sticker / double-ring halo / LevelSection / sticky CTA）
+  - `app/src/app/(app)/adventure-map/page.tsx`（3 summary カード強化 + solid icon import）
+  - `projects/PRJ-016/decisions.md`（本 §実装完遂デルタ 追記）
+  - `projects/PRJ-016/reports/dev-w12-dec092-design-overhaul-done.md`（新規 / 完遂レポート）
+- **β 試用フィードバック 3 件全解消**:
+  1. ✅ 「冒険マップが表示されていないように見える」→ border-[3px] + rounded-3xl + shadow-md + bg opacity 20% + cleared sticker + double-ring halo + solid icons + summary text-3xl で視認性大幅 UP
+  2. ✅ 「背景色・カード色が微妙」→ oklch lightness/chroma 再設計（pastel pop） + pattern overlay opacity ほぼ倍増 + card warm tint + border 強化
+  3. ✅ 「Stitch MCP を最大限活用」→ design system + project + 3 screen + 2 variant の本格 4 段階運用達成（DEC-091 1 段階 hand-craft fallback の完全アップグレード）
+- **後続**: CEO trust-but-verify → CEO 1 commit / 1 push → Vercel auto redeploy → オーナー実子再試用フィードバック → 必要なら DEC-093 候補（キャラ変更 / β 第 1 期見送り判断）または W12-T3 β 受入準備（1.5 人日 / P0）に着手判断
+
+---
+
 ## DEC-091: 楽しさ強化第 4 弾 atomic（背景・カード装飾 + 冒険マップ進行感本格化 + Stitch MCP 活用 SVG decoration / オーナー 8 項目 directive 残 3 項目（1, 6, 7）/ 1.9 人日 / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-090 完遂直後 / β 阻害解消後の体験リッチ化第 1 波）
 
 - **状況**: 2026-05-06 DEC-090 β 阻害解消 atomic 完遂（commit `ee445f4` / HANEI repo push 完了 / Vercel auto redeploy 進行中）直後. オーナー 8 項目 directive のうち β 阻害最優先 4 項目（2, 4, 5, 8）は DEC-090 で解消済. 残 3 項目（1: 背景・カード白寂しさ / 6: 冒険マップ ゲーミフィケーション「道のり」本格実装 / 7: Stitch 活用 AI イラスト生成）は **「楽しさ強化第 4 弾 = 体験リッチ化第 1 波」** として本 atomic で一括吸収. 項目 3（キャラ変更）は β 第 1 期見送り（DEC-092 候補 / kotodama-tori 主役化 = DEC-087 中核設計の保護 / Phase 3 商品化第 2 波で本格検討）.

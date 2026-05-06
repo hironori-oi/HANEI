@@ -18,7 +18,11 @@
 
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeftIcon, MapIcon, LockClosedIcon, CheckCircleIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, MapIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import {
+  CheckCircleIcon as CheckCircleIconSolid,
+  SparklesIcon as SparklesIconSolid,
+} from "@heroicons/react/24/solid";
 
 import {
   Card,
@@ -136,49 +140,61 @@ export default async function AdventureMapPage({ searchParams }: PageProps) {
         </p>
       </section>
 
-      {/* サマリ カード */}
+      {/* サマリ カード - DEC-092: 数値 text-3xl + subtle gradient bg + solid icons */}
       <section className="mb-8 grid grid-cols-3 gap-3">
-        <Card data-testid="adventure-map-cleared-card" data-card-decoration="true">
+        <Card
+          data-testid="adventure-map-cleared-card"
+          data-card-decoration="true"
+          className="border-[3px] border-success/40 bg-gradient-to-br from-success/10 to-success/20 shadow-md"
+        >
           <CardHeader>
-            <CheckCircleIcon
-              className="mb-1 h-6 w-6 text-success"
+            <CheckCircleIconSolid
+              className="mb-1 h-7 w-7 text-success drop-shadow-sm"
               aria-hidden="true"
             />
             <CardTitle className="text-base">クリア</CardTitle>
             <CardDescription>すごいね！</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold tabular-nums text-success">
+            <p className="text-3xl font-bold tabular-nums text-success">
               {summary.clearedCount} / 12
             </p>
           </CardContent>
         </Card>
-        <Card data-testid="adventure-map-in-progress-card" data-card-decoration="true">
+        <Card
+          data-testid="adventure-map-in-progress-card"
+          data-card-decoration="true"
+          className="border-[3px] border-primary/40 bg-gradient-to-br from-primary/10 to-primary/20 shadow-md"
+        >
           <CardHeader>
-            <SparklesIcon
-              className="mb-1 h-6 w-6 text-primary"
+            <SparklesIconSolid
+              className="mb-1 h-7 w-7 text-primary drop-shadow-sm"
               aria-hidden="true"
             />
             <CardTitle className="text-base">しんこうちゅう</CardTitle>
             <CardDescription>ちょうし いいね！</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold tabular-nums text-primary">
+            <p className="text-3xl font-bold tabular-nums text-primary">
               {summary.inProgressCount} / 12
             </p>
           </CardContent>
         </Card>
-        <Card data-testid="adventure-map-not-started-card" data-card-decoration="true">
+        <Card
+          data-testid="adventure-map-not-started-card"
+          data-card-decoration="true"
+          className="border-[3px] border-muted-foreground/30 bg-gradient-to-br from-muted/30 to-muted/50 shadow-md"
+        >
           <CardHeader>
             <LockClosedIcon
-              className="mb-1 h-6 w-6 text-muted-foreground"
+              className="mb-1 h-7 w-7 text-muted-foreground"
               aria-hidden="true"
             />
             <CardTitle className="text-base">これから</CardTitle>
             <CardDescription>たのしみだね</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold tabular-nums text-muted-foreground">
+            <p className="text-3xl font-bold tabular-nums text-muted-foreground">
               {summary.notStartedCount} / 12
             </p>
           </CardContent>

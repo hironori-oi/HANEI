@@ -33,12 +33,15 @@ import * as React from "react";
 import Link from "next/link";
 import { LazyMotion, domAnimation, m, useReducedMotion } from "framer-motion";
 import {
-  CheckCircleIcon,
+  CheckCircleIcon as CheckCircleIconSolid,
+  SparklesIcon as SparklesIconSolid,
+  ShieldCheckIcon as ShieldCheckIconSolid,
+} from "@heroicons/react/24/solid";
+import {
   LockClosedIcon,
-  SparklesIcon,
   ArrowRightIcon,
-  ShieldCheckIcon,
   FireIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
 import type { AdventureMapArea, AdventureMapSkill } from "@/lib/study/aggregations";
@@ -133,20 +136,20 @@ function AdventureMapClientInner({ grouped }: Props) {
           className="sticky bottom-4 z-30 mt-8"
           data-testid="adventure-map-continue-cta"
         >
-          <div className="mx-auto max-w-md rounded-2xl border-2 border-primary/60 bg-card/95 p-3 shadow-lg backdrop-blur">
+          <div className="mx-auto max-w-md rounded-3xl border-[3px] border-primary/70 bg-card/95 p-3 shadow-xl backdrop-blur">
             <Link
               href={inProgressArea.href}
               className={cn(
-                "flex items-center justify-between gap-3 rounded-xl px-4 py-3",
-                "bg-primary/10 text-primary outline-none",
-                "hover:bg-primary/15",
+                "flex items-center justify-between gap-3 rounded-2xl px-4 py-3",
+                "bg-primary/15 text-primary outline-none",
+                "hover:bg-primary/25",
                 "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
               )}
               aria-label={`${LEVEL_LABEL_JA[inProgressArea.level]} ${SKILL_LABELS_JA[inProgressArea.skill]} を つづける`}
               data-testid="adventure-map-continue-link"
             >
               <span className="flex items-center gap-2">
-                <SparklesIcon
+                <SparklesIconSolid
                   className="h-5 w-5 text-primary"
                   aria-hidden="true"
                 />
@@ -199,7 +202,7 @@ function LevelSection({
     <section
       data-testid={`adventure-map-level-${level}`}
       data-card-decoration="true"
-      className="rounded-2xl border bg-card p-5"
+      className="rounded-3xl border-[3px] bg-card p-5 shadow-md"
     >
       <h2 className="mb-4 font-display text-xl font-bold text-primary">
         英検 {level} 級 エリア
@@ -342,11 +345,12 @@ function resolveTrailStyle(
     from === "in_progress" || to === "in_progress";
   const bothNotStarted = from === "not_started" && to === "not_started";
 
+  // DEC-092: stroke width +0.4 / opacity を全体的に強化 (進行中 0.85 → 0.95 / fallback 0.55 → 0.75)
   if (bothCleared) {
     return {
       stroke: "#F2A93A",
-      width: 2.4,
-      opacity: 0.85,
+      width: 2.8,
+      opacity: 0.95,
       dashArray: null,
       flow: false,
     };
@@ -354,8 +358,8 @@ function resolveTrailStyle(
   if (oneCleared && involvesInProgress) {
     return {
       stroke: "#4FC3F7",
-      width: 2.0,
-      opacity: 0.85,
+      width: 2.4,
+      opacity: 0.95,
       dashArray: "3 4",
       flow: true,
     };
@@ -363,8 +367,8 @@ function resolveTrailStyle(
   if (involvesInProgress) {
     return {
       stroke: "#B8A4E0",
-      width: 1.8,
-      opacity: 0.7,
+      width: 2.2,
+      opacity: 0.85,
       dashArray: "2 4",
       flow: true,
     };
@@ -372,8 +376,8 @@ function resolveTrailStyle(
   if (bothNotStarted) {
     return {
       stroke: "#B8A4E0",
-      width: 1.4,
-      opacity: 0.3,
+      width: 1.6,
+      opacity: 0.45,
       dashArray: "2 5",
       flow: false,
     };
@@ -381,8 +385,8 @@ function resolveTrailStyle(
   // fallback: cleared <-> not_started (進行中なし)
   return {
     stroke: "#F2A93A",
-    width: 1.8,
-    opacity: 0.55,
+    width: 2.2,
+    opacity: 0.75,
     dashArray: "3 4",
     flow: false,
   };
@@ -403,16 +407,19 @@ function AreaNode({
     `マスタリ ${area.mastered}/${area.total}` +
     (boss ? " (試練エリア)" : "");
 
+  // DEC-092: 視認性強化 = border-2 → border-[3px] / rounded-2xl → rounded-3xl / p-4 → p-5
+  // bg opacity 10% → 18-20% / shadow-md hover:shadow-lg 追加
   const cardClasses = cn(
-    "group block rounded-2xl border-2 p-4 outline-none transition-colors",
+    "group block rounded-3xl border-[3px] p-5 shadow-md outline-none transition-all",
+    "hover:shadow-lg",
     "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
     area.status === "cleared"
-      ? "border-success/60 bg-success/10 hover:border-success"
+      ? "border-success/70 bg-success/20 hover:border-success"
       : area.status === "in_progress"
-        ? "border-primary/60 bg-primary/10 hover:border-primary"
-        : "border-muted-foreground/20 bg-muted/20 hover:border-muted-foreground/40",
-    // boss area = warm amber tint (deep amber + soft orange / 罰則ゼロ準拠 / 「赤色」未使用)
-    boss && "ring-1 ring-primary/30",
+        ? "border-primary/70 bg-primary/20 hover:border-primary"
+        : "border-muted-foreground/30 bg-muted/30 hover:border-muted-foreground/50",
+    // boss area = warm amber ring (罰則ゼロ準拠 / 「赤色」未使用)
+    boss && "ring-2 ring-primary/40 ring-offset-1",
   );
 
   // halo: in_progress または boss area not_started に subtle pulse
@@ -420,23 +427,38 @@ function AreaNode({
     area.status === "in_progress" ||
     (boss && area.status !== "cleared");
 
+  // DEC-092: in_progress = double-ring halo (内側 amber + 外側 white glow / 強化版)
+  const isDoubleRing = area.status === "in_progress";
+
   return (
     <div className="relative">
-      {/* B-2: halo (進行中 + 試練エリア の subtle radial pulse) */}
+      {/* B-2 / DEC-092: halo (進行中 = double-ring 強化 / 試練エリア = 単色 amber pulse) */}
       {showHalo ? (
-        <span
-          aria-hidden="true"
-          data-testid={`adventure-map-halo-${area.areaId}`}
-          className={cn(
-            "pointer-events-none absolute inset-0 rounded-2xl",
-            "hanei-node-halo",
-          )}
-          style={{
-            background: boss
-              ? "radial-gradient(circle at 50% 50%, rgba(242, 169, 58, 0.42) 0%, rgba(255, 210, 122, 0.18) 60%, transparent 78%)"
-              : "radial-gradient(circle at 50% 50%, rgba(242, 169, 58, 0.32) 0%, rgba(242, 169, 58, 0.08) 55%, transparent 75%)",
-          }}
-        />
+        isDoubleRing ? (
+          <span
+            aria-hidden="true"
+            data-testid={`adventure-map-halo-${area.areaId}`}
+            data-halo-style="double-ring"
+            className={cn(
+              "pointer-events-none absolute -inset-1 rounded-3xl",
+              "hanei-node-halo-double",
+            )}
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            data-testid={`adventure-map-halo-${area.areaId}`}
+            data-halo-style="single"
+            className={cn(
+              "pointer-events-none absolute inset-0 rounded-3xl",
+              "hanei-node-halo",
+            )}
+            style={{
+              background:
+                "radial-gradient(circle at 50% 50%, rgba(242, 169, 58, 0.50) 0%, rgba(255, 210, 122, 0.22) 60%, transparent 78%)",
+            }}
+          />
+        )
       ) : null}
 
       <Link
@@ -447,8 +469,23 @@ function AreaNode({
         data-level={area.level}
         data-skill={area.skill}
         data-boss-area={boss ? "true" : undefined}
-        className={cardClasses}
+        className={cn(cardClasses, "relative")}
       >
+        {/* DEC-092: cleared ノードの floating checkmark sticker (角バッジ) */}
+        {area.status === "cleared" ? (
+          <span
+            aria-hidden="true"
+            data-testid={`adventure-map-cleared-sticker-${area.areaId}`}
+            className={cn(
+              "absolute -right-2 -top-2 inline-flex h-7 w-7 items-center justify-center",
+              "rounded-full border-2 border-white bg-success text-white shadow-md",
+              "hanei-cleared-sticker",
+            )}
+          >
+            <CheckCircleIconSolid className="h-4 w-4" aria-hidden="true" />
+          </span>
+        ) : null}
+
         <div className="mb-2 flex items-center justify-between">
           <NodeStatusIcon status={area.status} reduce={reduce} boss={boss} />
           <span className="text-xs tabular-nums text-muted-foreground">
@@ -547,10 +584,12 @@ function NodeStatusIcon({
   reduce: boolean;
   boss: boolean;
 }) {
+  // DEC-092: cleared / in_progress = Solid icons (24/solid) で目立たせる
+  // not_started = Outline (中立 / 控えめ)
   if (status === "cleared") {
     return (
-      <CheckCircleIcon
-        className="h-7 w-7 text-success"
+      <CheckCircleIconSolid
+        className="h-8 w-8 text-success drop-shadow-sm"
         aria-hidden="true"
       />
     );
@@ -561,7 +600,7 @@ function NodeStatusIcon({
         animate={
           reduce
             ? { opacity: 1 }
-            : { scale: [1, 1.12, 1], opacity: [1, 0.85, 1] }
+            : { scale: [1, 1.15, 1], opacity: [1, 0.85, 1] }
         }
         transition={
           reduce
@@ -571,7 +610,10 @@ function NodeStatusIcon({
         className="inline-block"
         aria-hidden="true"
       >
-        <SparklesIcon className="h-7 w-7 text-primary" aria-hidden="true" />
+        <SparklesIconSolid
+          className="h-8 w-8 text-primary drop-shadow-sm"
+          aria-hidden="true"
+        />
       </m.span>
     );
   }
@@ -580,8 +622,8 @@ function NodeStatusIcon({
   // 既存 selector 互換 + 罰則ゼロ哲学 (LockClosedIcon は既に「中立」運用) を維持.
   if (boss) {
     return (
-      <ShieldCheckIcon
-        className="h-7 w-7 text-primary/60"
+      <ShieldCheckIconSolid
+        className="h-8 w-8 text-primary/70"
         aria-hidden="true"
       />
     );

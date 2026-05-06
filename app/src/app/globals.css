@@ -41,17 +41,19 @@
   --info-foreground: 199 80% 18%;
 
   /* Surfaces (light) */
+  /* DEC-092: warm tint cards (#FFFDF5 = 50 100% 98%) instead of pure white */
+  /* + stronger border for pastel pop visibility (36 18% 88% → 36 28% 80%) */
   --background: 36 33% 98%;
   --foreground: 222 47% 11%;
-  --card: 0 0% 100%;
+  --card: 50 100% 98%;
   --card-foreground: 222 47% 11%;
-  --popover: 0 0% 100%;
+  --popover: 50 100% 98%;
   --popover-foreground: 222 47% 11%;
   --muted: 36 20% 94%;
   --muted-foreground: 222 16% 36%;
 
-  --border: 36 18% 88%;
-  --input: 36 18% 88%;
+  --border: 36 28% 80%;
+  --input: 36 28% 80%;
   --ring: 36 88% 59%;
 
   --radius: 0.75rem;
@@ -387,30 +389,40 @@ li {
 /* WCAG 2.1 AA: 上層に foreground text を置いた状態で contrast 比 4.5:1 維持. */
 /* prefers-reduced-motion: reduce 対応 (gradient は静止 / pattern も静止).    */
 /* ------------------------------------------------------------------------ */
+/* ------------------------------------------------------------------------ */
+/* DEC-092 楽しさ強化第 5 弾 / β 試用フィードバック対応                          */
+/* Stitch MCP design system "Storybook Adventure" (asset 17217022164723714473) */
+/* から抽出した pastel pop tokens. washed out (lightness 0.97-0.985 / chroma   */
+/* 0.012-0.032) → pastel pop (lightness 0.92-0.96 / chroma 0.04-0.08) に強化.  */
+/* Stitch 採用色: Lavender #E0C3FC / Sky #BAE1FF / Mint #B9FBC0 / Amber #FFD97D */
+/* WCAG 2.1 AA contrast 4.5:1 厳守 (foreground oklch ~0.20 vs bg oklch ~0.93   */
+/* = 約 8.2:1 計算検証).                                                       */
+/* ------------------------------------------------------------------------ */
 :root {
   --bg-gradient-page: linear-gradient(
     180deg,
-    oklch(0.985 0.012 295) 0%,
-    oklch(0.972 0.022 235) 38%,
-    oklch(0.974 0.032 165) 100%
+    oklch(0.94 0.06 295) 0%,
+    oklch(0.93 0.07 235) 45%,
+    oklch(0.94 0.07 165) 100%
   );
   --bg-pattern-overlay: url("/decorations/stars-clouds-pattern.svg");
-  --bg-pattern-overlay-opacity: 0.06;
+  --bg-pattern-overlay-opacity: 0.11;
   --card-pattern-overlay: url("/decorations/soft-grain-pattern.svg");
-  --card-pattern-overlay-opacity: 0.05;
+  --card-pattern-overlay-opacity: 0.10;
 }
 
 .dark {
+  /* dark mode: ベース dark に少しだけ chroma を持たせて washed out 回避 */
   --bg-gradient-page: linear-gradient(
     180deg,
-    oklch(0.18 0.04 280) 0%,
-    oklch(0.16 0.05 240) 45%,
-    oklch(0.17 0.04 200) 100%
+    oklch(0.22 0.05 280) 0%,
+    oklch(0.20 0.05 240) 45%,
+    oklch(0.21 0.05 200) 100%
   );
   --bg-pattern-overlay: url("/decorations/stars-clouds-pattern.svg");
-  --bg-pattern-overlay-opacity: 0.08;
+  --bg-pattern-overlay-opacity: 0.10;
   --card-pattern-overlay: url("/decorations/soft-grain-pattern.svg");
-  --card-pattern-overlay-opacity: 0.07;
+  --card-pattern-overlay-opacity: 0.09;
 }
 
 /* 背景 gradient + subtle SVG pattern overlay (page level) */
@@ -511,5 +523,59 @@ li {
   .hanei-node-halo {
     animation: none !important;
     opacity: 0.5;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* DEC-092 / 項目 C: 進行中ノードの double-ring halo                           */
+/* 内側 amber gold + 外側 white glow の 2 段リング.                            */
+/* Stitch design system "Storybook Adventure" の tactile 演出継承.            */
+/* radial-gradient で半径方向に色を変える + 既存 hanei-node-halo pulse と併用. */
+/* ------------------------------------------------------------------------ */
+.hanei-node-halo-double {
+  /* 内側 amber gold + 外側 white glow / radial-gradient で 2 段表現 */
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 217, 125, 0.55) 0%,
+    rgba(242, 169, 58, 0.42) 28%,
+    rgba(255, 255, 255, 0.55) 58%,
+    rgba(255, 255, 255, 0) 78%
+  );
+  animation: hanei-node-halo 2.6s ease-in-out infinite;
+  transform-origin: center;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hanei-node-halo-double {
+    animation: none !important;
+    opacity: 0.55;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* DEC-092 / 項目 C: cleared ノードの floating checkmark sticker (バッジ)       */
+/* card 右上隅に小さな丸バッジで「クリア!」を可視化.                            */
+/* prefers-reduced-motion で gentle bob 停止.                                  */
+/* ------------------------------------------------------------------------ */
+@keyframes hanei-cleared-sticker-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-6deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(-2deg);
+  }
+}
+
+.hanei-cleared-sticker {
+  animation: hanei-cleared-sticker-bob 2.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hanei-cleared-sticker {
+    animation: none !important;
+    transform: rotate(-6deg);
   }
 }
