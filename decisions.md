@@ -1,5 +1,80 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-091: 楽しさ強化第 4 弾 atomic（背景・カード装飾 + 冒険マップ進行感本格化 + Stitch MCP 活用 SVG decoration / オーナー 8 項目 directive 残 3 項目（1, 6, 7）/ 1.9 人日 / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-090 完遂直後 / β 阻害解消後の体験リッチ化第 1 波）
+
+- **状況**: 2026-05-06 DEC-090 β 阻害解消 atomic 完遂（commit `ee445f4` / HANEI repo push 完了 / Vercel auto redeploy 進行中）直後. オーナー 8 項目 directive のうち β 阻害最優先 4 項目（2, 4, 5, 8）は DEC-090 で解消済. 残 3 項目（1: 背景・カード白寂しさ / 6: 冒険マップ ゲーミフィケーション「道のり」本格実装 / 7: Stitch 活用 AI イラスト生成）は **「楽しさ強化第 4 弾 = 体験リッチ化第 1 波」** として本 atomic で一括吸収. 項目 3（キャラ変更）は β 第 1 期見送り（DEC-092 候補 / kotodama-tori 主役化 = DEC-087 中核設計の保護 / Phase 3 商品化第 2 波で本格検討）.
+- **判定**: **GO**（DEC-091 = 楽しさ強化第 4 弾 atomic / **1.9 人日** / **page +0**（26/32 不変）/ **mutation +0**（10/10 不変 / 既に最終枠到達のため新規 mutation は DEC-077 拡張議論前提）/ **GET +0**（15 不変）/ **cron +0**（5 不変）/ **deps +0**（CSS gradient + SVG static asset のみ / 新規 npm package 無し）/ **assets +N**（Stitch MCP 生成 SVG decoration pattern 数種 + globals.css gradient/pattern token 追加））.
+- **判断根拠**:
+  1. **β 阻害解消済 → 体験リッチ化に投資できる相**: DEC-090 で latency / ヘッダ / 設定 / リセット が解消し β 立ち上げ準備完了. 残るは「触りたくなる」「気を引きつける」UX 投資 = 背景・カード装飾 + 冒険マップ進行感. オーナー directive 「アプリを触りたくなるようにしっかりと子どもの気を引付けるアプリ」に直結.
+  2. **白基調寂しさ → soft gradient + SVG pattern decoration**: Plan A で導入した Mochiy_Pop_One + Amber Gold / Mint Green / Lavender / Sky Blue token 系を **背景全面 soft gradient** + **カード soft pattern overlay** に展開. 罰則ゼロ哲学厳守（鮮やか過ぎず子供の集中を妨げない）+ WCAG 2.1 AA contrast 維持. ダーク/ライト両モード（next-themes 既存）対応.
+  3. **冒険マップ進行感 = node unlock animation + boss-battle wire**: DEC-089 Plan C で骨格実装済の `/adventure-map` を **「道のり」本格化**: (a) ノード間 SVG path 描画（クリア済 → 進行中 への trail 線描画）, (b) ノード unlock animation（クリア → 隣接 not_started が in_progress に変化する瞬間の framer-motion キーフレーム）, (c) 「次のエリアへ進む」CTA を冒険マップ内に配置（既存 study route 流用 / mutation +0）, (d) Plan C 標準で standalone 実装した `boss-battle-celebration.tsx` を learner 模試結果側に wire（既存 mock-exam 系 page を内部拡張 / page +0 / mutation +0）.
+  4. **Stitch MCP 活用 = AI 生成 SVG decoration pattern**: オーナー「イラスト外注 NO」directive を厳守し、Stitch MCP（`mcp__stitch__create_project` / `mcp__stitch__generate_screen_from_text`）で **HANEI 専用 design system を AI 生成 → SVG pattern を抽出 → public/decorations/ 配置**. 配置例: 背景に薄い星 / 雲 / 葉 / 桜 のシームレス pattern + カード隅に subtle decoration. CEO が直接 Stitch MCP で生成し dev 部門は code 統合のみ実施.
+  5. **DEC-006 不変条件: 全部位 +0**: page 26/32 不変 / mutation 10/10 不変（最終枠到達済）/ GET 15 不変 / cron 5 不変. 既存 `/adventure-map` page 拡張 + 既存 SSR 集計拡張 + globals.css token 拡張 + SVG static asset 配置のみ. **DEC-077 拡張議論不要**.
+  6. **β 子使用継続中 = 学習リグレッション 0 厳守**: 既存 `/study/[levelCode]/[skillCode]` は完全無変更 / 既存 page セレクタ・data-testid 完全保護 / vitest 977 baseline 維持 / E2E 全 spec PASS 維持. SSR 集計拡張は read-only / Server Action 触らず.
+  7. **Phase 3 商品化第 2 波の地ならし**: 本 atomic で「冒険感」体験骨格が完結 → β 子フィードバック後に DEC-090 跡地で重投資（WebGL 3D / プロイラスト差替 / リアルタイム TTS）の判断材料が揃う.
+- **本 atomic スコープ（含むもの 3 大項目）**:
+  1. **背景・カード装飾（項目 1）**:
+     - **背景**: `app/src/app/globals.css` に `--bg-gradient-soft` / `--bg-pattern-overlay` token 追加 → `body` または LP / home / adventure-map のラッパに適用. Lavender → Sky Blue → Mint Green の縦方向 soft gradient（罰則ゼロ哲学厳守 / WCAG AA contrast 維持）.
+     - **カード**: 既存 shadcn/ui `Card` の soft pattern overlay（subtle SVG decoration / opacity ~0.04-0.06）を CSS variable 経由で導入. 既存 `bg-card` / `text-card-foreground` 完全互換維持 / data-testid 不変.
+     - **ダーク/ライト両モード対応**: `next-themes` 既存統合.
+  2. **冒険マップ進行感本格実装（項目 6）**:
+     - 配置: `app/src/app/(app)/adventure-map/adventure-map-client.tsx` 拡張（page +0）.
+     - **node 間 trail 線**: SVG `<path>` で隣接ノード間に dashed trail を描画（クリア済 = 実線 Amber Gold / 進行中 = 点線 Sky Blue / 未着手 = 半透明 Lavender）.
+     - **node unlock animation**: framer-motion `motion.g` の `whileInView` + `staggerChildren` で進行中エリアの SparklesIcon が脈動. `prefers-reduced-motion: reduce` 完全対応.
+     - **「次のエリアへ進む」CTA**: 進行中エリア node 直近に sticky bottom button 配置 → 既存 `/study/eiken-{level}/{skillCode}?learner={id}` 遷移（route 無変更 / mutation +0）.
+     - **boss-battle-celebration wire**: Plan C で standalone 実装した `boss-battle-celebration.tsx` を learner 模試結果ページ（既存 page を内部拡張 / page +0）に統合 or `/adventure-map` 内の "ボス戦エリア" tag に wire. 既存 mutation 触らず.
+     - **罰則ゼロ厳守**: 未着手ノードは中立 `LockClosedIcon` 維持 / 鎖 / バツ印 0 / Plan C 罰則ゼロ哲学継承.
+  3. **Stitch MCP 活用 SVG decoration（項目 7）**:
+     - **CEO 直接実施**: `mcp__stitch__create_project` で HANEI 専用 design system 起動 → `mcp__stitch__generate_screen_from_text` で背景 pattern / カード decoration / 冒険マップ trail 線 / boss area 装飾 を 3-5 種 prompt 生成 → 採用候補を SVG として export → `app/public/decorations/` 配置.
+     - **dev は code 統合のみ**: globals.css token 経由で `background-image: url('/decorations/...')` 形式で適用. JSX import 不要（CSS 経由 / SSR 互換）.
+     - **罰則ゼロ・WCAG 2.1 AA 厳守**: Stitch 生成 prompt に明示的に「子供向け / 罰則演出ゼロ / 鎖 / バツ印 / 怒り 表情 0 / WCAG AA contrast」要件を含める.
+     - **bundle 影響 ≤ +20 KB gzip**: SVG decoration は最小化 + sprite 化 / public/ 配置で client bundle 影響 0（image fetch のみ）.
+- **本 atomic スコープ（含まないもの / 別 atomic）**:
+  - **キャラ変更機能（項目 3）**: DEC-092 候補 / β 第 1 期見送り / kotodama-tori 主役化保護（DEC-087 中核設計）/ Phase 3 商品化第 2 波で本格検討.
+  - **WebGL 3D 背景 / Three.js**: DEC-090 跡地（Phase 3）/ β 子フィードバック後判断.
+  - **プロイラスト差替**: 本 atomic は Stitch MCP AI 生成のみ / 外注は明示的に NO（オーナー directive）.
+  - **リアルタイム TTS バトル**: Plan C 範囲外 / DEC-082 §後続候補.
+  - **`evolution-celebration` の boss 戦 wire**: 本 atomic は learner 模試結果側のみ / `evolution-celebration` への影響 0.
+- **制約厳守 / 受入基準**:
+  - **DEC-024 罰則ゼロ哲学厳守**: 背景 gradient は鮮やか過ぎず（淡 Lavender / Sky Blue / Mint Green）/ カード pattern は subtle（opacity ~0.04-0.06）/ 鎖 / バツ印 / 怒り表情 0 / Stitch 生成 prompt に明示要件含める.
+  - **DEC-006 拡張版 (DEC-077) 不変条件**: page **26**/32（+0）/ mutation **10**/10（+0 / 最終枠到達済）/ GET **15**（+0）/ cron **5**（+0）.
+  - **DEC-003 三層認可**: 既存 `/adventure-map` GET 認可継承 / 新規 GET / mutation 0.
+  - **DEC-055 idempotency**: SSR 集計のみ / 副作用 0.
+  - **WCAG 2.1 AA**: 背景 gradient + foreground text の contrast 比 4.5:1 以上 / SVG decoration `aria-hidden="true"` / 冒険マップ trail 線 + node unlock animation `prefers-reduced-motion: reduce` 完全対応 / boss-battle-celebration 既存 dialog 認可継承.
+  - **既存 vitest 977 PASS / E2E 全 spec PASS リグレッション 0**: UI 変更のみ / 既存 selector 完全保持 / Server Action 触らず.
+  - **typecheck pass / lint warning 0 / `next build` 26 page + 5 cron 完遂**.
+  - **bundle 影響 ≤ +20 KB gzip**: SVG decoration は public/ 配置で client bundle 影響 0 / globals.css token 追加のみ +1〜2 KB.
+  - **既存 data-testid / data-part / aria-label 完全不変**.
+- **後続 atomic 候補**:
+  1. **DEC-092 (キャラ変更機能 / β 第 1 期見送り / Phase 3 商品化第 2 波)**: 育てるキャラ変更（オーナー項目 3）/ kotodama-tori 主役化保護後の追加バリエーション機能 / β 子フィードバック後判断.
+  2. **W12-T3 β 受入準備 (1.5 人日 / P0)**: 19 項目判定残 RED 件 GREEN 化.
+  3. **DEC-082 (β 後並走 3 項目 / 0.4 人日)**: TTS 自動投入 / 招待コード自動配布 / Sentry alert dashboard pinning.
+  4. **DEC-088 §後続 (β 後 / 0.1 人日)**: 実 mp3 投入（CC0 royalty-free / 8 種差替）.
+  5. **DEC-083 §後続 (β 後 / 0.3 人日)**: drizzle workflow 本体修復.
+  6. **DEC-090 跡地 (重投資 / β 子フィードバック後 / 1-2 週間)**: WebGL 3D / プロイラスト差替 / リアルタイム TTS / フルゲーム化 = Phase 3 商品化第 2 波.
+- **CEO 委任先 / 報告経路**:
+  - **CEO 直接実施 (Stitch MCP)**: AI 生成 SVG decoration（背景 pattern / カード overlay / trail 線 / boss area 装飾）3-5 種 prompt → 採用候補 SVG 抽出 → `app/public/decorations/` 配置.
+  - **dev 部門委任**: 規模感 1.9 人日 / sub-agent 1 名 / DEC-091 全 3 大項目を 1 atomic 一括実装（背景 gradient + カード overlay token 拡張 / 冒険マップ trail + node unlock animation + boss-battle wire / Stitch 生成 SVG の CSS 経由統合）→ 完遂後 CEO trust-but-verify → §実装完遂デルタ → CEO 1 commit/push → Vercel auto redeploy → オーナー実子試用フィードバック → DEC-092 / W12-T3 判断材料収集.
+- **教訓 / 設計方針 (DEC-091 設計の心)**:
+  1. **β 阻害解消後の体験リッチ化に集中**: DEC-090 で β 立ち上げ準備完了済 → 残予算は「触りたくなる」UX に投資.
+  2. **DEC-006 全部位 +0 = 構造的余地確保**: mutation 10/10 最終枠到達済のため新規 mutation は DEC-077 拡張議論前提. 本 atomic で +0 を厳守し以降の重投資余地を確保.
+  3. **Stitch MCP 活用で外注ゼロ + AI 生成主義**: オーナー「イラスト外注 NO」directive を厳守し AI ツールで体験品質を確保.
+  4. **冒険マップ進行感は SVG + framer-motion で骨格化**: WebGL / Lottie の重投資は Phase 3 商品化第 2 波に分離.
+  5. **罰則ゼロ哲学を装飾領域でも徹底**: Stitch 生成 prompt に明示要件 / 鮮やか過ぎず / 子供の集中保護.
+
+### §実装完遂デルタ
+- **2026-05-06 / DEC-091 atomic GO 判定 / 着手前**:
+  - **手順 1** ✅: 本 DEC-091 起票（decisions.md 冒頭 / 本 entry / ~140 行）.
+  - **手順 2** (予定): CEO 直接 Stitch MCP 生成（背景 pattern / カード overlay / trail 線 / boss area 装飾 3-5 種 SVG 生成 → `app/public/decorations/` 配置）.
+  - **手順 3** (予定): dev sub-agent 委任（DEC-091 全 3 大項目 / 既存セレクタ完全保護 / 罰則ゼロ厳守 / WCAG fallback 必須 / vitest 977 baseline 維持）.
+  - **手順 4** (予定): dev 実装完遂後 CEO trust-but-verify（typecheck / lint / vitest / next build / 罰則ゼロ目視 / DEC-006 全部位 +0 確認 / SVG decoration WCAG AA contrast 確認）.
+  - **手順 5** (予定): §実装完遂デルタ更新 + 1 commit/push（HANEI repo / Vercel auto redeploy）.
+  - **手順 6** (予定): オーナー実子試用フィードバック → DEC-092（キャラ変更 / β 第 1 期見送り判断確認）/ W12-T3 β 受入準備 着手判断.
+- **影響行 (予定)**: app/src/app/globals.css 拡張（background gradient + card pattern token）+ app/src/app/(app)/adventure-map/adventure-map-client.tsx 拡張（trail 線 + node unlock animation + boss-battle wire）+ app/public/decorations/ 配置（Stitch 生成 SVG 3-5 種）+ 既存 learner 模試結果系内部拡張（boss-battle wire / page +0 / mutation +0）+ 新規 unit test（任意 / 構造的不変条件）+ decisions.md DEC-091 起票（本 entry / ~140 行）.
+- **commit hash**: dev 完遂後 CEO 1 commit/push 予定.
+
+---
+
 ## DEC-090: β 阻害解消 + 設定柔軟化 atomic（正解判定 latency 改善 + 右上ヘッダ context-aware + 設定画面拡張 + 学習データリセット / 1.2 人日 / page +0 / mutation +1 = 10/10（最終枠到達）/ GET +0 / cron +0）GO 判定（2026-05-06 / DEC-089 Plan C 完遂直後 / オーナー 8 項目 directive 受領 / β 阻害最優先）
 
 - **状況**: 2026-05-06 DEC-089 Plan C 完遂（commit `447d7a5`）直後、オーナーは **8 項目 directive** を受領: (1) 背景・カード白寂しさ / (2) 設定画面拡張（名前 / 目標 / 受験日）/ (3) 育てるキャラ変更可？ / (4) 右上「ログイン / 無料ではじめる」固定問題 / (5) 学習データリセット機能 / (6) 冒険マップ進行感本格実装 / (7) イラスト外注 NO / Stitch 活用 / (8) **正解判定時間が長い → サクサク切替**. CEO は 8 項目を atomic 分解（DEC-090 = β 阻害解消 / DEC-091 = 楽しさ強化第 4 弾 / DEC-092 候補 = キャラ変更見送り = β 第 1 期 1 系列固定）.
