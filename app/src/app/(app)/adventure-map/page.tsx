@@ -116,6 +116,9 @@ export default async function AdventureMapPage({ searchParams }: PageProps) {
       data-cleared-count={summary.clearedCount}
       data-in-progress-count={summary.inProgressCount}
       data-not-started-count={summary.notStartedCount}
+      // DEC-093: preparing (problems が DB 未投入の skill-level) のカウント.
+      // 既存 3 summary card は変更せず、main 要素に attribute として露出.
+      data-preparing-count={summary.preparingCount}
     >
       <header className="mb-6 flex items-center justify-between">
         <Link

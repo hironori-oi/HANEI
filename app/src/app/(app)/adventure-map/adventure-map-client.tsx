@@ -42,6 +42,7 @@ import {
   ArrowRightIcon,
   FireIcon,
   ShieldCheckIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
 import type { AdventureMapArea, AdventureMapSkill } from "@/lib/study/aggregations";
@@ -71,6 +72,8 @@ const STATUS_LABEL_JA: Record<AdventureMapArea["status"], string> = {
   cleared: "クリアずみ",
   in_progress: "しんこうちゅう",
   not_started: "これから",
+  // DEC-093: 「じゅんびちゅう」(問題未準備 / total = 0) に Mint 色 + 期待感を持たせる.
+  preparing: "じゅんびちゅう",
 };
 
 const LEVEL_LABEL_JA: Record<"5" | "4" | "3", string> = {
@@ -402,13 +405,19 @@ function AreaNode({
   onBossPreview: (area: AreaWithHref) => void;
 }) {
   const boss = isBossArea(area);
+  // DEC-093: preparing は「じゅんびちゅう (もうすぐ あえるよ)」で期待感を伝える.
+  const statusSuffix =
+    area.status === "preparing"
+      ? `${STATUS_LABEL_JA[area.status]} (もうすぐ あえるよ)`
+      : `${STATUS_LABEL_JA[area.status]} マスタリ ${area.mastered}/${area.total}`;
   const ariaLabel =
-    `エリア 英検${area.level}級 ${SKILL_LABELS_JA[area.skill]} ${STATUS_LABEL_JA[area.status]} ` +
-    `マスタリ ${area.mastered}/${area.total}` +
+    `エリア 英検${area.level}級 ${SKILL_LABELS_JA[area.skill]} ` +
+    statusSuffix +
     (boss ? " (試練エリア)" : "");
 
   // DEC-092: 視認性強化 = border-2 → border-[3px] / rounded-2xl → rounded-3xl / p-4 → p-5
   // bg opacity 10% → 18-20% / shadow-md hover:shadow-lg 追加
+  // DEC-093: preparing は Mint 色 (secondary) で期待感を持たせる中立表示.
   const cardClasses = cn(
     "group block rounded-3xl border-[3px] p-5 shadow-md outline-none transition-all",
     "hover:shadow-lg",
@@ -417,7 +426,9 @@ function AreaNode({
       ? "border-success/70 bg-success/20 hover:border-success"
       : area.status === "in_progress"
         ? "border-primary/70 bg-primary/20 hover:border-primary"
-        : "border-muted-foreground/30 bg-muted/30 hover:border-muted-foreground/50",
+        : area.status === "preparing"
+          ? "border-secondary/60 bg-secondary/15 hover:border-secondary"
+          : "border-muted-foreground/30 bg-muted/30 hover:border-muted-foreground/50",
     // boss area = warm amber ring (罰則ゼロ準拠 / 「赤色」未使用)
     boss && "ring-2 ring-primary/40 ring-offset-1",
   );
@@ -499,7 +510,9 @@ function AreaNode({
               ? "text-success"
               : area.status === "in_progress"
                 ? "text-primary"
-                : "text-muted-foreground",
+                : area.status === "preparing"
+                  ? "text-secondary"
+                  : "text-muted-foreground",
           )}
         >
           {SKILL_LABELS_JA[area.skill]}
@@ -543,10 +556,22 @@ function AreaNode({
                 ? "bg-success"
                 : area.status === "in_progress"
                   ? "bg-primary"
-                  : "bg-muted-foreground/40",
+                  : area.status === "preparing"
+                    ? "bg-secondary/30"
+                    : "bg-muted-foreground/40",
             )}
           />
         </div>
+
+        {/* DEC-093: preparing 専用 子供向け励ましテキスト (期待感 / 罰則ゼロ厳守) */}
+        {area.status === "preparing" ? (
+          <p
+            className="mt-2 text-[11px] font-medium text-secondary"
+            data-testid={`adventure-map-preparing-msg-${area.areaId}`}
+          >
+            もうすぐ あえるよ!
+          </p>
+        ) : null}
       </Link>
 
       {/* boss preview ボタン (試練エリア専用 / 罰則ゼロ中立コピー) */}
@@ -615,6 +640,16 @@ function NodeStatusIcon({
           aria-hidden="true"
         />
       </m.span>
+    );
+  }
+  // DEC-093: preparing (じゅんびちゅう) = Mint 色 SparklesIcon outline で期待感を演出.
+  // 「もうすぐ あえるよ!」のメッセージとセットで子供に「準備中」と伝える (罰則ゼロ厳守).
+  if (status === "preparing") {
+    return (
+      <SparklesIcon
+        className="h-8 w-8 text-secondary"
+        aria-hidden="true"
+      />
     );
   }
   // not_started: 中立 lock (鎖アイコン未使用 / 罰なし / DEC-024 罰則ゼロ)

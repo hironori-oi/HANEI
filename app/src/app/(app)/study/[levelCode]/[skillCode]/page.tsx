@@ -8,7 +8,12 @@
 
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeftIcon, HomeIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowLeftIcon,
+  HomeIcon,
+  MapIcon,
+  SparklesIcon,
+} from "@heroicons/react/24/outline";
 import { requireAuth, getFamilyIdForUser } from "@/lib/auth/guards";
 import { db } from "@/lib/db/client";
 import { eq, and } from "drizzle-orm";
@@ -176,22 +181,51 @@ export default async function StudyPage({
   const problem = await getNextProblem(learner.id, level, skill);
 
   if (!problem) {
+    // DEC-093: β 試用フィードバック対応 第 3 波 / 項目 C
+    // 開発者向けエラー画面を撤去し、子供向け中立コピー (罰則ゼロ厳守 / DEC-024) で救済する.
+    // 真因 (LLM-as-Judge seed 未到達 / grammar-3, listening-3 等) は別 atomic で修復.
     return (
-      <main className="mx-auto max-w-2xl px-6 py-10">
-        <h1 className="mb-4 text-2xl font-bold">{SKILL_LABEL[skillBase]} (英検{level}級)</h1>
-        <div className="rounded-md border bg-muted/40 p-6 text-center">
-          <p className="mb-4">この級・スキルでは、まだ問題が用意されていません。</p>
-          <p className="text-sm text-muted-foreground">
-            問題は LLM-as-Judge パイプラインで毎日 02:00 JST に追加されます。
+      <main
+        className="mx-auto max-w-2xl px-6 py-10"
+        data-testid="study-preparing-gate"
+        data-level={level}
+        data-skill={skillBase}
+      >
+        <div className="rounded-3xl border-[3px] border-secondary/40 bg-card p-8 shadow-md">
+          <div className="mb-3 flex items-center gap-2">
+            <SparklesIcon className="h-7 w-7 text-secondary" aria-hidden="true" />
+            <h1 className="font-display text-2xl font-bold text-secondary">
+              {SKILL_LABEL[skillBase]} (英検{level}級)
+            </h1>
+          </div>
+          <p className="mb-2 text-base leading-relaxed">
+            ここの ぼうけんは いま じゅんびちゅう だよ。
           </p>
+          <p className="mb-6 text-base leading-relaxed">
+            もうすぐ あえるから まっててね。
+            <br />
+            ほかの エリアで あそぼう!
+          </p>
+          <div className="flex flex-col gap-2">
+            <Button asChild size="lg" className="min-h-tap-cta w-full">
+              <Link href="/adventure-map">
+                <MapIcon className="mr-1 h-5 w-5" aria-hidden="true" />
+                ぼうけんマップへ もどる
+              </Link>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="min-h-tap-cta w-full"
+            >
+              <Link href="/home">
+                <HomeIcon className="mr-1 h-5 w-5" aria-hidden="true" />
+                ホームへ もどる
+              </Link>
+            </Button>
+          </div>
         </div>
-        <Link
-          href="/home"
-          className="mt-6 inline-flex items-center gap-2 text-sm text-primary underline"
-        >
-          <ArrowLeftIcon className="h-4 w-4" aria-hidden="true" />
-          ホームに戻る
-        </Link>
       </main>
     );
   }

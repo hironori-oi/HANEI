@@ -390,25 +390,26 @@ li {
 /* prefers-reduced-motion: reduce 対応 (gradient は静止 / pattern も静止).    */
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
-/* DEC-092 楽しさ強化第 5 弾 / β 試用フィードバック対応                          */
-/* Stitch MCP design system "Storybook Adventure" (asset 17217022164723714473) */
-/* から抽出した pastel pop tokens. washed out (lightness 0.97-0.985 / chroma   */
-/* 0.012-0.032) → pastel pop (lightness 0.92-0.96 / chroma 0.04-0.08) に強化.  */
-/* Stitch 採用色: Lavender #E0C3FC / Sky #BAE1FF / Mint #B9FBC0 / Amber #FFD97D */
-/* WCAG 2.1 AA contrast 4.5:1 厳守 (foreground oklch ~0.20 vs bg oklch ~0.93   */
-/* = 約 8.2:1 計算検証).                                                       */
+/* DEC-093 β 試用フィードバック対応 第 3 波 / 項目 A: 背景白リバート             */
+/* DEC-092 §B (oklch lightness 0.93-0.94 / chroma 0.06-0.07 pastel pop          */
+/* gradient) をオーナー β 第 3 波フィードバック「白に戻してよい」を受け部分撤回.  */
+/*  - 上→下 ほぼ白 (oklch 0.99 系) で僅かな warm/cool/mint hint のみ残す         */
+/*  - カード視認性 (border-[3px] / shadow-md / warm tint #FFFDF5) は DEC-092      */
+/*    から保護 (--card / --popover / --border / --input は維持)                   */
+/*  - WCAG AA contrast 維持                                                      */
+/* dark mode は DEC-092 のままリバートしない (現状 oklch 0.20-0.22 系維持).        */
 /* ------------------------------------------------------------------------ */
 :root {
   --bg-gradient-page: linear-gradient(
     180deg,
-    oklch(0.94 0.06 295) 0%,
-    oklch(0.93 0.07 235) 45%,
-    oklch(0.94 0.07 165) 100%
+    oklch(0.995 0.004 80) 0%,
+    oklch(0.99 0.006 235) 50%,
+    oklch(0.99 0.005 165) 100%
   );
   --bg-pattern-overlay: url("/decorations/stars-clouds-pattern.svg");
-  --bg-pattern-overlay-opacity: 0.11;
+  --bg-pattern-overlay-opacity: 0.05;
   --card-pattern-overlay: url("/decorations/soft-grain-pattern.svg");
-  --card-pattern-overlay-opacity: 0.10;
+  --card-pattern-overlay-opacity: 0.06;
 }
 
 .dark {

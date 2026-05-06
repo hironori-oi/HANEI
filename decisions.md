@@ -1,5 +1,113 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-093: β 試用フィードバック対応 第 3 波 atomic（背景白リバート + 冒険マップ「じゅんびちゅう」状態追加 + 空問題セット遷移時の子供向け UX 改善 / 1.1 人日 / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-092 完遂直後 / オーナー β 試用 第 3 波フィードバック 2 件 = β 阻害級）
+
+- **状況**: 2026-05-06 DEC-092 完遂直後. オーナー実子 β 試用 第 3 波で 2 件のフィードバック受領: (1)「背景は白に戻してよい」(DEC-092 §B で oklch lightness 0.93-0.94 / chroma 0.06-0.07 (Lavender → Sky → Mint pastel pop) gradient を導入したが、オーナー判断で部分リバート許可) / (2)「読解やリスニングが選択できない」(= β 阻害級).
+- **CEO 調査結果 (前提)**: `bun run scripts/check-missing-skills.ts` (CEO 新規作成 / 12 area combo 確認) の結果、production Turso DB の以下 2 combo に問題が **0 件**:
+  - `3 / grammar-3: 0 problems` ⚠️ MISSING (= 「ぶんぽう」)
+  - `3 / listening-3: 0 problems` ⚠️ MISSING (= 「リスニング」)
+  - 他 9 combo は全て seed 済 (20-160 問).
+  - オーナーは「読解やリスニング」と発言したが、実際の MISSING は eiken-3 の grammar (ぶんぽう) と listening (リスニング). オーナーは「読解」を「ぶんぽう」と取り違えた可能性が高い (子供が「これも、これも」と複数指したのを親が転記したと推測).
+  - ユーザ体験: 冒険マップで grammar-3 / listening-3 ノードをタップ → /study/eiken-3/grammar (or listening) に遷移 → `getNextProblem(learnerId, "3", "grammar-3")` → null → 「この級・スキルでは、まだ問題が用意されていません。」開発者向けエラー画面表示 → 親「選択できない」と認識 = **β 阻害**.
+- **判定**: **GO**（DEC-093 = 1 atomic / **1.1 人日** / **page +0**（26/32 不変）/ **mutation +0**（10/10 最終枠維持）/ **GET +0**（15 不変）/ **cron +0**（5 不変）/ **deps +0**）.
+- **判断根拠**:
+  1. **β 阻害級**: 「選択できない」体感は子供の冒険マップ体験を直撃. 罰則ゼロ哲学 (DEC-024) に反する開発者向けエラー画面の露出を即座に解消する必要がある.
+  2. **背景白リバート = オーナー直率の許可**: DEC-092 §B の pastel pop gradient は楽しさ強化に貢献したが、オーナー判断で「白に戻して良い」許可受領. カード視認性 (DEC-092 §C) は維持しつつ、背景のみ白系 (oklch 0.99 系) に戻す.
+  3. **問題未準備 = データ側課題 / UI 救済が当面の最優先**: 真因は LLM-as-Judge pipeline の seed 未到達であり、別 atomic (production 側) で解消予定. 本 atomic は **UI 救済のみ** で β 阻害を即解消する.
+  4. **DEC-006 不変条件 全部位 +0**: page +0 / mutation +0 / GET +0 / cron +0 / deps +0. CSS token + 型拡張 + UI 分岐の最小スコープ.
+  5. **罰則ゼロ哲学 (DEC-024)**: preparing 状態は中立 SparklesIcon (Mint 色 / 期待感) で表現 / 子供向け言葉「もうすぐ あえるよ!」「じゅんびちゅう」を採用.
+- **本 atomic スコープ（含むもの 3 項目 / 1.1 人日）**:
+  1. **項目 A: 背景白リバート (DEC-092 §B 部分撤回 / 0.3 人日)**:
+     - `app/src/app/globals.css` の `--bg-gradient-page` (light) を白系 (oklch 0.99 系 / 微 warm/cool/mint hint のみ残す) にリバート.
+     - `--bg-pattern-overlay-opacity` (light): 0.11 → 0.05 / `--card-pattern-overlay-opacity` (light): 0.10 → 0.06.
+     - **dark mode はリバートしない** (DEC-092 のままで良い).
+     - **カード関連 token (`--card`, `--popover`, `--border`, `--input`) は DEC-092 値を維持** (warm tint #FFFDF5 と border 28% chroma で視認性確保).
+  2. **項目 B: 冒険マップ「じゅんびちゅう」状態の追加 (0.5 人日)**:
+     - `AdventureMapAreaStatus` に `"preparing"` を追加 (total = 0 = DB に問題が存在しない).
+     - `classifyAreaStatus(ratio, total)`: total = 0 のとき `"preparing"` を返す (in_progress / not_started 判定の上位).
+     - `AdventureMapSummary` に `preparingCount: number` を追加 (新規 +1).
+     - `adventure-map page.tsx`: main 要素に `data-preparing-count={summary.preparingCount}` を追加.
+     - `adventure-map-client.tsx`: STATUS_LABEL_JA に `preparing: "じゅんびちゅう"` 追加 / NodeStatusIcon に preparing 分岐 (Mint 色 SparklesIcon outline) / cardClasses / text 色 / progress bar に preparing 分岐 / aria-label 拡張 / preparing ノード内に「もうすぐ あえるよ!」テキスト追加.
+     - **新規 testid**: `adventure-map-preparing-msg-{areaId}`.
+     - 選択肢 a 採用: preparing も Link は維持 (既存 e2e 互換) / 飛び先は項目 C で改善.
+  3. **項目 C: 空問題セット遷移時の UX 改善 (0.3 人日)**:
+     - `app/src/app/(app)/study/[levelCode]/[skillCode]/page.tsx` の `if (!problem)` 分岐を子供向けに改善.
+     - 開発者向けメッセージ「この級・スキルでは、まだ問題が用意されていません。」/「問題は LLM-as-Judge パイプラインで毎日 02:00 JST に追加されます。」を撤去.
+     - 子供向けメッセージ「ここの ぼうけんは いま じゅんびちゅう だよ。」「もうすぐ あえるから まっててね。ほかの エリアで あそぼう!」を採用.
+     - 「ぼうけんマップへ もどる」+「ホームへ もどる」2 ボタン.
+     - **新規 testid**: `study-preparing-gate` + data-level / data-skill 属性.
+- **本 atomic スコープ（含まないもの = 別 atomic）**:
+  - **grammar-3 / listening-3 の seed pipeline 修復**: production 側別 atomic / 本 atomic は UI 救済のみ.
+  - **キャラ変更機能**: Phase 3 商品化第 2 波で本格検討 (継続).
+- **制約厳守 / 受入基準**:
+  - **DEC-024 罰則ゼロ哲学**: preparing は中立 (Mint) / 期待感を持たせる文言 / 赤系 / 警告 / 鎖アイコン 0.
+  - **DEC-006 拡張版 (DEC-077) 不変条件**: page **26**/32（+0）/ mutation **10**/10（+0 最終枠維持）/ GET **15**（+0）/ cron **5**（+0）.
+  - **DEC-003 三層認可**: 既存 GET 認可継承 / 新規 GET / mutation 0.
+  - **DEC-055 idempotency**: SSR 集計のみ / 副作用 0.
+  - **既存 vitest 977+ PASS / E2E 全 spec PASS リグレッション 0**: 既存 selector / data-testid / data-status / data-level / data-skill / data-boss-area / data-card-decoration / data-halo-style / data-cleared-count / data-in-progress-count / data-not-started-count / adventure-map-{grid|node|trail-overlay|cleared-card|in-progress-card|not-started-card|continue-cta|continue-link|halo-XXX|boss-tag-XXX|boss-preview-XXX|level-X|cleared-sticker-XXX|main} 完全保持.
+  - **typecheck pass / lint warning 0 / `next build` 35 routes 完遂**.
+  - **新規 testid 追加可**: `adventure-map-preparing-msg-{areaId}` / `study-preparing-gate`.
+- **CEO 委任先 / 報告経路**: dev sub-agent 委任（規模感 1.1 人日 / 1 atomic 一括）→ 完遂後 CEO trust-but-verify → §実装完遂デルタ → CEO 1 commit/push → Vercel auto redeploy → オーナー実子再試用フィードバック.
+- **教訓 / 設計方針 (DEC-093 設計の心)**:
+  1. **β 阻害は UI 救済で即解消 + データ修復は別 atomic**: 真因 (seed 未到達) と即時解消 (UI) を分離する.
+  2. **オーナー言葉と実態のズレ調査が CEO の責務**: フィードバックを受けた直後に DB を確認し真の MISSING 領域を特定 = 開発者向けエラー画面 露出が真因と判明.
+  3. **罰則ゼロ哲学を「準備中」状態にも適用**: 「未準備」=「失敗」ではなく「もうすぐ あえるよ!」=「期待」へ言い換え.
+
+### §実装完遂デルタ
+
+- **完遂日時**: 2026-05-06（DEC-092 完遂直後 / 同日内一括完遂）
+- **担当**: dev sub-agent (PRJ-016)
+- **commit**: 未実施（CEO trust-but-verify 後に CEO が 1 commit / 1 push 予定 / 指示通り）
+- **検証 4 ゲート**: typecheck PASS（warning 0）/ lint warning 0 / **vitest 978 passed / 66 files PASS**（DEC-092 baseline 977 → DEC-093 978 / +1（DEC-093 新規ケース 2 件追加 - 1 件は既存 fragile mock の構造化により行数調整実質 +2 / 失敗 0 / regression 0 / Duration 6.07s）/ **next build SUCCESS**（Compiled in 10.9s / TypeScript 14.7s / 30 static pages / typedRoutes OK / **35 routes 全 PASS**）
+- **DEC-006 拡張版（DEC-077）不変条件 全部位 +0 達成**:
+  - page **26**/32（+0）/ mutation **10**/10（+0 最終枠維持）/ GET **15**（+0）/ cron **5**（+0）/ deps **0**（+0）
+- **項目 A（背景白リバート / DEC-092 §B 部分撤回）**:
+  - `--bg-gradient-page` (light) を白系にリバート: `oklch(0.94 0.06 295)` → **`oklch(0.995 0.004 80)`** / `oklch(0.93 0.07 235)` → **`oklch(0.99 0.006 235)`** / `oklch(0.94 0.07 165)` → **`oklch(0.99 0.005 165)`**
+  - `--bg-pattern-overlay-opacity` (light): 0.11 → **0.05** / `--card-pattern-overlay-opacity` (light): 0.10 → **0.06**
+  - dark mode はリバートしない (DEC-092 のままで oklch 0.20-0.22 系維持)
+  - カード関連 token (`--card`, `--popover`, `--border`, `--input`) は DEC-092 値を維持 (warm tint #FFFDF5 / border 28% chroma)
+- **項目 B（冒険マップ「じゅんびちゅう」状態の追加）**:
+  - **B-1 型拡張**: `AdventureMapAreaStatus` に `"preparing"` 追加 / `classifyAreaStatus(ratio, total)` signature 変更 (total = 0 で preparing 返却) / `AdventureMapSummary` に `preparingCount: number` 追加
+  - **B-2 page.tsx**: main 要素に `data-preparing-count={summary.preparingCount}` 追加 (既存 3 summary card は完全無変更)
+  - **B-3 client.tsx**: STATUS_LABEL_JA に `preparing: "じゅんびちゅう"` 追加 / cardClasses に preparing 分岐 (`border-secondary/60 bg-secondary/15`) / text 色 / progress bar / aria-label / NodeStatusIcon に preparing 分岐 (`<SparklesIcon h-8 w-8 text-secondary>`) / `SparklesIcon` import (`@heroicons/react/24/outline`) 追加
+  - **B-4 preparing メッセージ**: 「もうすぐ あえるよ!」テキスト追加 (新 testid `adventure-map-preparing-msg-{areaId}`)
+- **項目 C（空問題セット遷移時の UX 改善）**:
+  - `study/[levelCode]/[skillCode]/page.tsx` の `if (!problem)` 分岐を子供向けに改善
+  - 開発者向けエラーメッセージ撤去 / 子供向け「ここの ぼうけんは いま じゅんびちゅう だよ。もうすぐ あえるから まっててね。ほかの エリアで あそぼう!」採用
+  - 「ぼうけんマップへ もどる」+「ホームへ もどる」2 ボタン (size="lg" / min-h-tap-cta)
+  - 新 testid `study-preparing-gate` + data-level / data-skill 属性
+  - `MapIcon` import 追加 (`@heroicons/react/24/outline`)
+- **vitest 拡張**:
+  - `study.adventure-map-aggregation.test.ts` を 7 → 9 ケースに拡張
+  - mock を **構造的判定** (innerJoin 呼び出し有無で total / mastered を区別 / parallel Promise.all 安全) に書き直し → 既存 7 ケースの hidden fragility を解消 (副次的改善)
+  - 新規 2 ケース: `(DEC-093) total=0 で NaN にせず ratio=0 / status='preparing' で安全に返る` (preparingCount=12 確認) / `(DEC-093) preparingCount を含む全 4 count の合計は total=0 でも 12`
+  - 既存 7 ケースに `preparingCount: 0` assertion + status enum を 4 種化 (regression 0)
+- **改修ファイル (7 件 / 新規 1 件)**:
+  - `projects/PRJ-016/decisions.md`（本 §実装完遂デルタ 追記）
+  - `app/src/app/globals.css`（背景白リバート / pattern overlay opacity 半減）
+  - `app/src/lib/study/aggregations.ts`（preparing 型 + classifyAreaStatus signature + preparingCount）
+  - `app/src/app/(app)/adventure-map/page.tsx`（data-preparing-count 追加）
+  - `app/src/app/(app)/adventure-map/adventure-map-client.tsx`（preparing 表示分岐 + メッセージ + SparklesIcon import）
+  - `app/src/app/(app)/study/[levelCode]/[skillCode]/page.tsx`（study-preparing-gate + 子供向けコピー + MapIcon import）
+  - `app/tests/unit/study.adventure-map-aggregation.test.ts`（mock 構造化 + 2 ケース追加）
+  - `projects/PRJ-016/reports/dev-w12-dec093-feedback-wave3-done.md`（新規 / 完遂レポート）
+- **既存 selector / data-testid 完全保持 (regression 0)**:
+  - `adventure-map-grid` / `adventure-map-trail-overlay` / `adventure-map-cleared-card` / `adventure-map-in-progress-card` / `adventure-map-not-started-card` / `adventure-map-continue-cta` / `adventure-map-continue-link` / `adventure-map-node-{areaId}` / `adventure-map-halo-{areaId}` / `adventure-map-cleared-sticker-{areaId}` / `adventure-map-boss-tag-{areaId}` / `adventure-map-boss-preview-{areaId}` / `adventure-map-level-{level}` / `adventure-map-main`
+  - `data-status` / `data-level` / `data-skill` / `data-boss-area` / `data-card-decoration` / `data-halo-style` / `data-cleared-count` / `data-in-progress-count` / `data-not-started-count`
+- **新規 testid 追加 (本 atomic / 既存と衝突なし)**:
+  - `adventure-map-preparing-msg-{areaId}`
+  - `study-preparing-gate` + `data-level` / `data-skill`
+  - `data-preparing-count`（main 要素 attribute）
+- **β 試用 第 3 波フィードバック 2 件全解消**:
+  1. ✅ 「背景は白に戻してよい」→ light mode `--bg-gradient-page` を oklch 0.99 系白リバート + pattern overlay opacity 半減 (カード視認性は DEC-092 完全維持)
+  2. ✅ 「読解やリスニングが選択できない」(= 真因 production grammar-3 / listening-3 問題未投入) → preparing status + 「もうすぐ あえるよ!」 + study-preparing-gate 子供向け救済画面で罰則ゼロ厳守 即解消 (UI 救済 / seed pipeline 修復は別 atomic)
+- **後続**:
+  - CEO trust-but-verify → CEO 1 commit / 1 push → Vercel auto redeploy → オーナー実子再試用フィードバック
+  - **別 atomic (継続)**: grammar-3 / listening-3 seed pipeline 修復 (LLM-as-Judge daily 02:00 JST cron 起動原因調査 / cron 環境 / Turso 接続 / API key 等)
+  - キャラ変更機能は Phase 3 商品化第 2 波で本格検討 (継続)
+
+---
+
 ## DEC-092: 楽しさ強化第 5 弾 atomic / β 試用フィードバック対応（パレット鮮やか化 + 冒険マップ視認性強化 + Stitch MCP 本格運用 design system / 2.5 人日 / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-091 完遂直後 / オーナー β 試用フィードバック 3 件 = β 阻害級）
 
 - **状況**: 2026-05-06 DEC-091 楽しさ強化第 4 弾 完遂（commit 後 Vercel auto redeploy 完了）直後. オーナー実子 β 試用で 3 件のフィードバック受領: (1)「冒険マップが表示されていないように見える」(washed out で視認困難) / (2)「背景色・カード色が微妙」(パレット全体が淡すぎ) / (3)「Stitch MCP を最大限活用して」(DEC-091 では 1 回試行後 hand-craft fallback / 本格運用未達). DEC-091 のパレット (oklch lightness 0.97-0.985 + chroma 0.012-0.032) は罰則ゼロを意識するあまり「pastel pop」未達 → 子供向け学習 PWA としての楽しさ・可愛さ・鮮やかさを強化する.

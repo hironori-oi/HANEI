@@ -681,7 +681,11 @@ export function buildHeatmapDateGrid(
 export type AdventureMapAreaStatus =
   | "cleared"
   | "in_progress"
-  | "not_started";
+  | "not_started"
+  // DEC-093: total = 0 = 「じゅんびちゅう」(問題未準備 / DB に該当 skill-level の問題が存在しない).
+  // 子供向け体験を守るため、未準備エリアでも Link は維持し、empty page (study-preparing-gate) で
+  // 「もうすぐ あえるよ!」の中立コピーで救済する (DEC-024 罰則ゼロ哲学).
+  | "preparing";
 
 export type AdventureMapSkill =
   | "vocabulary"
@@ -713,6 +717,12 @@ export interface AdventureMapSummary {
   inProgressCount: number;
   /** 未着手 */
   notStartedCount: number;
+  /**
+   * DEC-093: じゅんびちゅう (problems が DB に存在しない skill-level / total = 0).
+   * UI 上は preparing 状態として中立 (Mint 色 + SparklesIcon) で表示.
+   * not_started とは独立カウント (cleared + inProgress + notStarted + preparing = 12).
+   */
+  preparingCount: number;
 }
 
 const ADVENTURE_MAP_LEVELS = ["5", "4", "3"] as const;
@@ -733,7 +743,16 @@ const SKILL_LABEL_MAP: Record<AdventureMapSkill, string> = {
 /** 80% で「クリア」判定 (DEC-024 罰則ゼロ: 厳しすぎず子の達成感を優先). */
 const ADVENTURE_MAP_CLEAR_THRESHOLD = 0.8;
 
-function classifyAreaStatus(ratio: number): AdventureMapAreaStatus {
+/**
+ * DEC-093: total = 0 (DB に問題が存在しない) のとき "preparing" (じゅんびちゅう) を返す.
+ * 子供向け体験を守るため、未準備エリアは「失敗」「未着手」ではなく「もうすぐ あえるよ!」の
+ * 中立コピーで救済する (UI 側で Mint 色 + SparklesIcon で期待感を演出).
+ */
+function classifyAreaStatus(
+  ratio: number,
+  total: number,
+): AdventureMapAreaStatus {
+  if (total === 0) return "preparing";
   if (ratio >= ADVENTURE_MAP_CLEAR_THRESHOLD) return "cleared";
   if (ratio > 0) return "in_progress";
   return "not_started";
@@ -773,7 +792,7 @@ export async function getAdventureMapSummary(
         mastered,
         total,
         ratio: Number(ratio.toFixed(4)),
-        status: classifyAreaStatus(ratio),
+        status: classifyAreaStatus(ratio, total),
       });
     }
   }
@@ -781,9 +800,11 @@ export async function getAdventureMapSummary(
   let clearedCount = 0;
   let inProgressCount = 0;
   let notStartedCount = 0;
+  let preparingCount = 0;
   for (const a of areas) {
     if (a.status === "cleared") clearedCount += 1;
     else if (a.status === "in_progress") inProgressCount += 1;
+    else if (a.status === "preparing") preparingCount += 1;
     else notStartedCount += 1;
   }
 
@@ -792,6 +813,7 @@ export async function getAdventureMapSummary(
     clearedCount,
     inProgressCount,
     notStartedCount,
+    preparingCount,
   };
 }
 
