@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Mochiy_Pop_One } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -16,6 +16,20 @@ const fontMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
   display: "swap",
+});
+
+/**
+ * DEC-087 Plan A: 見出し / Hero タイトル / Level-up テキスト用 display フォント。
+ * Mochiy Pop One = 子ども向け楽しい印象のラウンド系日本語ゴシック。
+ * 見出し用途のみで利用 (本文 Inter は維持) / Latin subset のみ宣言。
+ * 日本語グリフは Google Fonts の動的サブセット (variable font) 配信で軽量化。
+ */
+const fontDisplay = Mochiy_Pop_One({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-display",
+  display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -49,7 +63,7 @@ export default function RootLayout({
     <html
       lang="ja"
       suppressHydrationWarning
-      className={`${fontSans.variable} ${fontMono.variable}`}
+      className={`${fontSans.variable} ${fontMono.variable} ${fontDisplay.variable}`}
     >
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <ThemeProvider

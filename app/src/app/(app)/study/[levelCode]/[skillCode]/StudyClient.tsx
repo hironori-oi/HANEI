@@ -29,6 +29,7 @@ import {
   recordStudyHeartbeat,
 } from "@/lib/actions/study-sessions";
 import { KotodamaTori, pickMood } from "@/components/study/kotodama-tori";
+import { AnswerFeedbackEffects } from "@/components/study/answer-feedback-effects";
 import { LessonCompleteModal } from "@/components/study/lesson-complete-modal";
 import { SessionCompleteModal } from "@/components/study/SessionCompleteModal";
 import { OverlearningModal } from "@/components/study/OverlearningModal";
@@ -792,7 +793,20 @@ export function StudyClient(props: {
         </Card>
       )}
 
-      {/* 選択肢 (Mint カード) — writing_essay では非表示 */}
+      {/* DEC-087 §5/§6: 正解 / 不正解 演出キャラ (画面右下に spring bounce で出現)
+          - 正解: 連続 3+ で多色 confetti / 罰則ゼロ
+          - 不正解: 首かしげ (赤色未使用 / 罰語なし) */}
+      {feedback ? (
+        <AnswerFeedbackEffects
+          key={`${feedback.correct ? "correct" : "wrong"}-${combo}`}
+          variant={feedback.correct ? "correct" : "wrong"}
+          comboCount={feedback.correct ? combo : 0}
+        />
+      ) : null}
+
+      {/* 選択肢 (Mint カード) — writing_essay では非表示
+          DEC-087 §5/§6: 正解選択肢に Mint Green グロー / 不正解選択肢に短い横シェイク (赤色未使用)
+       */}
       <div
         className={
           isWriting ? "hidden" : "grid gap-3 sm:grid-cols-2"
@@ -810,15 +824,26 @@ export function StudyClient(props: {
               onClick={() => handleSelect(choice.label)}
               disabled={feedback !== null || isPending}
               data-testid={`choice-${choice.label}`}
+              data-state={
+                isCorrectChoice
+                  ? "correct"
+                  : showWrong
+                    ? "wrong"
+                    : isSelected
+                      ? "selected"
+                      : "idle"
+              }
               className={[
-                "min-h-tap-cta rounded-lg border-2 px-5 py-4 text-left text-base transition-all",
+                "min-h-tap-cta rounded-lg border-2 px-5 py-4 text-left text-base transition-all motion-safe:duration-200",
                 "hover:border-accent hover:bg-accent/10",
                 "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
                 "disabled:cursor-not-allowed",
+                // DEC-087 §5: 正解時 Mint Green グロー + 微 scale
                 isCorrectChoice
-                  ? "border-success bg-success/10"
+                  ? "border-[color:var(--accent-correct)] bg-[color:var(--accent-correct)]/10 hanei-correct-glow motion-safe:scale-[1.02]"
                   : showWrong
-                    ? "border-destructive bg-destructive/10"
+                    // DEC-087 §6: 不正解時は赤色を使わず Amber Gold soft + 短い横シェイク
+                    ? "hanei-soft-warm motion-safe:animate-hanei-wrong-shake"
                     : isSelected
                       ? "border-accent bg-accent/10"
                       : "border-border bg-card",
@@ -830,13 +855,13 @@ export function StudyClient(props: {
               <span>{choice.text}</span>
               {isCorrectChoice && (
                 <CheckCircleIcon
-                  className="ml-2 inline h-5 w-5 text-success"
+                  className="ml-2 inline h-5 w-5 text-[color:var(--accent-correct)]"
                   aria-hidden="true"
                 />
               )}
               {showWrong && (
                 <XCircleIcon
-                  className="ml-2 inline h-5 w-5 text-destructive"
+                  className="ml-2 inline h-5 w-5 text-primary"
                   aria-hidden="true"
                 />
               )}
@@ -872,15 +897,21 @@ export function StudyClient(props: {
                     className="h-7 w-7 motion-safe:animate-bounce text-success"
                     aria-hidden="true"
                   />
-                  <h2 className="text-xl font-bold text-success">せいかい</h2>
+                  <h2 className="font-display text-xl font-bold text-success">
+                    せいかい
+                  </h2>
                 </>
               ) : (
                 <>
+                  {/* DEC-087 §6: 罰則ゼロ哲学 / 赤色未使用 / Amber Gold 系 warning のみ
+                      文言は「おしい」維持 (E2E `(せいかい|おしい)` selector 保護) */}
                   <XCircleIcon
                     className="h-7 w-7 text-warning"
                     aria-hidden="true"
                   />
-                  <h2 className="text-xl font-bold text-warning">おしい</h2>
+                  <h2 className="font-display text-xl font-bold text-warning">
+                    おしい
+                  </h2>
                 </>
               )}
               <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-sm font-bold text-primary">

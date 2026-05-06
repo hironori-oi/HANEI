@@ -1,5 +1,78 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-087: UI/UX 楽しさ強化 Plan A atomic（framer-motion 導入 + kotodama-tori 主役化 + 11 項目 polish / 0.75 人日 / page +0 / mutation +0 / GET +0 / 既存コンポーネント 8 ファイル拡張 + 新規 5 ファイル）GO 判定（2026-05-06 / β signup ログイン疎通直後 / オーナー Plan A→B→C 順次 GO 受領）
+
+- **状況**: 2026-05-06 オーナー手元 Vercel 本番 deploy + 本番 Turso schema 全体同期 (DEC-086 / `npm run db:push`) + signup → login 疎通完了直後、オーナーは **「アプリのデザインが非常にシンプルすぎてあまり楽しくない / 子供が楽しく学べるデザインやアニメーションを取り入れてください / 最高のアプリ環境を用意したい / Plan A→B→C 順次 GO」** directive 受領。CEO 提示 3 案 (Plan A: 0.75 人日 / Plan B: 2.5 人日 / Plan C: 1-2 週間) のうち全採用 + 順次着手判定。本 DEC-087 = Plan A スコープのみ確定起票。Plan B / C は後続 DEC-088 / DEC-089 で別個起票予定。
+- **判定**: **GO**（DEC-087 = UI/UX 楽しさ強化 Plan A atomic / **0.75 人日** / **page +0**（25/32 不変）/ **mutation +0**（9/10 不変）/ **GET +0**（12/15 不変）/ **cron +0**（5 不変）/ **deps +1** (`framer-motion` ~10KB gzip) / **deps +1** (Mochiy Pop One Google Font subset)）。
+- **判断根拠**:
+  1. **既存資産フル活用 / サンクコスト解消**: `kotodama-tori` 5 段階進化 SVG コンポーネント (hina/wakatori/seityo/syugosin/kenzya) が既に存在するが home/study/coach で常時 presence しておらず眠っていた。Plan A で主役化 = 世界観統一 + 既存実装の費用対効果回収。`canvas-confetti` 依存も既追加済 = 演出強化即可。
+  2. **β data リグレッション 0**: UI のみ変更 / DB schema 触らず / Server Action 触らず / DEC-006 全カテゴリ +0 維持 / vitest 801 PASS + E2E 全 spec PASS が既存 baseline で完全保護。
+  3. **罰則ゼロ哲学厳守 (DEC-024)**: 不正解時演出は「キャラが首を傾ける + 短いシェイク 1 回」で「責める」「叱る」演出ゼロ / 赤色排除 / カラーパレット拡張は緑系 (Mint Green #6FCF8E) で正解感を出す方向のみ。
+  4. **WCAG 2.1 AA 準拠維持**: `prefers-reduced-motion: reduce` 対応必須 (アニメ無効ユーザーは即時遷移 / 静的 fallback) = アクセシビリティ後退ゼロ。
+  5. **β 中即実装可能**: 0.75 人日 = 1 セッション完遂可 / β 子使用継続中に visible improvement 投入可能 = 実子フィードバックで Plan B 取捨選択判断材料を 1〜2 週間で得られる。
+  6. **Plan B / C への基盤整備**: framer-motion 導入 + tokens 拡張 + キャラ主役化 = Plan B (Lottie + サウンド) / Plan C (フルゲーム化) を上に積める設計の最下層を完成させる。
+- **本 atomic スコープ（含むもの 11 項目）**:
+  1. **`framer-motion` 依存追加** (`app/package.json` deps / 最新 stable / Next.js 16 + React 19 + Turbopack 互換確認済 patterns 使用)。
+  2. **Google Font `Mochiy Pop One` 追加** (`app/src/app/layout.tsx` next/font/google import / variable `--font-display` / 見出し用途のみ / 本文 Inter 維持)。
+  3. **カラートークン拡張** (`app/src/app/globals.css`): Sky Blue `#4FB6E5` (--accent-coach) + Lavender `#B8A4E0` (--accent-badge) + Mint Green `#6FCF8E` (--accent-correct) を CSS variable + Tailwind v4 `@theme` 経由で追加 / 罰則色 (赤系) は **追加しない**。
+  4. **Home Hero 大改造** (`app/src/app/(app)/home/HomeClient.tsx` or 該当 page.tsx): kotodama-tori (現進化段階) を画面下部から spring 登場 → 吹き出し「今日もがんばろう！」 / クリックで bounce 反応 / `prefers-reduced-motion` 時は静止 SVG fallback。
+  5. **Study 正解時演出** (`app/src/app/(app)/study/[levelCode]/[skillCode]/StudyClient.tsx`): キャラが画面右下から bounce 登場 → 拍手アニメ (SVG path morph) / 連続正解 3+ で `canvas-confetti` 多色発射 / 解答ボタン正解時 scale spring (1 → 1.05 → 1) + Mint Green グロー shadow。
+  6. **Study 不正解時演出** (同上ファイル): キャラが「うーん」首を傾ける (rotate -8deg / 8deg / 0 spring) / ボタン横シェイク (translateX -3px / 3px / 0 / 200ms / 1 回のみ / 罰則感ゼロの柔らか) / **赤色一切使わず** Amber Gold 薄色で「もう一度考えてみよう」中立フィードバック。
+  7. **Streak 炎アニメ** (`app/src/components/home/streak-display.tsx` 想定 / 該当パスは dev が特定): 数字横に SVG 炎 / 連続日数で強さ変化 (1-2日: 表示なし / 3日: 小炎 / 7日: 中炎 / 14日: 大炎 + 上昇パーティクル) / framer-motion `animate` で flicker。
+  8. **XP / コインバー smooth fill** (`app/src/components/economy/coin-display.tsx` + XP 表示箇所 / dev が特定): spring physics 1.5s / overshoot 5% / settle / 罰則ゼロ (減少時もアニメ柔らか)。
+  9. **ボタン micro-interactions** (`app/src/components/ui/button.tsx` 拡張 or 専用 wrapper component 新設): hover scale 1.03 / click scale 0.97 / spring back / `motion-reduce:transform-none` で fallback。
+  10. **ページ遷移 stagger fade-up** (`app/src/components/ui/page-transition.tsx` 新規 / Server Components ↔ Client Components 境界考慮): 子要素 stagger 50ms 間隔で flow-in (translateY 12px → 0 + opacity 0 → 1) / `motion-reduce` 即時表示 fallback。
+  11. **Level-up 演出強化** (`app/src/components/character/evolution-celebration.tsx` 既存拡張): 既存進化 SVG をフルスクリーン take-over (z-50 fixed inset-0 backdrop-blur) / 中央に進化 SVG 拡大 + キラキラ particle / `canvas-confetti` 多色 burst / 「進化したよ！」テキスト Mochiy Pop One 表示 / 4 秒後に自動 dismiss + tap で即 dismiss。
+- **本 atomic スコープ（含まないもの / Plan B / C で別 atomic）**:
+  - **Lottie / dotLottieReact**: Plan B (DEC-088 予定) で導入 / 本 atomic は framer-motion + canvas-confetti のみ。
+  - **サウンドエフェクト (Howler.js)**: Plan B で導入 / browser autoplay policy 考慮 + settings.audio_enabled toggle 必要 / 本 atomic は無音。
+  - **キャラ表情差分 (happy/thinking/cheering 各 3)**: Plan B で 5 進化段階 × 3 表情 = 15 SVG 追加。
+  - **学習履歴ヒートマップ**: Plan B 範囲。
+  - **Onboarding ストーリー演出**: Plan B 範囲。
+  - **冒険マップ UI / ボス戦演出 / 3D look / 音声 (TTS で kotodama-tori 喋る)**: Plan C (DEC-089 予定) 範囲。
+- **制約厳守 / 受入基準**:
+  - **DEC-024 罰則ゼロ哲学厳守**: 不正解時 / 連続未達成時 / 期限切れ等で「責める」「叱る」演出ゼロ / 赤色 / 怒り表情 / シェイク多用 / 大音量警告 全て禁止 / カラーパレットは緑/青/紫系のみ追加。
+  - **DEC-006 拡張版 (DEC-077) 不変条件**: GET 12/15 / mutation 9/10 / page 25/32 / cron 5 全て **+0** 維持。
+  - **DEC-003 三層認可**: 本 atomic は UI のみ / Server Action / API route 触らず = 三層認可影響ゼロ。
+  - **DEC-055 idempotency**: UI 演出は idempotent (同 state で同 UI / 副作用ゼロ) / DB 副作用なし。
+  - **WCAG 2.1 AA 準拠**: `prefers-reduced-motion: reduce` 全演出対応必須 / focus-visible リング維持 / コントラスト比 AA 維持 / 画面リーダー読上げ (aria-label / role) 維持。
+  - **Lighthouse Performance 80+ 維持**: バンドルサイズ +50KB gzip 以下 / framer-motion tree-shaking 確認 / Mochiy Pop One subset (latin + japanese 必要範囲のみ) / Animation 60fps 維持 (will-change / transform GPU only)。
+  - **既存 vitest 801 PASS / E2E 全 spec PASS リグレッション 0**: UI 変更のみ / data-testid / aria-label 既存セレクタ維持 / E2E ハッピーパス全件継続。
+  - **typecheck pass / lint warning 0**: ESLint react-hooks/exhaustive-deps 厳守 / framer-motion `motion.*` 型推論 OK 確認。
+  - **`next build` 25 routes 完遂**: バンドル増分が許容範囲内 / 新規 route 追加なし。
+  - **動作確認 3 端末**: Desktop Chrome / iPhone Safari / iPad Safari の 3 環境で smoke test (CEO trust-but-verify 段階)。
+- **後続 atomic 候補**:
+  1. **DEC-088 Plan B (β 後 / 2.5 人日)**: Lottie 5 種 + サウンドエフェクト 8 種 + キャラ表情 3 種 × 5 進化段階 + 学習履歴ヒートマップ + Onboarding ストーリー演出 / 本 DEC-087 完遂後 + 実子 1〜2 週間運用フィードバック収集後着手。
+  2. **DEC-089 Plan C (商品化フェーズ / 1-2 週間)**: 冒険マップ UI + 進化 SVG リッチイラスト化 + ボス戦演出 (模試 = ボス戦) + 音声 (kotodama-tori が OpenAI TTS で動的会話) + 3D look transitions / 商品化判断後着手。
+  3. **DEC-083 §後続 (β 後 / 0.3 人日)**: drizzle workflow 本体修復 (継続 pending).
+  4. **DEC-082 (β 後並走 3 項目 / 0.4 人日)**: TTS 自動投入 / 招待コード自動配布 / Sentry alert dashboard pinning (継続 pending).
+- **CEO 委任先 / 報告経路**: dev 部門委任 (規模感 0.75 人日 / sub-agent 1 名 / Plan A 全 11 項目を 1 atomic 一括実装) → 完遂後 CEO trust-but-verify (typecheck / lint / vitest / build / 3 端末 smoke / 罰則ゼロ目視) → review 部門なし (規模感小 / CEO 直接最終確認) → §実装完遂デルタ → CEO 1 commit/push → Vercel auto redeploy → オーナー実子試用 → 1〜2 週間後 Plan B 着手判断。
+- **教訓 / 設計方針 (Plan A 設計の心)**:
+  1. **既存資産先回収 → 不足のみ追加投資**: kotodama-tori 5 進化 SVG 既存 + canvas-confetti 既存 + Heroicons 既存。framer-motion + Mochiy Pop One のみ追加 = β 中即時投入可な最小構成。
+  2. **罰則ゼロ哲学を演出側で徹底**: 「不正解 = 罰」ではなく「不正解 = 一緒に考えよう」。色 / モーション / ワーディング 3 軸全てで罰則感排除。
+  3. **WCAG 配慮を後付けではなく設計に組み込む**: `prefers-reduced-motion` 全演出 fallback / focus / コントラスト / aria は実装着手時から要件化。
+  4. **Plan B / C への積み上げ設計**: framer-motion + tokens 拡張 + キャラ主役化 = Plan B Lottie / サウンド / Plan C 冒険マップを上に乗せる土台。手戻り最小設計。
+
+### §実装完遂デルタ
+- **2026-05-06 / Plan A atomic 完遂着地 / dev 完遂報告 + CEO trust-but-verify GREEN**:
+  - **手順 1** ✅: 本 DEC-087 起票 (decisions.md 冒頭 / 本 entry / ~120 行).
+  - **手順 2** ✅: dev sub-agent 委任 (Plan A 全 11 項目 / 既存セレクタ / data-testid 完全保護 / 罰則ゼロ厳守 / WCAG fallback 必須).
+  - **手順 3** ✅: dev 実装完遂 (`projects/PRJ-016/reports/dev-w12-uiux-plana-done.md` / 7 新規 + 4 改修 + framer-motion 12.38.0 追加 / +30〜40 KB gzip).
+  - **手順 4** ✅: CEO trust-but-verify GREEN (typecheck PASS / lint 0 warning / vitest **902 PASS** / 60 files / 0 fail / `next build` 25 page + 5 cron SUCCESS / E2E study-smoke 2/2 + family-streak 6/6 PASS / 罰則ゼロ目視 = 赤色 0・叱責語 0・絵文字 0・useReducedMotion 7 ファイル全件実装 / DEC-006 不変条件 page 25 + mutation 9 + GET 12 + cron 5 完全保持).
+  - **手順 5** ✅: §実装完遂デルタ更新 (本 entry) + dashboard 更新 + claude-code-company commit + HANEI repo (Vercel deploy source) sync push.
+  - **手順 6** (予定): オーナー実子試用 → Plan B (DEC-088) 即時着手 (オーナー Plan A→B→C 順次 GO directive 受領済 / 1〜2 週間待機なし).
+- **影響行 (実績)**:
+  - **新規 (7)**: `app/src/components/ui/motion-provider.tsx` + `page-transition.tsx` + `motion-button.tsx` + `animated-fill-bar.tsx` + `app/src/components/home/hero-kotodama-tori.tsx` + `streak-flame.tsx` + `app/src/components/study/answer-feedback-effects.tsx`.
+  - **改修 (4)**: `app/src/app/layout.tsx` (Mochiy_Pop_One + `--font-display` / +18 行) + `app/src/app/globals.css` (tokens + `.font-display` + keyframes / +136 行) + `app/src/app/(app)/home/page.tsx` (Hero section + StreakFlame 重畳 / +29 行) + `app/src/app/(app)/study/[levelCode]/[skillCode]/StudyClient.tsx` (AnswerFeedbackEffects 組込 + mint glow + soft-warm + shake / +47 行) + `app/src/components/character/evolution-celebration.tsx` (フルスクリーン take-over + 多色 confetti + 8 キラキラ粒子 + 4 秒 auto-dismiss / +98 行).
+  - **deps**: `app/package.json` + `package-lock.json` (`framer-motion@12.38.0` 追加 / LazyMotion + domAnimation tree-shake / +30〜40 KB gzip).
+  - **decisions.md** DEC-087 起票 + §実装完遂デルタ (本 entry / ~140 行).
+  - **dashboard/active-projects.md** 【最新】marker DEC-083 → DEC-087 GREEN 反映.
+- **commit hash**: claude-code-company 1 commit (本 §デルタ + dashboard + dev report 含む全件) + HANEI repo (deploy source) 1 commit (app/ 配下 11 ファイル + vercel.json + package.json).
+- **罰則ゼロ目視チェック**: 新規 7 ファイル全件で `red-*` / `destructive` / `bg-red` / `text-red` 0 hit. 罰語 (まちがい / だめ / 残念 / バツ) 新規追加 0. 既存「おしい」「もう一度考えてみよう」のみ使用 (E2E study-smoke regex 互換).
+- **WCAG 2.1 AA 確認**: 新規 7 ファイル全件で `useReducedMotion()` early-return パターン実装. globals.css `@media (prefers-reduced-motion: reduce)` 全 keyframe 0.01ms 短縮 fallback.
+
+---
+
 ## DEC-083: M-3 migration drift hotfix atomic（learner_study_targets 0019 を本番 Turso + dev local.db 双方に適用 / 0.1 人日 / scripts +1 / package.json scripts +2 / docs § 9 step 0 訂正）GO 判定 完遂（2026-05-06 / オーナー手元 dev SqliteError 報告直後 / hotfix-class）
 
 - **状況**: 2026-05-06 オーナー手元 `bun run dev` 起動時に `SqliteError: no such table: learner_study_targets` が再現（/home の `getLearnerStudyTarget` 経路 / `src/lib/actions/learner-study-target.ts:54` / fail-soft 上位で home GET 200 維持）。診断結果:

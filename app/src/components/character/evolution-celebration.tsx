@@ -21,6 +21,7 @@
  */
 
 import { useEffect } from "react";
+import confetti from "canvas-confetti";
 import { SparklesIcon, ArrowRightIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { triggerConfetti, isMotionReduced } from "@/lib/study/confetti";
@@ -84,7 +85,47 @@ export function EvolutionCelebrationModal(props: Props) {
     if (!open) return;
     void triggerConfetti(pickConfettiIntensity(toStage));
     void playFeedback("level-up");
-  }, [open, toStage]);
+
+    // DEC-087 §11: 多色 4 色 burst (Amber Gold + Sky Blue + Lavender + Mint Green)
+    // canvas-confetti 既存 dep / prefers-reduced-motion 時は skip
+    if (!isMotionReduced() && typeof window !== "undefined") {
+      try {
+        const result = confetti({
+          particleCount: 140,
+          spread: 100,
+          startVelocity: 42,
+          gravity: 0.65,
+          scalar: 1.0,
+          ticks: 260,
+          origin: { x: 0.5, y: 0.55 },
+          colors: [
+            "#F2A93A", // Amber Gold
+            "#FFD27A",
+            "#4FB6E5", // Sky Blue
+            "#B8A4E0", // Lavender
+            "#6FCF8E", // Mint Green
+            "#FFFFFF",
+          ],
+        }) as unknown;
+        if (
+          result &&
+          typeof (result as { then?: unknown }).then === "function"
+        ) {
+          void (result as Promise<unknown>);
+        }
+      } catch {
+        // silent: 描画失敗は UX を壊さない
+      }
+    }
+
+    // DEC-087 §11: 4 秒後に自動 dismiss (タップ即 dismiss は既存 onClick={onClose})
+    if (typeof window !== "undefined") {
+      const t = window.setTimeout(() => {
+        onClose?.();
+      }, 4000);
+      return () => window.clearTimeout(t);
+    }
+  }, [open, toStage, onClose]);
 
   if (!open) return null;
 
@@ -113,6 +154,8 @@ export function EvolutionCelebrationModal(props: Props) {
     badgeCodes: toStage === "syugosin" ? ["sakura_keeper"] : [],
   });
 
+  // DEC-087 §11: フルスクリーン take-over + backdrop-blur + キラキラ particle
+  // (既存 props / data-testid / onClose / onContinue API は完全保持)
   return (
     <div
       role="dialog"
@@ -122,7 +165,7 @@ export function EvolutionCelebrationModal(props: Props) {
       data-from-stage={fromStage}
       data-to-stage={toStage}
       data-motion-reduced={motionReduced ? "true" : "false"}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-md"
       onClick={onClose}
     >
       {/* 光柱 (motion 非削減時のみ) — CSS keyframe で透明度上昇 */}
@@ -138,6 +181,37 @@ export function EvolutionCelebrationModal(props: Props) {
         />
       )}
 
+      {/* DEC-087 §11: キラキラ particle (8 個 / rotate + scale で拡散) */}
+      {!motionReduced && (
+        <div
+          aria-hidden="true"
+          data-testid="evolution-sparkle-particles"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        >
+          {Array.from({ length: 8 }).map((_, i) => (
+            <span
+              key={i}
+              className="absolute h-2 w-2 rounded-full"
+              style={{
+                background: [
+                  "#F2A93A",
+                  "#4FB6E5",
+                  "#B8A4E0",
+                  "#6FCF8E",
+                  "#FFD27A",
+                  "#FFFFFF",
+                  "#F2A93A",
+                  "#B8A4E0",
+                ][i],
+                transform: `rotate(${i * 45}deg) translateY(-140px)`,
+                animation: `evolution-sparkle 2.4s ease-out ${i * 0.08}s infinite`,
+                opacity: 0.85,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       <div
         className="relative w-full max-w-lg rounded-2xl border-2 border-primary/40 bg-card p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -149,9 +223,9 @@ export function EvolutionCelebrationModal(props: Props) {
           />
           <h2
             id="evolution-title"
-            className="text-2xl font-bold text-primary"
+            className="font-display text-2xl font-bold text-primary"
           >
-            しんか！
+            しんかしたよ！
           </h2>
         </div>
 
@@ -207,7 +281,7 @@ export function EvolutionCelebrationModal(props: Props) {
               : "evolution-fade-in 1000ms ease-out 1500ms backwards",
           }}
         >
-          <p className="text-lg font-bold text-primary">
+          <p className="font-display text-xl font-bold text-primary">
             <ruby>
               {toInfo.furigana}
               <rt>{toLabel}</rt>
@@ -239,6 +313,20 @@ export function EvolutionCelebrationModal(props: Props) {
         @keyframes evolution-fade-in {
           0% { opacity: 0; transform: scale(0.85) translateY(8px); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        /* DEC-087 §11: キラキラ particle 拡散 */
+        @keyframes evolution-sparkle {
+          0% {
+            opacity: 0;
+            transform: rotate(var(--r, 0deg)) translateY(0) scale(0.4);
+          }
+          30% {
+            opacity: 0.95;
+          }
+          100% {
+            opacity: 0;
+            transform: rotate(var(--r, 0deg)) translateY(-180px) scale(1.2);
+          }
         }
       `}</style>
     </div>

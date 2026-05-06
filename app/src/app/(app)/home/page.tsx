@@ -48,6 +48,8 @@ import { StreakShieldBadge } from "@/components/home/streak-shield-badge";
 import { SakuraStreakDisplay } from "@/components/home/sakura-streak-display";
 import { DailyGoalRing } from "@/components/home/daily-goal-ring";
 import { CharacterWithAccessories } from "@/components/character/accessories/character-with-accessories";
+import { HeroKotodamaTori } from "@/components/home/hero-kotodama-tori";
+import { StreakFlame } from "@/components/home/streak-flame";
 
 import {
   requireAuth,
@@ -383,6 +385,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
+      {/* DEC-087 §4: Home Hero - kotodama-tori 主役化 + 吹き出し
+          spring 登場 / クリックで bounce / prefers-reduced-motion 静止 fallback */}
+      <section className="mb-6">
+        <HeroKotodamaTori
+          input={kotodamaInput}
+          learnerNickname={learner.nickname}
+          svgSize={140}
+        />
+      </section>
+
       <header className="mb-8 space-y-3">
         {/* F-3: 学習者切替 Tabs (2 名以上の場合のみ表示) */}
         {learners.length > 1 ? (
@@ -398,7 +410,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <p className="text-sm text-muted-foreground">
           こんにちは、{learner.nickname} さん
         </p>
-        <h1 className="text-3xl font-bold">きょうのミッション</h1>
+        <h1 className="font-display text-3xl font-bold">きょうのミッション</h1>
       </header>
 
       <div className="grid gap-6 sm:grid-cols-3">
@@ -452,9 +464,20 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </CardContent>
         </Card>
 
-        {/* 連続記録: W8-T6 桜の木メタファ (Duolingo 流の炎アイコンを置換) */}
+        {/* 連続記録: W8-T6 桜の木メタファ (Duolingo 流の炎アイコンを置換)
+            DEC-087 §7: streak 3 / 7 / 14 日で炎の輝きを並列表示 (達成感のみ / 罰則ゼロ) */}
         <div className="space-y-2">
-          <SakuraStreakDisplay streakDays={streak} svgSize={88} />
+          <div className="relative">
+            <SakuraStreakDisplay streakDays={streak} svgSize={88} />
+            {streak >= 3 ? (
+              <div
+                className="pointer-events-none absolute right-3 top-3 flex items-center gap-1"
+                aria-hidden="false"
+              >
+                <StreakFlame streakDays={streak} />
+              </div>
+            ) : null}
+          </div>
           {/* freeze ticket 残数バッジは桜カードの下に補助表示 */}
           <div className="flex items-center justify-end px-1">
             <StreakShieldBadge

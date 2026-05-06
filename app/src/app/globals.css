@@ -9,6 +9,12 @@
 @theme inline {
   --font-geist-sans: var(--font-sans);
   --font-geist-mono: var(--font-mono);
+  /* DEC-087 Plan A: 見出し / Hero / Level-up 用 display フォント (Mochiy Pop One) */
+  --font-display-family: var(--font-display);
+  /* DEC-087 Plan A: アクセントカラー (Tailwind v4 の bg-accent-coach 等で参照可能化) */
+  --color-accent-coach: var(--accent-coach);
+  --color-accent-badge: var(--accent-badge);
+  --color-accent-correct: var(--accent-correct);
 }
 
 :root {
@@ -49,6 +55,18 @@
   --ring: 36 88% 59%;
 
   --radius: 0.75rem;
+
+  /* ------------------------------------------------------------------------ */
+  /* DEC-087 Plan A: 楽しさ強化アクセントカラー (罰則ゼロ哲学厳守 / 赤系は追加しない) */
+  /*  - --accent-coach: AI コーチ識別 (Sky Blue #4FB6E5)                        */
+  /*  - --accent-badge: 達成バッジ (Lavender #B8A4E0)                           */
+  /*  - --accent-correct: 正解フィードバック (Mint Green #6FCF8E)               */
+  /* WCAG AA コントラスト維持のため文字色は dark fallback を別 token で持たない  */
+  /* (これらは bg / shadow / glow 用途を主とし、既存 success/destructive と独立) */
+  /* ------------------------------------------------------------------------ */
+  --accent-coach: #4fb6e5;
+  --accent-badge: #b8a4e0;
+  --accent-correct: #6fcf8e;
 }
 
 .dark {
@@ -83,6 +101,11 @@
   --border: 222 30% 20%;
   --input: 222 30% 20%;
   --ring: 36 92% 64%;
+
+  /* DEC-087 Plan A: dark mode 用に光度を少し上げて十分なコントラストを維持 */
+  --accent-coach: #6cc6ee;
+  --accent-badge: #c8b8e8;
+  --accent-correct: #84daa1;
 }
 
 * {
@@ -232,6 +255,119 @@ li {
 
 @media (prefers-reduced-motion: reduce) {
   .hanei-combo-pulse {
+    animation: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* DEC-087 Plan A: display フォント utility (見出し / Hero / Level-up 用)     */
+/* `font-display: swap` 設定済 / Mochiy Pop One                              */
+/* 本文 (Inter) との混在用に opt-in で利用                                    */
+/* ------------------------------------------------------------------------ */
+.font-display {
+  font-family:
+    var(--font-display),
+    "Mochiy Pop One",
+    var(--font-sans),
+    sans-serif;
+  letter-spacing: 0.01em;
+}
+
+/* ------------------------------------------------------------------------ */
+/* DEC-087 Plan A: 罰則ゼロ哲学準拠の柔らかフィードバック utility              */
+/*  - Mint Green グロー (正解時 ボタン強調)                                   */
+/*  - Amber Gold soft (不正解時 中立フィードバック / 赤色未使用)              */
+/* prefers-reduced-motion: reduce では無効化                                  */
+/* ------------------------------------------------------------------------ */
+.hanei-correct-glow {
+  box-shadow:
+    0 0 0 2px rgba(111, 207, 142, 0.45),
+    0 0 16px rgba(111, 207, 142, 0.45);
+  transition: box-shadow 240ms ease-out;
+}
+
+.hanei-soft-warm {
+  background-color: rgba(242, 169, 58, 0.06);
+  border-color: rgba(242, 169, 58, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hanei-correct-glow {
+    box-shadow: none !important;
+    transition: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* DEC-087 Plan A: streak 炎 flicker (3 日 / 7 日 / 14 日)                    */
+/* 罰則ゼロ哲学: 「燃える」演出は連続記録の達成感のみを表現                    */
+/* ------------------------------------------------------------------------ */
+@keyframes hanei-flame-flicker {
+  0%,
+  100% {
+    transform: scale(1) rotate(-1deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.04) rotate(1deg);
+    opacity: 0.92;
+  }
+}
+
+.hanei-flame-flicker {
+  animation: hanei-flame-flicker 1.6s ease-in-out infinite;
+  transform-origin: center bottom;
+  will-change: transform, opacity;
+}
+
+@keyframes hanei-flame-spark-rise {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-22px) scale(0.4);
+    opacity: 0;
+  }
+}
+
+.hanei-flame-spark {
+  animation: hanei-flame-spark-rise 1.8s ease-out infinite;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hanei-flame-flicker,
+  .hanei-flame-spark {
+    animation: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* DEC-087 Plan A: 不正解時の柔らか横シェイク (1 回 / 200ms / 罰則ゼロ)        */
+/* translateX -3px / 3px / 0 を 1 cycle のみ                                  */
+/* ------------------------------------------------------------------------ */
+@keyframes hanei-wrong-shake {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.motion-safe\:animate-hanei-wrong-shake {
+  animation: hanei-wrong-shake 200ms ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe\:animate-hanei-wrong-shake {
     animation: none !important;
   }
 }
