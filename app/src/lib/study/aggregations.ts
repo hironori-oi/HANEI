@@ -664,6 +664,137 @@ export function buildHeatmapDateGrid(
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// 12. (DEC-089 Plan C 項目 1 + 4) 冒険マップ 12 エリア 進捗集計
+//
+// 英検 5/4/3 級 × 4 skill = 12 エリア の進捗状態を一括取得する。
+// /adventure-map page と /api/study/adventure-map GET の両方から read-only で参照。
+//
+// 各エリアの状態判定 (罰則ゼロ哲学 / DEC-024):
+//  - cleared: マスタリ率 >= 80% (1 度でも正解した distinct 問題数 / 出題対象数)
+//  - in_progress: マスタリ率 > 0% かつ < 80%
+//  - not_started: マスタリ率 = 0% (鎖 / 罰アイコン未使用 / 中立 lock)
+//
+// 認可: 呼び出し前 requireLearnerOwner 通過済 (learnerId スコープ).
+// ---------------------------------------------------------------------------
+
+export type AdventureMapAreaStatus =
+  | "cleared"
+  | "in_progress"
+  | "not_started";
+
+export type AdventureMapSkill =
+  | "vocabulary"
+  | "grammar"
+  | "reading"
+  | "listening";
+
+export interface AdventureMapArea {
+  /** "eiken-5_vocabulary" のような複合 ID */
+  areaId: string;
+  level: "5" | "4" | "3";
+  skill: AdventureMapSkill;
+  /** UI 表示用ラベル ("英検5級 / ごい") */
+  label: string;
+  /** マスター済 distinct 問題数 */
+  mastered: number;
+  /** 出題対象 distinct 問題数 */
+  total: number;
+  /** 0..1 のマスタリ率 (total = 0 のときは 0) */
+  ratio: number;
+  status: AdventureMapAreaStatus;
+}
+
+export interface AdventureMapSummary {
+  areas: ReadonlyArray<AdventureMapArea>;
+  /** 全 12 エリアのうちクリア済 */
+  clearedCount: number;
+  /** 進行中 */
+  inProgressCount: number;
+  /** 未着手 */
+  notStartedCount: number;
+}
+
+const ADVENTURE_MAP_LEVELS = ["5", "4", "3"] as const;
+const ADVENTURE_MAP_SKILLS: ReadonlyArray<AdventureMapSkill> = [
+  "vocabulary",
+  "grammar",
+  "reading",
+  "listening",
+];
+
+const SKILL_LABEL_MAP: Record<AdventureMapSkill, string> = {
+  vocabulary: "ごい",
+  grammar: "ぶんぽう",
+  reading: "どっかい",
+  listening: "リスニング",
+};
+
+/** 80% で「クリア」判定 (DEC-024 罰則ゼロ: 厳しすぎず子の達成感を優先). */
+const ADVENTURE_MAP_CLEAR_THRESHOLD = 0.8;
+
+function classifyAreaStatus(ratio: number): AdventureMapAreaStatus {
+  if (ratio >= ADVENTURE_MAP_CLEAR_THRESHOLD) return "cleared";
+  if (ratio > 0) return "in_progress";
+  return "not_started";
+}
+
+/**
+ * 12 エリア (3 級 × 4 skill) の進捗を一括集計する.
+ *
+ * 既存 `getMasteryCoverage(level)` を 3 段階分呼び出し、
+ * skill 4 軸 × level 3 軸 = 12 エリアの AdventureMapArea を返す。
+ *
+ * 罰則ゼロ哲学 (DEC-024):
+ *  - 未着手も「未着手 (中立 lock)」状態を返すのみで赤色 / 罰メッセージは含めない.
+ */
+export async function getAdventureMapSummary(
+  db: Db,
+  learnerId: string,
+): Promise<AdventureMapSummary> {
+  const coverageByLevel = await Promise.all(
+    ADVENTURE_MAP_LEVELS.map((level) => getMasteryCoverage(db, learnerId, level)),
+  );
+
+  const areas: AdventureMapArea[] = [];
+  for (let i = 0; i < ADVENTURE_MAP_LEVELS.length; i += 1) {
+    const level = ADVENTURE_MAP_LEVELS[i]!;
+    const coverage = coverageByLevel[i] ?? [];
+    for (const skill of ADVENTURE_MAP_SKILLS) {
+      const c = coverage.find((row) => row.skill === skill);
+      const mastered = c?.mastered ?? 0;
+      const total = c?.total ?? 0;
+      const ratio = total > 0 ? Math.min(1, mastered / total) : 0;
+      areas.push({
+        areaId: `eiken-${level}_${skill}`,
+        level,
+        skill,
+        label: `英検${level}級 / ${SKILL_LABEL_MAP[skill]}`,
+        mastered,
+        total,
+        ratio: Number(ratio.toFixed(4)),
+        status: classifyAreaStatus(ratio),
+      });
+    }
+  }
+
+  let clearedCount = 0;
+  let inProgressCount = 0;
+  let notStartedCount = 0;
+  for (const a of areas) {
+    if (a.status === "cleared") clearedCount += 1;
+    else if (a.status === "in_progress") inProgressCount += 1;
+    else notStartedCount += 1;
+  }
+
+  return {
+    areas,
+    clearedCount,
+    inProgressCount,
+    notStartedCount,
+  };
+}
+
 // 未使用警告抑止 (gte / lte は将来集計に使用予定)
 const _exports = { gte, lte, aiCoachMessages, aiCoachConversations };
 void _exports;

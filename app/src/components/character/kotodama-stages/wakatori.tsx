@@ -127,6 +127,42 @@ export function KotodamaWakatoriSvg({
       <circle cx="96" cy="108" r="3" fill={KOTODAMA_COLORS.sakura} opacity="0.6" />
       <circle cx="144" cy="108" r="3" fill={KOTODAMA_COLORS.sakura} opacity="0.6" />
 
+      {/* DEC-089 Plan C 項目 3: happy 時 目もとキラキラ (Gold sparkle) */}
+      {expression === "happy" && (
+        <g data-part="wakatori-happy-sparkles" aria-hidden="true">
+          <path
+            d="M 96 88 L 98 84 L 100 88 L 96 88 Z M 98 84 L 98 80"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.85"
+          />
+          <path
+            d="M 144 88 L 146 84 L 148 88 L 144 88 Z M 146 84 L 146 80"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.85"
+          />
+        </g>
+      )}
+
+      {/* DEC-089 Plan C 項目 3: 翼先の追加飾り羽 (左右 / 若鳥らしい三角羽 1 枚ずつ) */}
+      <g data-part="wakatori-wing-tip-feathers" aria-hidden="true">
+        <path
+          d="M 64 168 L 60 178 L 70 174 Z"
+          fill={KOTODAMA_COLORS.shadow}
+          opacity="0.7"
+        />
+        <path
+          d="M 176 168 L 180 178 L 170 174 Z"
+          fill={KOTODAMA_COLORS.shadow}
+          opacity="0.7"
+        />
+      </g>
+
       {/* 頭頂の羽飾り (3 枚 / 凛々しい三角) */}
       <path
         d="M 110 70 L 116 56 L 122 70 Z"

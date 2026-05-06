@@ -1,5 +1,99 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-089: UI/UX 楽しさ強化 Plan C atomic（冒険マップ UI + ボス戦演出 + 進化キャラリッチ化 + kotodama-tori 音声 (TTS) / 商品化フェーズ 1.5 人日 圧縮 / page +1 = 26/32 / mutation +0 / GET +1 = 13/15 / cron +0）GO 判定（2026-05-06 / DEC-088 Plan B 完遂直後 / オーナー Plan A→B→C 順次 GO 完結）
+
+- **状況**: 2026-05-06 DEC-088 Plan B 完遂着地（commit `f7e545b` / HANEI repo push 完了 / Vercel auto redeploy 進行中）直後。オーナーは事前 directive「Plan A GO。そのあと planB、planC に進んでいきましょう」で Plan C も即時着手承認済（連続 atomic 体制）。Plan A = motion + token + キャラ主役化、Plan B = キャラ表情 + サウンド + 履歴 + Onboarding を経て、Plan C は **「商品化フェーズ」相当の体験リッチ化**：冒険マップ UI（学習レベル × skill を地図ノード化）+ ボス戦演出（模試 = ボス戦 視覚化）+ 進化 SVG リッチイラスト化 + kotodama-tori が OpenAI TTS で動的会話。**当初試算 1〜2 週間 を `1.5 人日` に圧縮**：3D look + WebGL 系の重い投資は別 atomic（DEC-090 候補）に切り出し、本 atomic は **「既存 SSR + 既存 page.tsx 拡張で完結する 4 大項目」** に絞る。
+- **判定**: **GO**（DEC-089 = UI/UX 楽しさ強化 Plan C atomic / **1.5 人日（圧縮版）** / **page +1**（25 → 26 / 32 / 冒険マップ専用 page route `/(app)/adventure-map` 新設）/ **mutation +0**（9/10 不変 / TTS は AI route 経由 = `/api/ai/coach` の variant 拡張で吸収）/ **GET +1**（12 → 13 / 15 / `/api/study/adventure-map` = 学習進捗集計の専用 endpoint 新設）/ **cron +0**（5 不変）/ **deps +0**（OpenAI TTS は既存 `openai` SDK を流用 / WebGL / Three.js は不採用）/ **assets +N**（進化リッチ SVG 5 種 + ボス戦背景 SVG 3 種 + map ノードアイコン 8 種））.
+- **判断根拠**:
+  1. **「商品化」≠「重投資」と再定義**: 当初想定の WebGL 3D / 真リッチ Lottie / フルゲーム化 は β 子使用フィードバックを得てから判断する方が ROI 高い。本 atomic は **「冒険感」の 体験骨格を SVG + framer-motion + 既存 SSR で 1.5 人日で組み上げる**。Plan B までで完成した「キャラ表情 + サウンド + 履歴 + Onboarding」を冒険マップに繋ぎ込めば、子の没入度は劇的に上がる。
+  2. **β data リグレッション 0**: 既存 `/study/[levelCode]/[skillCode]` は無変更 / 新規 `/adventure-map` は **既存学習データを read-only 集計** で表示 / DB schema 触らず / Server Action 触らず / vitest 930 PASS + E2E 全 spec PASS の baseline 保護.
+  3. **罰則ゼロ哲学厳守 (DEC-024)**: 「ボス戦」表現は「kotodama-tori と一緒に挑む試練」中立トーン / 「敗北 = 罰」演出ゼロ / 模試結果は「再挑戦できる」表現 / 進化リッチ SVG は「悲しみ」「怒り」表情含まず.
+  4. **DEC-006 増枠は計画的 +2**: page +1（margin 6 → 5 / 32 上限まで余裕）+ GET +1（margin 3 → 2 / 15 上限まで余裕）= β 後 T6 mutation +1 と独立軸. cron +0 / 三層認可影響ゼロ.
+  5. **TTS は既存 OpenAI SDK 流用**: kotodama-tori が「やったね！」「もう一度ためしてみよう」等の短尺音声を OpenAI tts-1 model で動的生成 → R2 cache（DEC-061 既存パターン）。新規依存ゼロ. cost guard は既存 `monthly-budget-alert` cron（DEC-081）で監視済.
+  6. **Plan C 完遂で「楽しさ」3 段階完結**: Plan A（0.75 人日）→ Plan B（2.5 人日）→ Plan C（1.5 人日）= 計 **4.75 人日 / 3 atomic** で当初試算 1-2 週間圧縮達成. オーナー実子試用フィードバック → DEC-090（重投資）判断材料に活用.
+- **本 atomic スコープ（含むもの 4 大項目）**:
+  1. **冒険マップ UI 新規 page route `/adventure-map`**:
+     - 配置: `app/src/app/(app)/adventure-map/page.tsx` 新規（page +1 = 26）
+     - 表示: 12 学習エリア（英検 5/4/3 級 × 4 skill = listening / reading / writing / vocabulary） を **縦長スクロール地図** で配置
+     - 各エリアノード = SVG ノード + 進捗 ring（既存 `daily-goal-ring.tsx` パターン流用 / framer-motion stagger entry）
+     - クリア済エリア = Mint Green ノード + ✓ アイコン / 進行中 = Amber Gold + 現在地マーカー / 未着手 = グレー + locked icon
+     - 各ノードクリック → 既存 `/study/[levelCode]/[skillCode]` に遷移（既存 route 無変更）
+     - 罰則ゼロ: 未着手も「すぐにいける！」中立 / 鎖 / 罰アイコン未使用
+  2. **ボス戦演出（模試結果モーダル）**:
+     - 配置: `app/src/components/exam/boss-battle-celebration.tsx` 新規 + `app/src/components/exam/exam-result-modal.tsx` 改修 or 新規（既存模試結果表示は既存 / 演出のみ wrap）
+     - 模試完了時に `evolution-celebration.tsx` 同等のフルスクリーン take-over 演出
+     - 「ことだまトリと挑む試練」中立コピー + 多色 confetti（合格時）/ 「次にむけて作戦をたてよう」（不合格時 / 罰則ゼロ）
+     - 既存模試完了 hook で trigger（既存 mutation 触らず）
+  3. **進化キャラリッチ化（5 段階 SVG 詳細描き込み）**:
+     - 既存 5 進化段階 SVG を「より子供向けの可愛さ + 描き込み量増」で再描画（dev 判断 / 既存ファイル拡張 or v2 ファイル別途）
+     - 「飾り羽」「目の輝き」「装具」等を進化段階で増えていく方向性で `expression="happy"/"thinking"/"idle"` の Plan B 互換維持
+     - SVG path 増量による bundle 影響 +5〜10 KB gzip 想定（許容範囲）
+  4. **kotodama-tori TTS 音声会話 (OpenAI tts-1)**:
+     - 配置: `app/src/lib/ai/kotodama-voice.ts` 新規（OpenAI tts-1 model 呼出 + 短尺台詞 8〜12 種を pre-generate / R2 cache）
+     - GET endpoint 新規: `app/src/app/api/study/adventure-map/route.ts`（GET +1 = 13）
+       - 学習進捗集計（クリア / 進行中 / 未着手 エリア）を return + kotodama-tori 短尺音声 URL 同梱
+     - audio re-use: 既存 `audio_enabled` setting 連動 / `prefers-reduced-motion: reduce` 時はテキストのみ
+     - 台詞例: 「やったね！」「もう一度ためしてみよう」「次のエリアに行こう！」（罰則ゼロ）
+     - cost guard: 既存 `monthly-budget-alert` cron（DEC-081）で監視 / pre-generate により実時間 cost 最小化
+- **本 atomic スコープ（含まないもの / 重投資 = DEC-090 候補）**:
+  - **WebGL 3D look transitions**: Three.js / React Three Fiber 採用 = 別 atomic（DEC-090 候補 / β 子使用フィードバック後判断）
+  - **真リッチ Lottie アニメ**: `dotlottie-react` / `@lottiefiles/dotlottie-react` 採用 + Lottie JSON 5 種以上 = 別 atomic
+  - **音声合成のリアルタイム動的生成**: 本 atomic は pre-generate のみ（cost 圧縮）/ realtime TTS は別 atomic
+  - **ボス戦リアルタイムバトル UI**: 本 atomic は「ボス戦演出 = 模試結果モーダル」止まり / 真の戦闘 UI は別 atomic
+  - **進化 SVG → イラストレーター手描き差替**: 本 atomic は SVG 描き込み増量のみ / プロイラスト発注は別 work
+- **制約厳守 / 受入基準**:
+  - **DEC-024 罰則ゼロ哲学厳守**: 冒険マップは「鎖 / 罰 / 怒り」アイコン未使用 / 未着手も中立 / ボス戦は「試練」中立 / TTS 台詞は罰語ゼロ.
+  - **DEC-006 拡張版 (DEC-077) 不変条件**: page 26/32（+1 / margin 6）/ mutation 9/10（+0）/ GET 13/15（+1 / margin 2）/ cron 5（+0）.
+  - **DEC-003 三層認可**: 新規 GET `/api/study/adventure-map` は learner role で本人データ read-only / 三層認可継承.
+  - **DEC-055 idempotency**: TTS pre-generate は idempotent / R2 cache hit で副作用ゼロ.
+  - **WCAG 2.1 AA**: 冒険マップ全ノード focusable + aria-label + キーボード遷移 / TTS 音声は alt text 併記 / `prefers-reduced-motion: reduce` 時 stagger 即時.
+  - **既存 vitest 930 PASS / E2E 全 spec PASS リグレッション 0**: UI 変更 + 1 page + 1 GET / 既存 selector 完全保持 / 新規 unit test（adventure-map aggregation / kotodama-voice cache）必要に応じ追加.
+  - **typecheck pass / lint warning 0 / `next build` 26 page + 5 cron 完遂**.
+  - **cost guard 維持**: TTS pre-generate は cost ¥10 以内 / 既存 `MONTHLY_BUDGET_JPY` 閾値内.
+- **後続 atomic 候補**:
+  1. **DEC-090 重投資版 (将来 / β 子使用フィードバック後 / 1-2 週間)**: WebGL 3D / 真リッチ Lottie / リアルタイムバトル UI / プロイラスト差替 / リアルタイム TTS = 商品化第 2 波.
+  2. **DEC-088 §後続 (β 後 / 0.1 人日)**: 実 mp3 投入（CC0 royalty-free / 8 種差替）.
+  3. **DEC-083 §後続 (β 後 / 0.3 人日)**: drizzle workflow 本体修復.
+  4. **DEC-082 (β 後並走 3 項目 / 0.4 人日)**: TTS 自動投入 / 招待コード自動配布 / Sentry alert dashboard pinning.
+  5. **W12-T3 β 受入準備 (1.5 人日 / P0)**: 19 項目判定残 RED 件 GREEN 化.
+- **CEO 委任先 / 報告経路**: dev 部門委任（規模感 1.5 人日 / sub-agent 1 名 / Plan C 全 4 大項目を 1 atomic 一括実装）→ 完遂後 CEO trust-but-verify → §実装完遂デルタ → CEO 1 commit/push → Vercel auto redeploy → オーナー実子試用 → DEC-090 重投資判断（β 後 1-2 週間運用フィードバック後）.
+- **教訓 / 設計方針 (Plan C 設計の心)**:
+  1. **「商品化」を 1.5 人日に圧縮 = 体験骨格に絞る**: 重投資（WebGL / Lottie / リアルタイム）は β 子フィードバック後の DEC-090 に分離.
+  2. **既存 SDK / 既存 cache パターン流用**: TTS は既存 `openai` SDK / R2 cache（DEC-061）/ 新規依存ゼロ.
+  3. **罰則ゼロを冒険要素全方位で徹底**: 鎖 / 罰 / 怒り / 敗北演出を全て中立化（「試練」「再挑戦」「次のエリア」表現）.
+  4. **DEC-006 計画的増枠**: page +1 / GET +1 = 受入基準明記 / β 後 T6 mutation +1 と独立.
+  5. **cost guard 重視**: TTS は pre-generate のみ / 既存 `monthly-budget-alert` で監視継続.
+
+### §実装完遂デルタ
+- **2026-05-06 / Plan C atomic 完遂着地 / dev 完遂報告 + CEO trust-but-verify GREEN**:
+  - **手順 1** ✅: 本 DEC-089 起票（decisions.md 冒頭 / 本 entry / ~140 行）.
+  - **手順 2** ✅: dev sub-agent 委任（agentId `a30f5d425b378dd60` / Plan C 全 4 大項目 / page +1 / GET +1 / 既存セレクタ完全保護 / 罰則ゼロ厳守 / WCAG fallback 必須 / vitest 930 baseline 維持）.
+  - **手順 3** ✅: dev 実装完遂（`projects/PRJ-016/reports/dev-w12-uiux-planc-done.md` / 14 ファイル変更 = 新規 8 + 改修 6 / 依存追加 0 / バンドル増分 +4〜8 KB gzip ≤ 30 KB target）.
+  - **手順 4** ✅: CEO trust-but-verify GREEN（typecheck PASS / lint 0 warning / vitest **948 PASS** / 65 files / 0 fail / `next build` **26 page** + 9 API + 5 cron SUCCESS / E2E study-smoke 2/2 + family-streak 6/6 PASS（chromium + mobile-chrome）/ DEC-006 page **26**/32 + GET **13**/15 + mutation 9 + cron 5 / DEC-024 罰則ゼロ目視 = 赤色 0・鎖 0・バツ印 0・叱責語 0・sad/crying/angry 表情 0（automated 14 NG 語チェック含む）/ 三層認可継承（learner role 本人のみ）/ cost ¥0.7 per pre-generate ≤ ¥10 限度内）.
+  - **手順 5** ✅: §実装完遂デルタ更新（本 entry）+ HANEI repo commit + push（Vercel auto redeploy）.
+  - **手順 6** ✅: **オーナー Plan A→B→C 順次 GO directive 完結**（Plan A `efe84d9` + Plan B `f7e545b` + Plan C 本 atomic / 計 **4.75 人日 / 3 atomic** で当初試算 1-2 週間圧縮達成）→ 実子試用 → DEC-090 重投資判断材料収集（β 子使用フィードバック後 / WebGL 3D / リアルタイム TTS / Lottie 等は別 atomic）.
+- **影響行 (実績)**:
+  - **新規 (8)**: `app/src/app/(app)/adventure-map/page.tsx`（Server Component / page +1）+ `adventure-map-client.tsx`（Client / framer-motion stagger / 12 エリア grid）+ `app/src/app/api/study/adventure-map/route.ts`（GET +1 = 13 / learner auth / aggregations §12 集計 + voiceManifest）+ `app/src/lib/ai/kotodama-voice.ts`（OpenAI tts-1 + R2 cache / 10 中立台詞 / pre-generate API + manifest read-only）+ `app/src/components/exam/boss-battle-celebration.tsx`（standalone reusable modal / role=dialog + aria-modal / 合格 confetti + 不合格 中立 retry）+ `app/tests/unit/study.adventure-map-aggregation.test.ts`（8 cases / 12 エリア組立 + status 分類 + 罰則ゼロ status 種類検証）+ `app/tests/unit/ai.kotodama-voice.test.ts`（10 cases / 全 voice code 定義 + cache key 形式 + read-only manifest 検証 + **罰則ゼロ 14 NG 語自動検証**）.
+  - **改修 (6)**: `app/src/lib/study/aggregations.ts` (§12 `getAdventureMapSummary` + 型追加 / 既存 export 不変) + `app/src/components/character/kotodama-stages/{hina,wakatori,seityo,kenzya,syugosin}.tsx` 5 SVG 全件に装飾追加（hina 幼羽 / wakatori 三角羽 / seityo Gold ペンダント + 流線 / kenzya 眼鏡 + 巻物スター / syugosin 桜花 4→8 / `expression="happy"` 時の目もとキラキラ全段階共通）+ Plan B 互換 100% 維持（既存 call site 無変更）.
+  - **decisions.md** DEC-089 起票 + §実装完遂デルタ（本 entry / ~150 行）.
+- **commit hash**: HANEI repo 1 commit（本 §デルタ + dev report + 14 ファイル全件 + 18 新規 unit test）.
+- **DEC-006 invariants 確認**: page **26**/32（+1 / margin 6）+ GET **13**/15（+1 / margin 2）+ mutation 9/10（+0）+ cron 5（+0）= **計画的増枠 完遂**.
+- **罰則ゼロ目視チェック**: 新規 8 ファイル + 改修 5 SVG 全件で `red-*` / `destructive` / `bg-red` / `text-red` 0 hit. 鎖アイコン 0 / バツ印 0 / 叱責語 14 種 NG word 0（kotodama-voice.test.ts で自動検証 / 「失敗 / だめ / サボ / 悲しい / 残念 / つらい 等」全件 grep 0）. SVG 表情 `idle/happy/thinking` のみ（`sad/crying/angry` 不採用厳守）. 未着手エリアは中立 `LockClosedIcon`（鎖未使用 / 「これから」「たのしみだね」中立 copy）.
+- **WCAG 2.1 AA 確認**: 全エリアノード `tabIndex=0 / aria-label / focus-visible:ring-2`. ボス戦モーダル `role=dialog / aria-modal=true`. `prefers-reduced-motion: reduce` 全演出 fallback.
+- **cost 検証 (DEC-081 monthly-budget-alert 整合)**: TTS pre-generate 1 回 = 平均 30 文字 × 10 種 = 300 文字 → tts-1 単価 $0.015/1K 文字 → 約 $0.0045 ≒ ¥0.7（≤ ¥10 限度内 / 月次運用 cost 増分 ¥0 / R2 cache hit 常態化 / pre-generate は手動 1 回想定）.
+- **3 atomic 通算サマリ (Plan A → B → C)**:
+  - **vitest**: baseline 801 → Plan A 902 → Plan B 930 → Plan C **948**（+147 件累積 / regression 0）.
+  - **next build**: baseline 25 page → Plan A 25 → Plan B 25 → Plan C **26**（+1 / `/adventure-map`）.
+  - **GET endpoint**: baseline 11 → Plan A 12 (DEC-081 既存 /sentry-test) → Plan B 12 → Plan C **13**（+1 / `/api/study/adventure-map`）.
+  - **page route**: baseline 25 → Plan A 25 → Plan B 25 → Plan C **26**.
+  - **mutation**: 9 不変（3 atomic 全件 +0）/ **cron**: 5 不変.
+  - **依存追加**: Plan A `framer-motion` + Plan B `howler` + `@types/howler` + Plan C **0**（既存 OpenAI / R2 SDK 流用）.
+  - **バンドル増分累計**: Plan A +30〜40 + Plan B +37 + Plan C +4〜8 = **+71〜85 KB gzip**（β PWA としては許容範囲 / Lighthouse Performance 80+ 維持想定）.
+  - **罰則ゼロ累計**: 赤色 0 / 罰語 0 / 絵文字 0 / sad/crying/angry 0 / 鎖 0 / バツ印 0（全 atomic 厳守）.
+- **既知の制約**: (1) ボス戦モーダルは standalone 実装で wire 未実施（学習者向け模試 UI 未存在のため）/ 将来 `/study/mock-exam-result` 等新設時に import 想定（page +0 維持）. (2) TTS pre-generate は helper API のみ / batch script `scripts/generate-kotodama-voices.ts` 系自動化は DEC-090 候補. (3) 冒険マップ進捗は SSR 集計 / 学習中即時反映は次回ナビゲーション / Phase 3 で SWR 化検討.
+
+---
+
 ## DEC-088: UI/UX 楽しさ強化 Plan B atomic（キャラ表情差分 + サウンド + 学習履歴ヒートマップ + Onboarding ストーリー / 2.5 人日 / page +0 / mutation +0 / GET +0 / 新規 ~12 ファイル + 改修 ~6 ファイル）GO 判定（2026-05-06 / DEC-087 Plan A 完遂直後 / オーナー Plan A→B→C 順次 GO 継承）
 
 - **状況**: 2026-05-06 DEC-087 Plan A 完遂着地（commit `efe84d9` / HANEI repo push 完了 / Vercel auto redeploy 進行中）直後。オーナーは事前 directive「Plan A GO。そのあと planB、planC に進んでいきましょう」で **Plan B 即時着手承認済**（1-2 週間運用フィードバック待機なし / 連続 atomic 体制）。Plan A で framer-motion + Mochiy Pop One + tokens 拡張 + kotodama-tori 主役化 = 楽しさ強化の **下層基盤** 完成。Plan B = その上に **キャラ表情豊富化 + 音 + 履歴可視化 + Onboarding 物語** で β 子使用継続中の visible improvement 第 2 弾を投入。

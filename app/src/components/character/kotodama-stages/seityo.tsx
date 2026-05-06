@@ -139,6 +139,64 @@ export function KotodamaSeityoSvg({
         </g>
       )}
 
+      {/* DEC-089 Plan C 項目 3: happy 時 目もとキラキラ + 胸元の Gold アクセント */}
+      {expression === "happy" && (
+        <g data-part="seityo-happy-sparkles" aria-hidden="true">
+          <path
+            d="M 96 90 L 98 86 L 100 90 L 96 90 Z M 98 86 L 98 82"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.85"
+          />
+          <path
+            d="M 144 90 L 146 86 L 148 90 L 144 90 Z M 146 86 L 146 82"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.85"
+          />
+        </g>
+      )}
+
+      {/* DEC-089 Plan C 項目 3: 胸元の上品な Gold ペンダント風アクセサリ (常時表示) */}
+      <g data-part="seityo-pendant" aria-hidden="true">
+        <circle
+          cx="120"
+          cy="124"
+          r="3"
+          fill={KOTODAMA_COLORS.gold}
+          opacity="0.85"
+        />
+        <circle
+          cx="120"
+          cy="124"
+          r="1.4"
+          fill={KOTODAMA_COLORS.white}
+          opacity="0.9"
+        />
+      </g>
+
+      {/* DEC-089 Plan C 項目 3: 翼下の追加流線飾り (左右 / 成鳥らしい優美) */}
+      <g data-part="seityo-wing-flourish" aria-hidden="true">
+        <path
+          d="M 30 152 Q 24 162 32 168"
+          stroke={KOTODAMA_COLORS.shadow}
+          strokeWidth="1.6"
+          fill="none"
+          opacity="0.55"
+        />
+        <path
+          d="M 210 152 Q 216 162 208 168"
+          stroke={KOTODAMA_COLORS.shadow}
+          strokeWidth="1.6"
+          fill="none"
+          opacity="0.55"
+        />
+      </g>
+
       {/* 頭頂の冠羽 (5 枚 / 風格) */}
       <path d="M 100 70 L 106 50 L 112 70 Z" fill={KOTODAMA_COLORS.primary} />
       <path d="M 110 66 L 116 44 L 122 66 Z" fill={KOTODAMA_COLORS.shadow} />

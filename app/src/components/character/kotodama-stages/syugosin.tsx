@@ -157,6 +157,36 @@ export function KotodamaSyugosinSvg({
         </g>
       )}
 
+      {/* DEC-089 Plan C 項目 3: happy 時 目もとキラキラ + 後光増幅 */}
+      {expression === "happy" && (
+        <g data-part="syugosin-happy-sparkles" aria-hidden="true">
+          <path
+            d="M 96 84 L 98 80 L 100 84 L 96 84 Z M 98 80 L 98 76"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.9"
+          />
+          <path
+            d="M 144 84 L 146 80 L 148 84 L 144 84 Z M 146 80 L 146 76"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.9"
+          />
+        </g>
+      )}
+
+      {/* DEC-089 Plan C 項目 3: 桜の花びら追加散布 (4 → 8 枚 / 神々しさ増強) */}
+      <g data-part="syugosin-extra-petals" aria-hidden="true" opacity="0.85">
+        <circle cx="60" cy="50" r="4" fill={KOTODAMA_COLORS.sakura} />
+        <circle cx="180" cy="50" r="4" fill={KOTODAMA_COLORS.sakura} />
+        <circle cx="60" cy="216" r="4" fill={KOTODAMA_COLORS.sakura} />
+        <circle cx="180" cy="216" r="4" fill={KOTODAMA_COLORS.sakura} />
+      </g>
+
       {/* 守護神の冠 (5 枚 / すべて gold + 中央桜) */}
       <path d="M 100 66 L 106 46 L 112 66 Z" fill={KOTODAMA_COLORS.gold} />
       <path d="M 110 60 L 116 36 L 122 60 Z" fill={KOTODAMA_COLORS.gold} />

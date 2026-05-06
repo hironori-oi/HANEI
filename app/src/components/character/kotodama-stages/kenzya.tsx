@@ -115,6 +115,43 @@ export function KotodamaKenzyaSvg({
         </g>
       )}
 
+      {/* DEC-089 Plan C 項目 3: happy 時 目もとキラキラ + 巻物上の星 */}
+      {expression === "happy" && (
+        <g data-part="kenzya-happy-sparkles" aria-hidden="true">
+          <path
+            d="M 96 84 L 98 80 L 100 84 L 96 84 Z M 98 80 L 98 76"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.85"
+          />
+          <path
+            d="M 144 84 L 146 80 L 148 84 L 144 84 Z M 146 80 L 146 76"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.85"
+          />
+          <path
+            d="M 174 152 L 176 148 L 178 152 L 174 152 Z M 176 148 L 176 144"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.8"
+          />
+        </g>
+      )}
+
+      {/* DEC-089 Plan C 項目 3: 賢者の眼鏡風アクセサリ (常時 / 知性) */}
+      <g data-part="kenzya-glasses" aria-hidden="true">
+        <circle cx="106" cy="100" r="9" fill="none" stroke={KOTODAMA_COLORS.accent} strokeWidth="1.2" opacity="0.55" />
+        <circle cx="134" cy="100" r="9" fill="none" stroke={KOTODAMA_COLORS.accent} strokeWidth="1.2" opacity="0.55" />
+        <line x1="115" y1="100" x2="125" y2="100" stroke={KOTODAMA_COLORS.accent} strokeWidth="1.2" opacity="0.55" />
+      </g>
+
       {/* 賢者の冠 (5 枚 / 中央に gold) */}
       <path d="M 100 68 L 106 48 L 112 68 Z" fill={KOTODAMA_COLORS.primary} />
       <path d="M 110 64 L 116 42 L 122 64 Z" fill={KOTODAMA_COLORS.shadow} />

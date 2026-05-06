@@ -120,6 +120,42 @@ export function KotodamaHinaSvg({
       <circle cx="98" cy="124" r="3.5" fill={KOTODAMA_COLORS.sakura} opacity="0.7" />
       <circle cx="142" cy="124" r="3.5" fill={KOTODAMA_COLORS.sakura} opacity="0.7" />
 
+      {/* DEC-089 Plan C 項目 3: happy 時に目もとキラキラ追加 (罰則ゼロ / sparkle のみ) */}
+      {expression === "happy" && (
+        <g data-part="hina-happy-sparkles" aria-hidden="true">
+          <path
+            d="M 96 104 L 98 100 L 100 104 L 96 104 Z M 98 100 L 98 96"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.85"
+          />
+          <path
+            d="M 144 104 L 146 100 L 148 104 L 144 104 Z M 146 100 L 146 96"
+            stroke={KOTODAMA_COLORS.gold}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill={KOTODAMA_COLORS.gold}
+            opacity="0.85"
+          />
+        </g>
+      )}
+
+      {/* DEC-089 Plan C 項目 3: 体側面の幼羽飾り (左右 2 つ・うす Amber) */}
+      <g data-part="hina-side-feathers" aria-hidden="true" opacity="0.85">
+        <path
+          d="M 76 142 Q 70 150 74 158 Q 80 156 82 150 Z"
+          fill={KOTODAMA_COLORS.shadow}
+          opacity="0.55"
+        />
+        <path
+          d="M 164 142 Q 170 150 166 158 Q 160 156 158 150 Z"
+          fill={KOTODAMA_COLORS.shadow}
+          opacity="0.55"
+        />
+      </g>
+
       {/* ぴよぴよ羽 (頭頂 3 本) */}
       <line
         x1="120"
