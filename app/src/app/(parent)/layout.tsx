@@ -32,7 +32,7 @@ export default async function ParentLayout({
   const activeLearnerId = learners[0]?.id ?? "";
 
   return (
-    <div className="min-h-screen">
+    <div className="hanei-bg-gradient min-h-screen">
       <SiteHeader />
       {learners.length > 0 ? (
         <div className="border-b bg-card/50">

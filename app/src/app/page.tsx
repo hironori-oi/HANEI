@@ -38,7 +38,7 @@ export default async function HomePage() {
       : null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-12 px-6 py-16">
+    <main className="hanei-bg-gradient hanei-bg-gradient--sakura mx-auto flex min-h-screen max-w-5xl flex-col gap-12 px-6 py-16">
       {/* Hero */}
       <section className="text-center">
         <p className="mb-3 text-sm font-medium uppercase tracking-widest text-primary">

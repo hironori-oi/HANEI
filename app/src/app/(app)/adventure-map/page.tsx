@@ -138,7 +138,7 @@ export default async function AdventureMapPage({ searchParams }: PageProps) {
 
       {/* サマリ カード */}
       <section className="mb-8 grid grid-cols-3 gap-3">
-        <Card data-testid="adventure-map-cleared-card">
+        <Card data-testid="adventure-map-cleared-card" data-card-decoration="true">
           <CardHeader>
             <CheckCircleIcon
               className="mb-1 h-6 w-6 text-success"
@@ -153,7 +153,7 @@ export default async function AdventureMapPage({ searchParams }: PageProps) {
             </p>
           </CardContent>
         </Card>
-        <Card data-testid="adventure-map-in-progress-card">
+        <Card data-testid="adventure-map-in-progress-card" data-card-decoration="true">
           <CardHeader>
             <SparklesIcon
               className="mb-1 h-6 w-6 text-primary"
@@ -168,7 +168,7 @@ export default async function AdventureMapPage({ searchParams }: PageProps) {
             </p>
           </CardContent>
         </Card>
-        <Card data-testid="adventure-map-not-started-card">
+        <Card data-testid="adventure-map-not-started-card" data-card-decoration="true">
           <CardHeader>
             <LockClosedIcon
               className="mb-1 h-6 w-6 text-muted-foreground"

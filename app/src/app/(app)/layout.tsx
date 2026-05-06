@@ -34,7 +34,7 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="hanei-bg-gradient min-h-screen">
       <SiteHeader />
       {badge ? (
         <div

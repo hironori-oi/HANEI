@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  HANEI / DEC-091 楽しさ強化第 4 弾 / 項目 A: 背景 + カード装飾
+  Subtle seamless tile (sakura petals) for background pattern overlay.
+  - viewBox 200x200 / tileable
+  - 罰則ゼロ哲学 (DEC-024) 厳守: 鎖 / バツ印 / 涙 / 怒り 0
+  - Pastel pink + lavender hint (Plan A token と調和)
+  - WCAG: aria-hidden="true" 前提 (decoration only)
+  - bundle: ~1-2 KB
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" aria-hidden="true">
+  <defs>
+    <radialGradient id="petal-grad" cx="0.5" cy="0.4" r="0.6">
+      <stop offset="0%" stop-color="#ffd1e0" stop-opacity="0.9"/>
+      <stop offset="60%" stop-color="#f4b8d2" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#d9a4cc" stop-opacity="0.45"/>
+    </radialGradient>
+    <g id="petal">
+      <!-- 5 枚花弁 / 中央に小さなしべ -->
+      <g transform="translate(0,0)">
+        <ellipse cx="0" cy="-7" rx="4" ry="7" fill="url(#petal-grad)"/>
+        <ellipse cx="6.7" cy="-2.2" rx="4" ry="7" fill="url(#petal-grad)" transform="rotate(72 6.7 -2.2)"/>
+        <ellipse cx="4.1" cy="5.7" rx="4" ry="7" fill="url(#petal-grad)" transform="rotate(144 4.1 5.7)"/>
+        <ellipse cx="-4.1" cy="5.7" rx="4" ry="7" fill="url(#petal-grad)" transform="rotate(216 -4.1 5.7)"/>
+        <ellipse cx="-6.7" cy="-2.2" rx="4" ry="7" fill="url(#petal-grad)" transform="rotate(288 -6.7 -2.2)"/>
+        <circle cx="0" cy="0" r="1.4" fill="#f2a93a" opacity="0.55"/>
+      </g>
+    </g>
+  </defs>
+  <!-- 6 個を擬似ランダム配置 / シームレスエッジを考慮 (端は鏡像配置を避けたシフト) -->
+  <use href="#petal" transform="translate(28,34) scale(1.0) rotate(12)"/>
+  <use href="#petal" transform="translate(150,18) scale(0.85) rotate(-22)"/>
+  <use href="#petal" transform="translate(82,72) scale(1.1) rotate(38)"/>
+  <use href="#petal" transform="translate(170,118) scale(0.95) rotate(8)"/>
+  <use href="#petal" transform="translate(48,140) scale(0.9) rotate(-34)"/>
+  <use href="#petal" transform="translate(120,164) scale(1.05) rotate(56)"/>
+  <use href="#petal" transform="translate(192,82) scale(0.7) rotate(28)"/>
+  <use href="#petal" transform="translate(8,98) scale(0.7) rotate(-16)"/>
+</svg>

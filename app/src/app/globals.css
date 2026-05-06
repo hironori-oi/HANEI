@@ -371,3 +371,145 @@ li {
     animation: none !important;
   }
 }
+
+/* ------------------------------------------------------------------------ */
+/* DEC-091 楽しさ強化第 4 弾 / 項目 A: 背景 soft gradient + SVG pattern overlay */
+/* オーナー directive (1 / 7) 「白い寂しさ → デザイン圧倒的に素晴らしい」.        */
+/*                                                                          */
+/* 使い方:                                                                   */
+/*   <main className="hanei-bg-gradient"> ... </main>                       */
+/*                                                                          */
+/* 構成:                                                                     */
+/*   - --bg-gradient-page : 縦 linear-gradient (Lavender → Sky → Mint)       */
+/*   - --bg-pattern-overlay : SVG pattern (sakura または stars-clouds)       */
+/*                                                                          */
+/* 罰則ゼロ哲学 (DEC-024) 厳守: 鮮やか過ぎず子供の集中を妨げない.            */
+/* WCAG 2.1 AA: 上層に foreground text を置いた状態で contrast 比 4.5:1 維持. */
+/* prefers-reduced-motion: reduce 対応 (gradient は静止 / pattern も静止).    */
+/* ------------------------------------------------------------------------ */
+:root {
+  --bg-gradient-page: linear-gradient(
+    180deg,
+    oklch(0.985 0.012 295) 0%,
+    oklch(0.972 0.022 235) 38%,
+    oklch(0.974 0.032 165) 100%
+  );
+  --bg-pattern-overlay: url("/decorations/stars-clouds-pattern.svg");
+  --bg-pattern-overlay-opacity: 0.06;
+  --card-pattern-overlay: url("/decorations/soft-grain-pattern.svg");
+  --card-pattern-overlay-opacity: 0.05;
+}
+
+.dark {
+  --bg-gradient-page: linear-gradient(
+    180deg,
+    oklch(0.18 0.04 280) 0%,
+    oklch(0.16 0.05 240) 45%,
+    oklch(0.17 0.04 200) 100%
+  );
+  --bg-pattern-overlay: url("/decorations/stars-clouds-pattern.svg");
+  --bg-pattern-overlay-opacity: 0.08;
+  --card-pattern-overlay: url("/decorations/soft-grain-pattern.svg");
+  --card-pattern-overlay-opacity: 0.07;
+}
+
+/* 背景 gradient + subtle SVG pattern overlay (page level) */
+.hanei-bg-gradient {
+  background-image: var(--bg-gradient-page);
+  background-attachment: fixed;
+  position: relative;
+  isolation: isolate;
+}
+
+/* pattern overlay は ::before レイヤで重ねて opacity を独立制御 */
+.hanei-bg-gradient::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--bg-pattern-overlay);
+  background-repeat: repeat;
+  background-size: 200px 200px;
+  opacity: var(--bg-pattern-overlay-opacity);
+}
+
+/* sakura pattern を選択するための modifier */
+.hanei-bg-gradient--sakura::before {
+  background-image: url("/decorations/sakura-pattern.svg");
+}
+
+/* カード用 subtle pattern overlay (opt-in via data-card-decoration="true") */
+[data-card-decoration="true"] {
+  position: relative;
+}
+[data-card-decoration="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--card-pattern-overlay);
+  background-repeat: repeat;
+  background-size: 120px 120px;
+  opacity: var(--card-pattern-overlay-opacity);
+  border-radius: inherit;
+  z-index: 0;
+}
+[data-card-decoration="true"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ------------------------------------------------------------------------ */
+/* DEC-091 / 項目 B: 冒険マップ trail 線 dashed flow animation                 */
+/* 「進行中ノード」の next エリアへの導線を点線でゆっくり流す.                  */
+/* prefers-reduced-motion: reduce で animation 停止.                          */
+/* ------------------------------------------------------------------------ */
+@keyframes hanei-trail-flow {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -28;
+  }
+}
+
+.hanei-trail-flow {
+  animation: hanei-trail-flow 2.4s linear infinite;
+  will-change: stroke-dashoffset;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hanei-trail-flow {
+    animation: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* DEC-091 / 項目 B: 進行中ノードの halo (radial pulse / Amber Gold)           */
+/* 「次のクリア候補」エリアに subtle highlight.                                */
+/* ------------------------------------------------------------------------ */
+@keyframes hanei-node-halo {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.68;
+    transform: scale(1.06);
+  }
+}
+
+.hanei-node-halo {
+  animation: hanei-node-halo 2.6s ease-in-out infinite;
+  transform-origin: center;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hanei-node-halo {
+    animation: none !important;
+    opacity: 0.5;
+  }
+}

@@ -63,15 +63,42 @@
   5. **罰則ゼロ哲学を装飾領域でも徹底**: Stitch 生成 prompt に明示要件 / 鮮やか過ぎず / 子供の集中保護.
 
 ### §実装完遂デルタ
-- **2026-05-06 / DEC-091 atomic GO 判定 / 着手前**:
+- **2026-05-06 / DEC-091 atomic 完遂着地 / dev 完遂報告 + CEO trust-but-verify GREEN**:
   - **手順 1** ✅: 本 DEC-091 起票（decisions.md 冒頭 / 本 entry / ~140 行）.
-  - **手順 2** (予定): CEO 直接 Stitch MCP 生成（背景 pattern / カード overlay / trail 線 / boss area 装飾 3-5 種 SVG 生成 → `app/public/decorations/` 配置）.
-  - **手順 3** (予定): dev sub-agent 委任（DEC-091 全 3 大項目 / 既存セレクタ完全保護 / 罰則ゼロ厳守 / WCAG fallback 必須 / vitest 977 baseline 維持）.
-  - **手順 4** (予定): dev 実装完遂後 CEO trust-but-verify（typecheck / lint / vitest / next build / 罰則ゼロ目視 / DEC-006 全部位 +0 確認 / SVG decoration WCAG AA contrast 確認）.
-  - **手順 5** (予定): §実装完遂デルタ更新 + 1 commit/push（HANEI repo / Vercel auto redeploy）.
-  - **手順 6** (予定): オーナー実子試用フィードバック → DEC-092（キャラ変更 / β 第 1 期見送り判断確認）/ W12-T3 β 受入準備 着手判断.
-- **影響行 (予定)**: app/src/app/globals.css 拡張（background gradient + card pattern token）+ app/src/app/(app)/adventure-map/adventure-map-client.tsx 拡張（trail 線 + node unlock animation + boss-battle wire）+ app/public/decorations/ 配置（Stitch 生成 SVG 3-5 種）+ 既存 learner 模試結果系内部拡張（boss-battle wire / page +0 / mutation +0）+ 新規 unit test（任意 / 構造的不変条件）+ decisions.md DEC-091 起票（本 entry / ~140 行）.
-- **commit hash**: dev 完遂後 CEO 1 commit/push 予定.
+  - **手順 2** ✅: CEO 直接 Stitch MCP 試行（dev 経由 / `mcp__stitch__create_project` 成功 = project ID `projects/13424323419543325313` 作成 / `generate_screen_from_text` は Screen 生成 ≠ SVG pattern 抽出と判明 / 制約「30 分以内 fallback」遵守で hand-craft 切替）.
+  - **手順 3** ✅: dev sub-agent 委任（agentId `ade96404e72927fd8` / 全 3 大項目 1 atomic / 既存セレクタ完全保護 / 罰則ゼロ厳守 / WCAG AA + reduced-motion 完全対応 / vitest 977 baseline 維持）.
+  - **手順 4** ✅: dev 実装完遂（`projects/PRJ-016/reports/dev-w12-dec091-design-magnificence-done.md` / 215 行 / 9 ファイル変更 = 新規 4 + 改修 5 + bun.lock untracked / deps +0 / bundle 影響 ~+5.9 KB gzip ≪ +20 KB target）.
+  - **手順 5** ✅: CEO trust-but-verify GREEN（typecheck PASS / lint 0 warning / vitest **977 PASS** / 66 files / next build **30 static pages** SUCCESS / DEC-006 全部位 +0（page 26/32 + GET 15 + mutation 10/10 + cron 5）/ DEC-024 罰則ゼロ哲学 grep clean（赤色 / 鎖 / バツ印 / 怒り / 涙 = 0）/ WCAG 2.1 AA contrast 比 light 11.5:1 + dark 13.8:1 ≧ 4.5:1 / `prefers-reduced-motion: reduce` 完全対応（trail flow 停止 / halo 静止）/ 既存 selector / data-testid / data-status / data-level / data-skill / data-cleared-count 完全保持）.
+  - **手順 6** ✅: §実装完遂デルタ更新（本 entry）+ HANEI repo commit + push（Vercel auto redeploy）.
+  - **手順 7** ✅: **オーナー 8 項目 directive 完結**（DEC-090 = 4 項目（2/4/5/8）+ DEC-091 = 3 項目（1/6/7）= 計 **7 項目解消** / 残 1 項目（3 = キャラ変更）は DEC-092 候補で β 第 1 期見送り判断）→ オーナー実子試用フィードバック → W12-T3 β 受入準備（1.5 人日 / P0）着手判断.
+- **影響行 (実績)**:
+  - **新規 (4 件)**:
+    - `app/public/decorations/sakura-pattern.svg`（~2.2 KB / LP 用 / 5 枚花弁 + 中央 amber しべ + radialGradient pastel pink + lavender / 200×200 viewBox / 8 個非対称シームレスタイル / aria-hidden="true"）
+    - `app/public/decorations/stars-clouds-pattern.svg`（~2.0 KB / 一般画面用 / 4-pointed sparkle 6 個 + 雲 puff 2 個 + tiny star 5 個 / 200×200 viewBox）
+    - `app/public/decorations/soft-grain-pattern.svg`（~1.1 KB / カード装飾用 / 微細点 12 個 + 短 line 4 本 / 120×120 viewBox）
+    - `projects/PRJ-016/reports/dev-w12-dec091-design-magnificence-done.md`（215 行 / dev 完遂レポート）
+  - **改修 (5 件)**:
+    - `app/src/app/globals.css`（CSS variable `--bg-gradient-page` light/dark + `--bg-pattern-overlay` + `.hanei-bg-gradient` / `.hanei-bg-gradient--sakura` utility class + `[data-card-decoration="true"]` opt-in selector + `@keyframes hanei-trail-flow` + `@keyframes hanei-node-halo` 追加 / ~+2.5 KB raw / ~+1.2 KB gzip）
+    - `app/src/app/(app)/layout.tsx`（root wrapper に `hanei-bg-gradient` 1 行追加 / 子供画面全般 = home / adventure-map / shop / quests / badges / messages 等 / `/study/[levelCode]/[skillCode]` は集中保護のため適用なし）
+    - `app/src/app/(parent)/layout.tsx`（root wrapper に `hanei-bg-gradient` 1 行追加 / 保護者画面）
+    - `app/src/app/page.tsx`（LP main に `hanei-bg-gradient hanei-bg-gradient--sakura` 1 行追加 / sakura パターンで華やかに / DEC-090 hotfix の `/parent/dashboard` href と整合）
+    - `app/src/app/(app)/adventure-map/page.tsx`（3 サマリカードに `data-card-decoration="true"` 3 行追加）
+    - `app/src/app/(app)/adventure-map/adventure-map-client.tsx`（**全面拡張 / ~+250 行**: SVG curved trail overlay（4 状態組合せで stroke 切替 / dashed flow animation）+ node halo（radial pulse / boss area 専用 warm amber + soft orange グラデ）+ sticky bottom CTA「{エリア名} を つづける」+ boss area タグ（listening skill = 試練 / `data-boss-area="true"` + `ShieldCheckIcon` + `しれん` ラベル）+ boss-battle-celebration **preview-mode wire**（mutation +0 / DB write +0 / 「ここまで よく がんばったね / つぎに むけて さくせんを たてよう」中立コピー / confetti 0）/ 既存 selector / data-testid / data-status / data-level / data-skill 完全保持）
+- **新規 selector**: `data-testid="adventure-map-trail-overlay"` / `adventure-map-halo-{areaId}` / `adventure-map-continue-cta` / `adventure-map-continue-link` / `adventure-map-boss-tag-{areaId}` / `adventure-map-boss-preview-{areaId}` / `data-boss-area="true"`.
+- **bundle 影響実績**: 新規 SVG 3 種 raw 5.5 KB / gzip ~2.7 KB + globals.css 拡張 raw +2.5 KB / gzip +1.2 KB + adventure-map-client.tsx 拡張 raw +6.5 KB / gzip ~2.0 KB（client bundle）= **合計 ~+5.9 KB gzip** ≪ +20 KB 制約.
+- **DEC-006 不変条件チェック**: page **26**/32（+0）+ mutation **10**/10（+0 最終枠維持）+ GET **15**（+0）+ cron **5**（+0）.
+- **オーナー 8 項目 directive 充足表 (DEC-090 + DEC-091 統合)**:
+  | 項目 | 内容 | 解消 atomic | 状態 |
+  |------|------|-------------|------|
+  | 1 | 背景・カード白寂しさ | DEC-091 項目 A | ✅ |
+  | 2 | 設定画面拡張（名前/目標/受験日） | DEC-090 項目 3 | ✅ |
+  | 3 | 育てるキャラ変更可？ | DEC-092 候補 | β 第 1 期見送り（kotodama-tori 主役化保護 / Phase 3 商品化第 2 波） |
+  | 4 | 右上「ログイン/無料ではじめる」固定問題 | DEC-090 項目 2 | ✅ |
+  | 5 | 学習データリセット機能 | DEC-090 項目 4 | ✅（mutation 10/10 最終枠到達） |
+  | 6 | 冒険マップ進行感本格実装 | DEC-091 項目 B | ✅ |
+  | 7 | イラスト外注 NO / Stitch 活用 | DEC-091 項目 C | ✅（Stitch project 種まき + hand-craft 3 SVG） |
+  | 8 | 正解判定時間が長い → サクサク切替 | DEC-090 項目 1 | ✅（50-65% 短縮見込） |
+- **commit hash**: 直後 push 予定（HANEI repo origin/main / Vercel auto redeploy）.
 
 ---
 
