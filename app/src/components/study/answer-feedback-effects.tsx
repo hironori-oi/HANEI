@@ -1,25 +1,26 @@
 "use client";
 
 /**
- * HANEI - DEC-087 Plan A: Study 画面の正解 / 不正解 演出 (項目 5 / 6)
+ * HANEI - DEC-087 Plan A + DEC-088 Plan B: Study 画面の正解 / 不正解 演出
  *
  * 1. 正解時:
- *    - kotodama-tori SVG を画面右下から spring bounce 登場
+ *    - 学習者の現在の進化段階に応じた kotodama-tori SVG を画面右下から spring bounce 登場
+ *    - 表情は "happy" (にこにこ) に切替
  *    - 拍手 (rotate 微小揺れ) + 連続正解 3+ で多色 confetti を発射
  *    - 罰則ゼロ哲学: 「できた」喜びのみ / 罰語ゼロ
  *
  * 2. 不正解時:
  *    - キャラが「うーん」首を傾ける (rotate -8deg / 8deg / 0 / 1 cycle)
+ *    - 表情は "thinking" (考え中) に切替
  *    - **赤色未使用** (Amber Gold soft / 中立)
  *    - 「もう一度考えてみよう」の文言は呼出側で表示 / 本コンポーネントは演出のみ
  *
- * 親コンポーネント (StudyClient) は <AnswerFeedbackEffects key={...} variant="correct"|"wrong" comboCount=N />
+ * 親コンポーネント (StudyClient) は <AnswerFeedbackEffects key={...} variant="correct"|"wrong" comboCount=N stage="hina" />
  * を feedback 表示の都度マウントし、unmount で次回はクリーン状態にする (key 駆動)。
  *
  * - prefers-reduced-motion: reduce 時はキャラ表示なし (no entrance)
  * - confetti は既存 lib/study/confetti を流用 (依存追加なし)
- * - SVG は既存 KotodamaHinaSvg ... のうち最小 (hina) を流用 (Plan A スコープ)
- *   → 進化段階別キャラ表情差分は Plan B (DEC-088) で導入
+ * - SVG は学習者の進化段階 (KotodamaStage) に応じて 5 種から自動選択 (Plan B / DEC-088 §1)
  */
 
 import * as React from "react";
@@ -27,11 +28,25 @@ import { LazyMotion, domAnimation, m, useReducedMotion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { isMotionReduced } from "@/lib/study/confetti";
 import { KotodamaHinaSvg } from "@/components/character/kotodama-stages/hina";
+import { KotodamaWakatoriSvg } from "@/components/character/kotodama-stages/wakatori";
+import { KotodamaSeityoSvg } from "@/components/character/kotodama-stages/seityo";
+import { KotodamaKenzyaSvg } from "@/components/character/kotodama-stages/kenzya";
+import { KotodamaSyugosinSvg } from "@/components/character/kotodama-stages/syugosin";
+import type { KotodamaStage } from "@/lib/study/kotodama-tori-stage";
+import type {
+  KotodamaExpression,
+  KotodamaStageSvgProps,
+} from "@/components/character/kotodama-stages/colors";
 
 interface Props {
   variant: "correct" | "wrong";
   /** 連続正解数 (3+ で多色 confetti / Plan A の §5 連続 3+ 多色 confetti) */
   comboCount?: number;
+  /**
+   * 現在の進化段階 (Plan B / DEC-088 §1).
+   * 未指定時は "hina" (後方互換).
+   */
+  stage?: KotodamaStage;
 }
 
 /**
@@ -47,6 +62,17 @@ const PLAN_A_CONFETTI_COLORS = [
   "#FFFFFF",
 ];
 
+const STAGE_COMPONENTS: Record<
+  KotodamaStage,
+  (props: KotodamaStageSvgProps) => React.JSX.Element
+> = {
+  hina: KotodamaHinaSvg,
+  wakatori: KotodamaWakatoriSvg,
+  seityo: KotodamaSeityoSvg,
+  kenzya: KotodamaKenzyaSvg,
+  syugosin: KotodamaSyugosinSvg,
+};
+
 export function AnswerFeedbackEffects(props: Props) {
   return (
     <LazyMotion features={domAnimation} strict>
@@ -55,7 +81,11 @@ export function AnswerFeedbackEffects(props: Props) {
   );
 }
 
-function AnswerFeedbackEffectsInner({ variant, comboCount = 0 }: Props) {
+function AnswerFeedbackEffectsInner({
+  variant,
+  comboCount = 0,
+  stage = "hina",
+}: Props) {
   const reduce = useReducedMotion();
 
   // 連続正解 3+ で多色 confetti を 1 度だけ発射
@@ -90,10 +120,16 @@ function AnswerFeedbackEffectsInner({ variant, comboCount = 0 }: Props) {
   // 設計: prefers-reduced-motion 環境では「演出キャラ」自体を出さない (静的 UI のみで通る)
   if (reduce) return null;
 
+  const Svg = STAGE_COMPONENTS[stage] ?? KotodamaHinaSvg;
+  const expression: KotodamaExpression =
+    variant === "correct" ? "happy" : "thinking";
+
   if (variant === "correct") {
     return (
       <m.div
         data-testid="answer-correct-effect"
+        data-stage={stage}
+        data-expression={expression}
         aria-hidden="true"
         className="pointer-events-none fixed bottom-4 right-4 z-40"
         initial={{ y: 80, opacity: 0, scale: 0.8 }}
@@ -106,9 +142,10 @@ function AnswerFeedbackEffectsInner({ variant, comboCount = 0 }: Props) {
           animate={{ rotate: [0, -6, 6, -3, 3, 0] }}
           transition={{ duration: 0.9, ease: "easeOut" }}
         >
-          <KotodamaHinaSvg
+          <Svg
             size={84}
             label="ことだまトリ せいかい おめでとう"
+            expression={expression}
           />
         </m.div>
       </m.div>
@@ -119,6 +156,8 @@ function AnswerFeedbackEffectsInner({ variant, comboCount = 0 }: Props) {
   return (
     <m.div
       data-testid="answer-wrong-effect"
+      data-stage={stage}
+      data-expression={expression}
       aria-hidden="true"
       className="pointer-events-none fixed bottom-4 right-4 z-40"
       initial={{ y: 60, opacity: 0 }}
@@ -129,9 +168,10 @@ function AnswerFeedbackEffectsInner({ variant, comboCount = 0 }: Props) {
         animate={{ rotate: [0, -8, 8, 0] }}
         transition={{ duration: 0.9, ease: "easeOut" }}
       >
-        <KotodamaHinaSvg
+        <Svg
           size={72}
           label="ことだまトリ いっしょに かんがえる"
+          expression={expression}
         />
       </m.div>
     </m.div>

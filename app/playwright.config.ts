@@ -85,6 +85,11 @@ export default defineConfig({
       ...(process.env.BETA_INVITE_REQUIRED === "true"
         ? { BETA_INVITE_REQUIRED: "true" }
         : {}),
+      // DEC-088 Plan B 項目 4: E2E 環境では onboarding ストーリー モーダルを抑止.
+      // OnboardingTrigger は NEXT_PUBLIC_E2E_DISABLE_ONBOARDING="true" の場合に
+      // 描画を完全スキップする (production build には影響しない / regression 0).
+      // build 時に inline 化される client-side env として明示する。
+      NEXT_PUBLIC_E2E_DISABLE_ONBOARDING: "true",
     },
   },
 });

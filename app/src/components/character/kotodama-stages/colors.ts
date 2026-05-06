@@ -35,6 +35,16 @@ export const KOTODAMA_COLORS = {
 
 export const KOTODAMA_VIEWBOX = "0 0 240 240" as const;
 
+/**
+ * 表情バリエーション (DEC-088 Plan B 項目 1).
+ *
+ * 罰則ゼロ哲学 (DEC-024): 「sad / crying / angry」は不採用。
+ * - idle: 通常 / デフォルト (中立的に微笑む)
+ * - happy: 正解時 / 進化時 / 喜び表現 (大きい笑顔 + 弧目)
+ * - thinking: 出題中 / 不正解時 (やわらかな考え中 / 「うーん」)
+ */
+export type KotodamaExpression = "idle" | "happy" | "thinking";
+
 export interface KotodamaStageSvgProps {
   /** 表示サイズ (px) */
   size?: number;
@@ -50,4 +60,11 @@ export interface KotodamaStageSvgProps {
   animate?: boolean;
   /** 0..1 の進捗 (次段階までの達成度) — 円弧 progress glow に反映 */
   progress?: number;
+  /**
+   * 表情 (DEC-088 Plan B 項目 1).
+   *
+   * default: "idle" (後方互換).
+   * 罰則ゼロ哲学により sad / crying / angry は採用しない.
+   */
+  expression?: KotodamaExpression;
 }

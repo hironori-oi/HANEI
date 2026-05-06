@@ -25,6 +25,7 @@ import {
   setAudioEnabled,
 } from "@/lib/study/audio-feedback";
 import { setConfettiEnabled } from "@/lib/study/confetti";
+import { setSoundEffectsEnabled } from "@/lib/audio/sound-effects";
 import { updateLearnerPreferences } from "@/lib/actions/learner-preferences";
 
 interface Props {
@@ -57,6 +58,8 @@ export function SoundConfettiToggle(props: Props) {
     const next = !soundEnabled;
     setSoundLocal(next);
     setAudioEnabled(next);
+    // DEC-088 Plan B 項目 2: Howler エンジンの mute も同期
+    setSoundEffectsEnabled(next);
     persist({ soundEnabled: next, confettiEnabled });
   };
 

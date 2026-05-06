@@ -20,6 +20,7 @@ import {
   mockExamResults,
   problems,
   problemExplanations,
+  studySessions,
 } from "@/lib/db/schema";
 import type { Db } from "@/lib/db/client";
 
@@ -571,6 +572,96 @@ export async function getMasteryCoverage(
     result.push({ skill: code, mastered, total });
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// 11. (DEC-088 Plan B 項目 3) 学習履歴ヒートマップ用 日次学習分数
+//
+// /home に「12 週 × 7 曜日 = 84 日」のヒートマップを表示するため、
+// 直近 N 日 (default 84) の `study_sessions.cumulative_seconds` を `session_date` ごとに
+// SUM して「日次学習分数」を返す。
+//
+// **GET endpoint は新設しない** (DEC-006 GET +0 維持) — 既存 /home server component の
+// Promise.all に新規 await を追加する形で取得する。
+//
+// 罰則ゼロ哲学 (DEC-024):
+//  - 値 0 (未学習日) も「失敗」「サボった」等のネガ語にせず、UI 側で薄い色のまま表示する.
+//  - 戻り値は単純な map (date -> minutes) で、ネガ判定ロジックを持たない純粋値.
+// ---------------------------------------------------------------------------
+
+/**
+ * { dateIso: 学習分数 } の連想 (sessionDate ベース / JST 6:00 境界).
+ * 例: { "2026-05-01": 12, "2026-05-02": 0, ... }
+ */
+export type DailyStudyMinutesMap = Readonly<Record<string, number>>;
+
+/**
+ * 直近 `days` 日 (今日含む) の sessionDate ごとの学習分数を返す.
+ *
+ * - 入力 days はクランプ (1..365) / default 84 (12 週 × 7 曜日)
+ * - 0 件の日は map に含めず、呼び出し側で 0 fallback する想定 (caller-builder pattern)
+ * - cumulativeSeconds は heartbeat により秒単位で進行 → 60 で割って分数 (floor) に丸める
+ */
+export async function getRecentDailyStudyMinutes(
+  db: Db,
+  learnerId: string,
+  days = 84,
+  now = new Date(),
+): Promise<DailyStudyMinutesMap> {
+  const clamped = Math.min(365, Math.max(1, Math.floor(days)));
+
+  // since: today の (clamped-1) 日前の 00:00 を起点 (含む)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const since = new Date(today.getTime() - (clamped - 1) * 24 * 60 * 60 * 1000);
+  // YYYY-MM-DD 文字列 (sessionDate と同フォーマット / JST 6:00 境界とは厳密一致しないが
+  // /home ヒートマップ表示用途では暦日単位で十分)
+  const sinceIso = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, "0")}-${String(since.getDate()).padStart(2, "0")}`;
+
+  // eslint-disable-next-line no-restricted-syntax -- 学習者本人スコープ済 (呼び出し前 requireLearnerOwner)
+  const rows = await db
+    .select({
+      date: studySessions.sessionDate,
+      totalSeconds: sql<number>`COALESCE(SUM(${studySessions.cumulativeSeconds}), 0)`,
+    })
+    .from(studySessions)
+    .where(
+      and(
+        eq(studySessions.learnerId, learnerId),
+        sql`${studySessions.sessionDate} >= ${sinceIso}`,
+      ),
+    )
+    .groupBy(studySessions.sessionDate);
+
+  const map: Record<string, number> = {};
+  for (const r of rows) {
+    const seconds = Number(r.totalSeconds ?? 0);
+    if (seconds <= 0) continue;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes > 0) {
+      map[r.date] = minutes;
+    }
+  }
+  return map;
+}
+
+/**
+ * 表示用に「最終日 (= 今日) を末尾に揃えた N 日連続の date 配列」を生成するヘルパ.
+ * /home の StudyHeatmap が `dateIso[] × minutes[]` 構造を欲しがるための小ユーティリティ.
+ */
+export function buildHeatmapDateGrid(
+  days: number,
+  now: Date = new Date(),
+): ReadonlyArray<string> {
+  const clamped = Math.min(365, Math.max(1, Math.floor(days)));
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const out: string[] = [];
+  for (let i = clamped - 1; i >= 0; i -= 1) {
+    const d = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+    out.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    );
+  }
+  return out;
 }
 
 // 未使用警告抑止 (gte / lte は将来集計に使用予定)

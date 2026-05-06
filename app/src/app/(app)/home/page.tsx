@@ -50,6 +50,8 @@ import { DailyGoalRing } from "@/components/home/daily-goal-ring";
 import { CharacterWithAccessories } from "@/components/character/accessories/character-with-accessories";
 import { HeroKotodamaTori } from "@/components/home/hero-kotodama-tori";
 import { StreakFlame } from "@/components/home/streak-flame";
+import { StudyHeatmap } from "@/components/home/study-heatmap";
+import { OnboardingTrigger } from "@/components/onboarding/onboarding-trigger";
 
 import {
   requireAuth,
@@ -61,6 +63,7 @@ import {
   getDailySkillCounts,
   getMasteryCoverage,
   getCurrentStreak,
+  getRecentDailyStudyMinutes,
 } from "@/lib/study/aggregations";
 import { getDailyProgress } from "@/lib/study/daily-goal";
 import { getKotodamaStageInput } from "@/lib/study/kotodama-stage-resolver";
@@ -279,6 +282,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     questSummary,
     studyTarget,
     todayStudySeconds,
+    heatmapMinutesByDate,
   ] = await Promise.all([
     getCurrentStreak(db, learner.id),
     getDailySkillCounts(db, learner.id),
@@ -318,6 +322,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     getTodayLearningSeconds(learner.id).catch((err) => {
       console.error("[home] getTodayLearningSeconds failed:", err);
       return 0;
+    }),
+    // DEC-088 Plan B 項目 3: 学習履歴ヒートマップ用 (12 週 × 7 曜日 = 84 日)
+    // - GET endpoint は新設しない (DEC-006 GET +0 維持) — 既存 /home server component に同梱
+    // - 失敗時は空 map (= 全日 0 分) で fallback / Heatmap は赤色未使用なので失敗が叱責にならない
+    getRecentDailyStudyMinutes(db, learner.id, 84).catch((err) => {
+      console.error("[home] getRecentDailyStudyMinutes failed:", err);
+      return {} as Record<string, number>;
     }),
   ]);
 
@@ -385,6 +396,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
+      {/* DEC-088 Plan B 項目 4: 初回 /home 訪問時の Onboarding ストーリーモーダル.
+          localStorage flag (DB 保存なし / mutation +0 維持) で 1 度だけ表示. */}
+      <OnboardingTrigger learnerNickname={learner.nickname} />
+
       {/* DEC-087 §4: Home Hero - kotodama-tori 主役化 + 吹き出し
           spring 登場 / クリックで bounce / prefers-reduced-motion 静止 fallback */}
       <section className="mb-6">
@@ -531,6 +546,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       {/* W8-T5: 今日のゴール プログレスリング */}
       <section className="mt-8">
         <DailyGoalRing progress={dailyGoalProgress} />
+      </section>
+
+      {/* DEC-088 Plan B 項目 3: 学習履歴ヒートマップ (12 週 × 7 曜日)
+          GitHub Contributions 風だが赤色未使用 (Mint Green 4 階調) / 罰則ゼロ哲学.
+          GET endpoint 新設なし (既存 /home server component に同梱). */}
+      <section className="mt-8">
+        <StudyHeatmap minutesByDate={heatmapMinutesByDate} days={84} />
       </section>
 
       {/* 今日の学習プラン */}

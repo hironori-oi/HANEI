@@ -14,6 +14,7 @@ export function KotodamaWakatoriSvg({
   label,
   animate = false,
   progress = 0,
+  expression = "idle",
 }: KotodamaStageSvgProps) {
   return (
     <svg
@@ -23,6 +24,7 @@ export function KotodamaWakatoriSvg({
       role="img"
       aria-label={label ?? "ことだまトリ・わかとり"}
       className={className}
+      data-expression={expression}
     >
       <title>{label ?? "ことだまトリ・わかとり"}</title>
 
@@ -96,14 +98,30 @@ export function KotodamaWakatoriSvg({
       <ellipse cx="120" cy="100" rx="36" ry="34" fill={KOTODAMA_COLORS.base} />
       <ellipse cx="108" cy="92" rx="14" ry="11" fill={KOTODAMA_COLORS.white} opacity="0.55" />
 
-      {/* 目 (凛々しい / 少し細目) */}
-      <ellipse cx="106" cy="100" rx="4" ry="5" fill={KOTODAMA_COLORS.black} />
-      <ellipse cx="134" cy="100" rx="4" ry="5" fill={KOTODAMA_COLORS.black} />
-      <circle cx="107" cy="98" r="1.4" fill={KOTODAMA_COLORS.white} />
-      <circle cx="135" cy="98" r="1.4" fill={KOTODAMA_COLORS.white} />
-
-      {/* くちばし (しっかり) */}
-      <path d="M 113 113 L 127 113 L 120 122 Z" fill={KOTODAMA_COLORS.accent} />
+      {/* 目 / くちばし (表情に応じて切替) */}
+      {expression === "happy" ? (
+        <g data-part="face-happy">
+          <path d="M 100 100 Q 106 94 112 100" stroke={KOTODAMA_COLORS.black} strokeWidth="2.4" strokeLinecap="round" fill="none" />
+          <path d="M 128 100 Q 134 94 140 100" stroke={KOTODAMA_COLORS.black} strokeWidth="2.4" strokeLinecap="round" fill="none" />
+          <path d="M 112 113 Q 120 124 128 113 Z" fill={KOTODAMA_COLORS.accent} />
+        </g>
+      ) : expression === "thinking" ? (
+        <g data-part="face-thinking">
+          <ellipse cx="106" cy="98" rx="4" ry="5" fill={KOTODAMA_COLORS.black} />
+          <ellipse cx="134" cy="98" rx="4" ry="5" fill={KOTODAMA_COLORS.black} />
+          <circle cx="107" cy="95" r="1.4" fill={KOTODAMA_COLORS.white} />
+          <circle cx="135" cy="95" r="1.4" fill={KOTODAMA_COLORS.white} />
+          <path d="M 114 117 L 126 117" stroke={KOTODAMA_COLORS.accent} strokeWidth="2.4" strokeLinecap="round" />
+        </g>
+      ) : (
+        <g data-part="face-idle">
+          <ellipse cx="106" cy="100" rx="4" ry="5" fill={KOTODAMA_COLORS.black} />
+          <ellipse cx="134" cy="100" rx="4" ry="5" fill={KOTODAMA_COLORS.black} />
+          <circle cx="107" cy="98" r="1.4" fill={KOTODAMA_COLORS.white} />
+          <circle cx="135" cy="98" r="1.4" fill={KOTODAMA_COLORS.white} />
+          <path d="M 113 113 L 127 113 L 120 122 Z" fill={KOTODAMA_COLORS.accent} />
+        </g>
+      )}
 
       {/* ほっぺ */}
       <circle cx="96" cy="108" r="3" fill={KOTODAMA_COLORS.sakura} opacity="0.6" />

@@ -14,6 +14,7 @@ export function KotodamaSyugosinSvg({
   label,
   animate = false,
   progress = 1,
+  expression = "idle",
 }: KotodamaStageSvgProps) {
   return (
     <svg
@@ -23,6 +24,7 @@ export function KotodamaSyugosinSvg({
       role="img"
       aria-label={label ?? "ことだまトリ・しゅごしん"}
       className={className}
+      data-expression={expression}
     >
       <title>{label ?? "ことだまトリ・しゅごしん"}</title>
 
@@ -130,14 +132,30 @@ export function KotodamaSyugosinSvg({
       <path d="M 96 86 Q 104 82 112 86" stroke={KOTODAMA_COLORS.accent} strokeWidth="2.4" fill="none" strokeLinecap="round" />
       <path d="M 128 86 Q 136 82 144 86" stroke={KOTODAMA_COLORS.accent} strokeWidth="2.4" fill="none" strokeLinecap="round" />
 
-      {/* 目 (神聖 / 縦長 + gold ハイライト) */}
-      <ellipse cx="106" cy="100" rx="4" ry="6" fill={KOTODAMA_COLORS.black} />
-      <ellipse cx="134" cy="100" rx="4" ry="6" fill={KOTODAMA_COLORS.black} />
-      <circle cx="107" cy="98" r="1.6" fill={KOTODAMA_COLORS.gold} />
-      <circle cx="135" cy="98" r="1.6" fill={KOTODAMA_COLORS.gold} />
-
-      {/* くちばし */}
-      <path d="M 113 113 L 127 113 L 120 124 Z" fill={KOTODAMA_COLORS.gold} />
+      {/* 目 / くちばし (表情に応じて切替 / 守護神は gold ハイライト維持) */}
+      {expression === "happy" ? (
+        <g data-part="face-happy">
+          <path d="M 100 100 Q 106 94 112 100" stroke={KOTODAMA_COLORS.black} strokeWidth="2.4" strokeLinecap="round" fill="none" />
+          <path d="M 128 100 Q 134 94 140 100" stroke={KOTODAMA_COLORS.black} strokeWidth="2.4" strokeLinecap="round" fill="none" />
+          <path d="M 112 113 Q 120 126 128 113 Z" fill={KOTODAMA_COLORS.gold} />
+        </g>
+      ) : expression === "thinking" ? (
+        <g data-part="face-thinking">
+          <ellipse cx="106" cy="98" rx="4" ry="6" fill={KOTODAMA_COLORS.black} />
+          <ellipse cx="134" cy="98" rx="4" ry="6" fill={KOTODAMA_COLORS.black} />
+          <circle cx="107" cy="95" r="1.6" fill={KOTODAMA_COLORS.gold} />
+          <circle cx="135" cy="95" r="1.6" fill={KOTODAMA_COLORS.gold} />
+          <path d="M 113 117 L 127 117" stroke={KOTODAMA_COLORS.gold} strokeWidth="2.4" strokeLinecap="round" />
+        </g>
+      ) : (
+        <g data-part="face-idle">
+          <ellipse cx="106" cy="100" rx="4" ry="6" fill={KOTODAMA_COLORS.black} />
+          <ellipse cx="134" cy="100" rx="4" ry="6" fill={KOTODAMA_COLORS.black} />
+          <circle cx="107" cy="98" r="1.6" fill={KOTODAMA_COLORS.gold} />
+          <circle cx="135" cy="98" r="1.6" fill={KOTODAMA_COLORS.gold} />
+          <path d="M 113 113 L 127 113 L 120 124 Z" fill={KOTODAMA_COLORS.gold} />
+        </g>
+      )}
 
       {/* 守護神の冠 (5 枚 / すべて gold + 中央桜) */}
       <path d="M 100 66 L 106 46 L 112 66 Z" fill={KOTODAMA_COLORS.gold} />

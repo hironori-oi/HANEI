@@ -30,6 +30,8 @@ import {
 } from "@/lib/actions/study-sessions";
 import { KotodamaTori, pickMood } from "@/components/study/kotodama-tori";
 import { AnswerFeedbackEffects } from "@/components/study/answer-feedback-effects";
+import type { KotodamaStage } from "@/lib/study/kotodama-tori-stage";
+import { playSoundEffect, setSoundEffectsEnabled } from "@/lib/audio/sound-effects";
 import { LessonCompleteModal } from "@/components/study/lesson-complete-modal";
 import { SessionCompleteModal } from "@/components/study/SessionCompleteModal";
 import { OverlearningModal } from "@/components/study/OverlearningModal";
@@ -126,6 +128,12 @@ export function StudyClient(props: {
    * - 設定されていない時は heartbeat / hard_limit 終了 server action を呼ばない (Phase 1 互換)
    */
   studySessionDbId?: string;
+  /**
+   * DEC-088 Plan B 項目 1: 学習者の現在進化段階.
+   * AnswerFeedbackEffects に渡して 5 種 SVG から進化段階別キャラを描画する.
+   * 未指定時は "hina" (後方互換).
+   */
+  kotodamaStage?: KotodamaStage;
 }) {
   const {
     learnerId,
@@ -142,6 +150,7 @@ export function StudyClient(props: {
     sessionId,
     serverTodayCumulativeSeconds = 0,
     studySessionDbId,
+    kotodamaStage = "hina",
   } = props;
   const router = useRouter();
   const [selected, setSelected] = useState<string | null>(null);
@@ -327,10 +336,12 @@ export function StudyClient(props: {
     router.push("/home");
   };
 
-  // W8-T3 / W8-T4: preferences をモジュール singleton に同期
+  // W8-T3 / W8-T4 + DEC-088 Plan B 項目 2: preferences をモジュール singleton に同期
+  // - audio-feedback (oscillator) と sound-effects (Howler.js) の両方に同じ enabled を反映
   useEffect(() => {
     setAudioEnabled(soundEnabled);
     setConfettiEnabled(confettiEnabled);
+    setSoundEffectsEnabled(soundEnabled);
   }, [soundEnabled, confettiEnabled]);
   // W7 B-10: writing_essay 用 textarea state
   const [essayDraft, setEssayDraft] = useState<string>("");
@@ -450,17 +461,20 @@ export function StudyClient(props: {
           setComboJustUpgraded(false);
         }
 
-        // W8-T3 / W8-T4: 音響フィードバック + Confetti
+        // W8-T3 / W8-T4 + DEC-088 Plan B 項目 2: 音響フィードバック + Confetti
         // - tier upgrade 瞬間: combo 音 + 軽い confetti (W8-T2 と連動)
         // - 通常正解: correct 音
         // - 不正解: incorrect 音
+        // - Howler エンジン (sound-effects.ts) も並列で再生 (mp3 短尺 / 新エンジン)
         // すべて silent fail-safe (preferences / autoplay policy で skip 可)
         if (result.correct) {
           if (tierUpgraded) {
             void playFeedback("combo");
+            void playSoundEffect("combo");
             void triggerConfetti("light");
           } else {
             void playFeedback("correct");
+            void playSoundEffect("correct");
           }
           // W8-T4: 5 問以上連続正解後の終了でレッスン完了 modal を表示
           // W10-T4: ただしセッションモードでは SessionCompleteModal を優先
@@ -469,6 +483,7 @@ export function StudyClient(props: {
           }
         } else {
           void playFeedback("incorrect");
+          void playSoundEffect("wrong");
         }
 
         // W10-T4: セッション集計 (problemType 横断 / Phase 1 では LESSON_CORRECT XP=2 ≒ ハネキン換算)
@@ -557,11 +572,18 @@ export function StudyClient(props: {
       {/* G-5: ことだまトリ コンパニオン */}
       <KotodamaTori mood={mood} streak={streak} lastResult={lastResult} />
 
-      {/* W8-T4: レッスン完了 modal (5 問以上連続正解後の終了時) */}
+      {/* W8-T4: レッスン完了 modal (5 問以上連続正解後の終了時)
+          DEC-088 Plan B 項目 5: totalXp / totalXpBeforeLesson を AnimatedFillBar に橋渡し */}
       <LessonCompleteModal
         open={showLessonComplete}
         streak={streak}
         earnedXp={feedback?.xpDelta}
+        totalXp={feedback?.totalXp}
+        totalXpBeforeLesson={
+          feedback && typeof feedback.xpDelta === "number"
+            ? Math.max(0, feedback.totalXp - feedback.xpDelta)
+            : undefined
+        }
         onContinue={() => {
           setShowLessonComplete(false);
           router.push("/home");
@@ -801,6 +823,7 @@ export function StudyClient(props: {
           key={`${feedback.correct ? "correct" : "wrong"}-${combo}`}
           variant={feedback.correct ? "correct" : "wrong"}
           comboCount={feedback.correct ? combo : 0}
+          stage={kotodamaStage}
         />
       ) : null}
 

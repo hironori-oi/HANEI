@@ -20,6 +20,8 @@ import { SparklesIcon, ArrowRightIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { triggerConfetti, isMotionReduced } from "@/lib/study/confetti";
 import { playFeedback } from "@/lib/study/audio-feedback";
+import { playSoundEffect } from "@/lib/audio/sound-effects";
+import { AnimatedFillBar } from "@/components/ui/animated-fill-bar";
 
 interface Props {
   open: boolean;
@@ -27,6 +29,13 @@ interface Props {
   streak: number;
   /** 獲得 XP 累積 */
   earnedXp?: number;
+  /**
+   * DEC-088 Plan B 項目 5: XP 進捗バー描画用 (任意).
+   * 累計 totalXp と「現セッション直前の totalXp」差分を AnimatedFillBar で smooth fill.
+   * 未指定時は従来通り「+N XP かくとく」テキストのみ表示.
+   */
+  totalXp?: number;
+  totalXpBeforeLesson?: number;
   onContinue: () => void;
   onClose?: () => void;
 }
@@ -38,13 +47,23 @@ function pickIntensity(streak: number): "light" | "medium" | "heavy" {
 }
 
 export function LessonCompleteModal(props: Props) {
-  const { open, streak, earnedXp, onContinue, onClose } = props;
+  const {
+    open,
+    streak,
+    earnedXp,
+    totalXp,
+    totalXpBeforeLesson,
+    onContinue,
+    onClose,
+  } = props;
 
   useEffect(() => {
     if (!open) return;
     // 並列で confetti と level-up 音を発動 (両方とも settings で無効化される可能性あり)
     void triggerConfetti(pickIntensity(streak));
     void playFeedback("level-up");
+    // DEC-088 Plan B 項目 2: Howler エンジンでも complete 音を並列再生
+    void playSoundEffect("complete");
   }, [open, streak]);
 
   if (!open) return null;
@@ -95,10 +114,27 @@ export function LessonCompleteModal(props: Props) {
         </p>
 
         {typeof earnedXp === "number" && earnedXp > 0 && (
-          <p className="mb-4 inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-sm font-bold text-primary">
-            <SparklesIcon className="h-4 w-4" aria-hidden="true" />+{earnedXp}{" "}
-            XP かくとく
-          </p>
+          <div className="mb-4 space-y-2">
+            <p className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-sm font-bold text-primary">
+              <SparklesIcon className="h-4 w-4" aria-hidden="true" />+{earnedXp}{" "}
+              XP かくとく
+            </p>
+            {/* DEC-088 Plan B 項目 5: XP smooth fill bar
+                totalXp / totalXpBeforeLesson が両方提供された時のみ表示.
+                fill バー自体は AnimatedFillBar で前回値 → 現在値を spring 補間する. */}
+            {typeof totalXp === "number" &&
+              typeof totalXpBeforeLesson === "number" &&
+              totalXp > totalXpBeforeLesson && (
+                <AnimatedFillBar
+                  testId="lesson-complete-xp-bar"
+                  ariaLabel="獲得XP の伸び"
+                  value={totalXp}
+                  max={Math.max(totalXp, totalXpBeforeLesson + earnedXp * 2)}
+                  className="h-2.5"
+                  fillClassName="bg-primary"
+                />
+              )}
+          </div>
         )}
 
         <Button

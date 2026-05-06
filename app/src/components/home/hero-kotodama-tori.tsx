@@ -143,6 +143,7 @@ function HeroInner({ input, learnerNickname, svgSize }: Required<Props>) {
             size={svgSize}
             progress={info.progressToNext}
             label={`ことだまトリ ${info.label}`}
+            expression="idle"
           />
         </m.div>
       </m.button>

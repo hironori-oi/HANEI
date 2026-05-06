@@ -27,6 +27,8 @@ import {
   hasReachedOverlearningHardLimit,
   todayMinutesFromSeconds,
 } from "@/lib/study/study-time";
+import { getKotodamaStageInput } from "@/lib/study/kotodama-stage-resolver";
+import { getKotodamaStage } from "@/lib/study/kotodama-tori-stage";
 import { Button } from "@/components/ui/button";
 import { StudyClient } from "./StudyClient";
 
@@ -116,6 +118,11 @@ export default async function StudyPage({
   // W10-T5: 過学習防止 - 当日累計学習秒数 (server-rendered baseline)
   // 60 分到達済みの場合は問題取得せず hard_limit gate ページを返す (DB 負荷削減 + 入口で止める)
   const serverTodayCumulativeSeconds = await getTodayLearningSeconds(learner.id);
+
+  // DEC-088 Plan B 項目 1: 学習者の現在進化段階を server で計算し AnswerFeedbackEffects に渡す
+  // (毎回 SVG 5 種から進化段階に応じたものを描画する / 表情も切替)
+  const kotodamaStageInput = await getKotodamaStageInput(db, learner.id);
+  const learnerKotodamaStage = getKotodamaStage(kotodamaStageInput);
 
   if (hasReachedOverlearningHardLimit(serverTodayCumulativeSeconds)) {
     const todayMinutes = todayMinutesFromSeconds(serverTodayCumulativeSeconds);
@@ -256,6 +263,7 @@ export default async function StudyPage({
         sessionId={sessionRawId}
         serverTodayCumulativeSeconds={serverTodayCumulativeSeconds}
         studySessionDbId={studySessionDbId}
+        kotodamaStage={learnerKotodamaStage}
       />
     </main>
   );

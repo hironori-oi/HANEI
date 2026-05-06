@@ -15,6 +15,7 @@ export function KotodamaHinaSvg({
   label,
   animate = false,
   progress = 0,
+  expression = "idle",
 }: KotodamaStageSvgProps) {
   return (
     <svg
@@ -24,6 +25,7 @@ export function KotodamaHinaSvg({
       role="img"
       aria-label={label ?? "ことだまトリ・ひな"}
       className={className}
+      data-expression={expression}
     >
       <title>{label ?? "ことだまトリ・ひな"}</title>
 
@@ -63,17 +65,56 @@ export function KotodamaHinaSvg({
       <ellipse cx="120" cy="115" rx="38" ry="34" fill={KOTODAMA_COLORS.base} />
       <ellipse cx="108" cy="108" rx="14" ry="11" fill={KOTODAMA_COLORS.white} opacity="0.5" />
 
-      {/* 目 (ぱっちり 2 つ) */}
-      <circle cx="106" cy="116" r="5" fill={KOTODAMA_COLORS.black} />
-      <circle cx="134" cy="116" r="5" fill={KOTODAMA_COLORS.black} />
-      <circle cx="107.5" cy="114" r="1.6" fill={KOTODAMA_COLORS.white} />
-      <circle cx="135.5" cy="114" r="1.6" fill={KOTODAMA_COLORS.white} />
-
-      {/* くちばし (小さな三角) */}
-      <path
-        d="M 115 128 L 125 128 L 120 134 Z"
-        fill={KOTODAMA_COLORS.accent}
-      />
+      {/* 目 / くちばし (表情に応じて切替) */}
+      {expression === "happy" ? (
+        // happy: ニコッと弧目 (^_^) + 開いた笑顔くちばし
+        <g data-part="face-happy">
+          <path
+            d="M 100 116 Q 106 110 112 116"
+            stroke={KOTODAMA_COLORS.black}
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d="M 128 116 Q 134 110 140 116"
+            stroke={KOTODAMA_COLORS.black}
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d="M 113 128 Q 120 138 127 128 Z"
+            fill={KOTODAMA_COLORS.accent}
+          />
+        </g>
+      ) : expression === "thinking" ? (
+        // thinking: 上を向く目 + 小さな閉じくちばし
+        <g data-part="face-thinking">
+          <circle cx="106" cy="114" r="5" fill={KOTODAMA_COLORS.black} />
+          <circle cx="134" cy="114" r="5" fill={KOTODAMA_COLORS.black} />
+          <circle cx="107.5" cy="111" r="1.6" fill={KOTODAMA_COLORS.white} />
+          <circle cx="135.5" cy="111" r="1.6" fill={KOTODAMA_COLORS.white} />
+          <path
+            d="M 115 130 L 125 130"
+            stroke={KOTODAMA_COLORS.accent}
+            strokeWidth="2.2"
+            strokeLinecap="round"
+          />
+        </g>
+      ) : (
+        // idle: 既存のぱっちり 2 つ + 小さな三角くちばし
+        <g data-part="face-idle">
+          <circle cx="106" cy="116" r="5" fill={KOTODAMA_COLORS.black} />
+          <circle cx="134" cy="116" r="5" fill={KOTODAMA_COLORS.black} />
+          <circle cx="107.5" cy="114" r="1.6" fill={KOTODAMA_COLORS.white} />
+          <circle cx="135.5" cy="114" r="1.6" fill={KOTODAMA_COLORS.white} />
+          <path
+            d="M 115 128 L 125 128 L 120 134 Z"
+            fill={KOTODAMA_COLORS.accent}
+          />
+        </g>
+      )}
 
       {/* ほっぺ (ピンクぽち) */}
       <circle cx="98" cy="124" r="3.5" fill={KOTODAMA_COLORS.sakura} opacity="0.7" />

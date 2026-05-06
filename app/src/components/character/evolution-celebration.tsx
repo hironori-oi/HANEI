@@ -26,6 +26,7 @@ import { SparklesIcon, ArrowRightIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { triggerConfetti, isMotionReduced } from "@/lib/study/confetti";
 import { playFeedback } from "@/lib/study/audio-feedback";
+import { playSoundEffect } from "@/lib/audio/sound-effects";
 import {
   describeKotodamaStage,
   getKotodamaStageLabel,
@@ -85,6 +86,8 @@ export function EvolutionCelebrationModal(props: Props) {
     if (!open) return;
     void triggerConfetti(pickConfettiIntensity(toStage));
     void playFeedback("level-up");
+    // DEC-088 Plan B 項目 2: Howler エンジンでも進化音を並列再生
+    void playSoundEffect("levelup");
 
     // DEC-087 §11: 多色 4 色 burst (Amber Gold + Sky Blue + Lavender + Mint Green)
     // canvas-confetti 既存 dep / prefers-reduced-motion 時は skip
@@ -269,6 +272,7 @@ export function EvolutionCelebrationModal(props: Props) {
               progress={1}
               label={toInfo.label}
               animate={!motionReduced}
+              expression="happy"
             />
           </div>
         </div>

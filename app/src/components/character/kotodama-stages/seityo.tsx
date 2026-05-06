@@ -14,6 +14,7 @@ export function KotodamaSeityoSvg({
   label,
   animate = false,
   progress = 0,
+  expression = "idle",
 }: KotodamaStageSvgProps) {
   return (
     <svg
@@ -23,6 +24,7 @@ export function KotodamaSeityoSvg({
       role="img"
       aria-label={label ?? "ことだまトリ・せいちょう"}
       className={className}
+      data-expression={expression}
     >
       <title>{label ?? "ことだまトリ・せいちょう"}</title>
 
@@ -111,15 +113,31 @@ export function KotodamaSeityoSvg({
       <ellipse cx="120" cy="98" rx="32" ry="32" fill={KOTODAMA_COLORS.base} />
       <ellipse cx="110" cy="90" rx="12" ry="9" fill={KOTODAMA_COLORS.white} opacity="0.5" />
 
-      {/* 目 (鋭い / アーモンド型) */}
-      <path d="M 100 99 Q 106 95 112 99 Q 106 103 100 99 Z" fill={KOTODAMA_COLORS.black} />
-      <path d="M 128 99 Q 134 95 140 99 Q 134 103 128 99 Z" fill={KOTODAMA_COLORS.black} />
-      <circle cx="106" cy="98" r="1.3" fill={KOTODAMA_COLORS.white} />
-      <circle cx="134" cy="98" r="1.3" fill={KOTODAMA_COLORS.white} />
-
-      {/* くちばし (鋭い) */}
-      <path d="M 112 110 L 128 110 L 120 122 Z" fill={KOTODAMA_COLORS.accent} />
-      <path d="M 116 116 L 124 116" stroke={KOTODAMA_COLORS.shadow} strokeWidth="0.8" />
+      {/* 目 / くちばし (表情に応じて切替) */}
+      {expression === "happy" ? (
+        <g data-part="face-happy">
+          <path d="M 100 100 Q 106 94 112 100" stroke={KOTODAMA_COLORS.black} strokeWidth="2.4" strokeLinecap="round" fill="none" />
+          <path d="M 128 100 Q 134 94 140 100" stroke={KOTODAMA_COLORS.black} strokeWidth="2.4" strokeLinecap="round" fill="none" />
+          <path d="M 112 110 Q 120 124 128 110 Z" fill={KOTODAMA_COLORS.accent} />
+        </g>
+      ) : expression === "thinking" ? (
+        <g data-part="face-thinking">
+          <path d="M 100 97 Q 106 93 112 97 Q 106 101 100 97 Z" fill={KOTODAMA_COLORS.black} />
+          <path d="M 128 97 Q 134 93 140 97 Q 134 101 128 97 Z" fill={KOTODAMA_COLORS.black} />
+          <circle cx="106" cy="96" r="1.3" fill={KOTODAMA_COLORS.white} />
+          <circle cx="134" cy="96" r="1.3" fill={KOTODAMA_COLORS.white} />
+          <path d="M 113 116 L 127 116" stroke={KOTODAMA_COLORS.accent} strokeWidth="2.4" strokeLinecap="round" />
+        </g>
+      ) : (
+        <g data-part="face-idle">
+          <path d="M 100 99 Q 106 95 112 99 Q 106 103 100 99 Z" fill={KOTODAMA_COLORS.black} />
+          <path d="M 128 99 Q 134 95 140 99 Q 134 103 128 99 Z" fill={KOTODAMA_COLORS.black} />
+          <circle cx="106" cy="98" r="1.3" fill={KOTODAMA_COLORS.white} />
+          <circle cx="134" cy="98" r="1.3" fill={KOTODAMA_COLORS.white} />
+          <path d="M 112 110 L 128 110 L 120 122 Z" fill={KOTODAMA_COLORS.accent} />
+          <path d="M 116 116 L 124 116" stroke={KOTODAMA_COLORS.shadow} strokeWidth="0.8" />
+        </g>
+      )}
 
       {/* 頭頂の冠羽 (5 枚 / 風格) */}
       <path d="M 100 70 L 106 50 L 112 70 Z" fill={KOTODAMA_COLORS.primary} />

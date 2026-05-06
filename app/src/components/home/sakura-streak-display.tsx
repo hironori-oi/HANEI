@@ -14,6 +14,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { describeSakuraStage, type SakuraStage } from "@/lib/study/sakura-streak";
+import { AnimatedFillBar } from "@/components/ui/animated-fill-bar";
 import { SakuraSeedSvg } from "./sakura-stages/seed";
 import { SakuraSproutSvg } from "./sakura-stages/sprout";
 import { SakuraLeavesSvg } from "./sakura-stages/leaves";
@@ -88,13 +89,25 @@ export function SakuraStreakDisplay({ streakDays, svgSize = 96, className }: Pro
               {info.description}
             </p>
             {info.nextStage && info.nextStageInDays !== null ? (
-              <p className="text-xs text-muted-foreground">
-                あと{" "}
-                <span className="font-bold tabular-nums text-primary">
-                  {info.nextStageInDays}
-                </span>{" "}
-                日で つぎの だんかい！
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  あと{" "}
+                  <span className="font-bold tabular-nums text-primary">
+                    {info.nextStageInDays}
+                  </span>{" "}
+                  日で つぎの だんかい！
+                </p>
+                {/* DEC-088 Plan B 項目 5: 次段階までの進捗を AnimatedFillBar で smooth fill.
+                    分母 = 次段階しきい値 (= 現在 streak + 残日数), 分子 = 現在 streak. */}
+                <AnimatedFillBar
+                  testId="sakura-streak-next-stage-bar"
+                  ariaLabel={`つぎの だんかいまで あと ${info.nextStageInDays} 日`}
+                  value={Math.max(0, streakDays)}
+                  max={Math.max(1, streakDays + info.nextStageInDays)}
+                  className="h-1.5"
+                  fillClassName="bg-primary"
+                />
+              </div>
             ) : (
               <p className="text-xs text-muted-foreground">
                 さいこうの だんかいに とうたつしました。

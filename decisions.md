@@ -1,5 +1,109 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-088: UI/UX 楽しさ強化 Plan B atomic（キャラ表情差分 + サウンド + 学習履歴ヒートマップ + Onboarding ストーリー / 2.5 人日 / page +0 / mutation +0 / GET +0 / 新規 ~12 ファイル + 改修 ~6 ファイル）GO 判定（2026-05-06 / DEC-087 Plan A 完遂直後 / オーナー Plan A→B→C 順次 GO 継承）
+
+- **状況**: 2026-05-06 DEC-087 Plan A 完遂着地（commit `efe84d9` / HANEI repo push 完了 / Vercel auto redeploy 進行中）直後。オーナーは事前 directive「Plan A GO。そのあと planB、planC に進んでいきましょう」で **Plan B 即時着手承認済**（1-2 週間運用フィードバック待機なし / 連続 atomic 体制）。Plan A で framer-motion + Mochiy Pop One + tokens 拡張 + kotodama-tori 主役化 = 楽しさ強化の **下層基盤** 完成。Plan B = その上に **キャラ表情豊富化 + 音 + 履歴可視化 + Onboarding 物語** で β 子使用継続中の visible improvement 第 2 弾を投入。
+- **判定**: **GO**（DEC-088 = UI/UX 楽しさ強化 Plan B atomic / **2.5 人日** / **page +0**（25/32 不変）/ **mutation +0**（9/10 不変）/ **GET +0**（12/15 不変）/ **cron +0**（5 不変）/ **deps +1** (`howler` ~12 KB gzip / `lottie-react` ~50 KB gzip もしくは軽量代替 `dotlottie-react` 検討) / **assets +N** (Lottie JSON 5 種 + 効果音 mp3 8 種 + キャラ表情 SVG 15 種 = 5 進化 × 3 表情)）。
+- **判断根拠**:
+  1. **Plan A 基盤の完全活用**: framer-motion + LazyMotion + tokens 拡張 + kotodama-tori 主役化（Plan A 完遂）の上に Lottie / 音 / 履歴 / Onboarding を乗せれば手戻り最小。本 atomic 内で **新規依存 +1（howler のみ）** に最小化（Lottie は framer-motion で代替可能か判断 / 5 種程度なら Plan A の m.div + SVG path animation で吸収可能）。
+  2. **β data リグレッション 0**: UI のみ変更 / DB schema 触らず / Server Action 触らず / DEC-006 全カテゴリ +0 維持 / vitest 902 PASS + E2E 全 spec PASS が既存 baseline で完全保護 / Onboarding は localStorage flag で "1 回だけ表示" 完結（DB 不要）.
+  3. **罰則ゼロ哲学厳守 (DEC-024)**: キャラ表情 3 種 = `idle` / `happy` / `thinking` のみ（**`sad` / `crying` / `angry` は不採用**）. サウンドは `correct` / `wrong` / `levelup` / `combo` / `coin` / `streak` / `complete` / `tap` の 8 種 / **すべて柔らか・短尺（0.3〜1.5s）/ 不正解音も「叱責音」ではなく「うーん」音色 (Amber Gold 相当)**. Onboarding ストーリーは「ことだまトリと一緒に英語の旅へ」/ 罰語ゼロ.
+  4. **WCAG 2.1 AA 準拠維持**: `prefers-reduced-motion: reduce` + 既存 `audio_enabled` setting toggle（DEC-024 設定 / 既存）/ Lottie は `loop` 無限再生回避（演出時のみ）/ 履歴ヒートマップは色のみでなく数値ラベル併記（色覚多様性対応）.
+  5. **β 中即実装可能**: 2.5 人日 = 1 sub-agent 1 atomic で完遂可 / β 子使用継続中に visible improvement 投入 / Plan A→B 連続投入で「短期間に大きく変わる」体験をオーナー実子に提供.
+  6. **Plan C への基盤整備**: 本 atomic で「キャラ表情 3 種 × 5 進化段階 = 15 SVG」+ 「サウンドエンジン (Howler) 共通化」+ 「履歴可視化基盤」+ 「Onboarding フレームワーク」を整備 = Plan C (DEC-089) で「冒険マップ UI / ボス戦 / 音声 (TTS) / 3D look」を上に乗せる際の最後の前提条件を満たす.
+- **本 atomic スコープ（含むもの 5 大項目）**:
+  1. **キャラ表情差分 5 進化 × 3 表情 = 15 SVG**:
+     - 進化段階: `hina` / `wakatori` / `seityo` / `syugosin` / `kenzya`（既存 5 種）
+     - 表情: `idle`（既存 = 通常時 / props デフォルト）/ `happy`（正解時 / 目を細める + 口角上げ）/ `thinking`（不正解時 / 目線右上 + 口を一文字 / **首かしげ rotate は framer-motion 側 / SVG は静止表情のみ**）
+     - 罰則ゼロ: `sad` / `crying` / `angry` 表情は **作らない** / 不正解時は `thinking` のみで「一緒に考える」中立表現
+     - 既存 `KotodamaHinaSvg` 等のシグネチャに `expression?: "idle" | "happy" | "thinking"` props 追加 / default `idle`（後方互換）
+     - 配置: `app/src/components/character/kotodama-stages/{hina,wakatori,seityo,syugosin,kenzya}.tsx` 改修 / props 経由で `<g data-expression="happy">` 等の SVG group 切替 or inline 条件付き path 切替（実装は dev 判断 / 1 ファイル増やさない）.
+     - StudyClient 側で `<AnswerFeedbackEffects expression={variant === "correct" ? "happy" : "thinking"} />` を渡す
+     - HeroKotodamaTori 側で `expression="idle"` 既定（将来 Plan C で時間帯/streak 動的化）
+  2. **サウンドエフェクト 8 種 (Howler.js)**:
+     - 新規依存: `howler` (~12 KB gzip) + `@types/howler`
+     - サウンド配置: `app/public/sounds/{correct,wrong,levelup,combo,coin,streak,complete,tap}.mp3` 8 種
+     - mp3 は **CC0 / royalty-free 短尺 0.3〜1.5s / Amber 系優しい音色** をオーナー手元で別途投入 (本 atomic では空 mp3 placeholder + ロード処理 + UI トグル + Howler instance singleton のみ実装 / 実 mp3 は別 atomic で投入)
+     - 新規 module: `app/src/lib/audio/sound-effects.ts`
+       - `playSoundEffect(name: SoundName)` 関数 / Howler.Howl singleton / `audio_enabled` setting respect
+       - `prefers-reduced-motion: reduce` ユーザは音も止める（aggressive interpret / `useReducedMotion` 連動）
+       - SSR 安全（`typeof window === "undefined"` 早期 return）
+     - 既存 `audio_enabled` setting (DEC-024 既存 / `app/src/components/settings/sound-toggle.tsx`) と統合 / 新規 setting 不要
+     - 統合先: StudyClient `submitChoiceValue` 後 / EvolutionCelebration mount / ComboCounter trigger / coin gain hook / streak update hook / lesson complete modal / button tap (motion-button 拡張)
+  3. **学習履歴ヒートマップ**:
+     - 配置: `app/src/components/home/study-heatmap.tsx` 新規（home page.tsx の Hero 直下に挿入）
+     - データソース: 既存 server-side fetch で `learner_streak` または `study_sessions` 直近 84 日（12 週 × 7 曜）を集計 / **既存 SQL 拡張または既存 GET endpoint の payload 1 field 追加** で対応（**新規 GET なし** = DEC-006 +0 維持）
+     - 表示: 12 週 × 7 曜 grid / 1 セル = 1 日 / 学習量に応じて Mint Green の濃淡 4 段階（color + 数値ラベル併記 / 色覚多様性対応）
+     - 罰則ゼロ: 学習なしの日は「白 / 灰色」で淡く / 「赤 / 警告」表示なし / hover で「○月○日 / ○分」中立表示
+     - WCAG: aria-label `日付 / 学習時間`、focusable cell、tab navigation
+  4. **Onboarding ストーリー演出**:
+     - 配置: `app/src/components/onboarding/onboarding-story-modal.tsx` 新規 + `app/src/lib/onboarding/storage.ts` 新規（localStorage flag 管理 / `hanei.onboarding.shown` boolean）
+     - トリガー: 初回 `/home` 訪問時に flag 未設定なら show / 1 回限り（**DB 永続化なし** = mutation +0 維持）
+     - 構成: 3 ページストーリー / framer-motion stagger
+       - Page 1: 「ようこそ！」+ Hero kotodama-tori (hina) 中央 + 吹き出し「ぼく、ことだまトリ。一緒に英語の旅に出よう！」
+       - Page 2: 「進化のしくみ」+ 5 進化段階 SVG 横並び + 「学べば学ぶほど、ぼくが大きくなるよ」
+       - Page 3: 「準備できた？」+ 「学習をはじめる」CTA → close + flag set
+     - スキップ可能（右上 ×ボタン / aria-label "閉じる"）/ ESC でも close
+     - 罰則ゼロ: 「英検 3 級まで頑張ろう！」等のプレッシャー文言なし / 「楽しく学ぼう」中立トーン
+  5. **既存バー → AnimatedFillBar 差替**:
+     - Plan A で用意した `AnimatedFillBar` を既存 XP 表示 / コインバー / streak ゲージ等に段階適用
+     - 対象（dev が grep して洗い出し / 5 箇所程度想定）:
+       - `app/src/components/economy/coin-display.tsx`
+       - `app/src/components/learner/learner-xp-card.tsx`（存在する場合）
+       - `app/src/components/study/lesson-complete-modal.tsx`（XP gain bar）
+       - `app/src/app/(app)/home/page.tsx`（XP / coin / streak 表示箇所）
+       - `app/src/components/home/sakura-streak-display.tsx`（streak progress）
+     - 差替方針: 既存 div + width style → `<AnimatedFillBar value={...} max={...} />` / data-testid / aria-label 完全保持 / E2E selector 0 影響
+- **本 atomic スコープ（含まないもの / Plan C / 別 atomic）**:
+  - **冒険マップ UI**: Plan C (DEC-089 予定) / 学習レベル × skill を地図ノード化 / route 化が必要なため別 atomic
+  - **ボス戦演出（模試 = ボス戦 視覚化）**: Plan C 範囲
+  - **音声合成 (kotodama-tori が OpenAI TTS で動的会話)**: Plan C 範囲 / mutation 増 + cost 増 = 別 atomic
+  - **3D look transitions**: Plan C 範囲 / WebGL 性能影響評価必要
+  - **実 mp3 投入**: 本 atomic は placeholder のみ / オーナー手元で royalty-free mp3 を投入する別作業（CC0 配布元 = freesound.org / Zapsplat 等）
+  - **Lottie 採用判断**: 本 atomic は framer-motion + SVG + Howler で済む構成を優先 / Lottie は Plan C で「真にリッチな 3D look」が必要になった時点で再評価（依存追加を先送り = bundle 抑制）
+- **制約厳守 / 受入基準**:
+  - **DEC-024 罰則ゼロ哲学厳守**: 表情 3 種は `idle` / `happy` / `thinking` のみ（`sad` / `crying` / `angry` 不採用）/ サウンド 8 種すべて柔らかく / Onboarding 文言は「楽しく学ぼう」中立 / ヒートマップは赤色未使用.
+  - **DEC-006 拡張版 (DEC-077) 不変条件**: GET 12/15 / mutation 9/10 / page 25/32 / cron 5 全て **+0** 維持. ヒートマップは既存 home page.tsx の SSR で取得（既存 SQL 拡張 or payload 1 field 追加）= 新規 GET なし. Onboarding flag は localStorage = mutation なし.
+  - **DEC-003 三層認可**: 本 atomic は UI のみ / Server Action / API route 触らず = 三層認可影響ゼロ.
+  - **DEC-055 idempotency**: UI 演出は idempotent / Onboarding flag は localStorage / DB 副作用なし.
+  - **WCAG 2.1 AA 準拠**: `prefers-reduced-motion: reduce` 全演出 + 音 fallback / `audio_enabled` setting respect / focus-visible 維持 / コントラスト比 AA / aria-label / heatmap セル focusable + 数値ラベル併記.
+  - **Lighthouse Performance 80+ 維持**: バンドル増分 +60 KB gzip 以下 (Howler ~12 + 表情 SVG inline ~5 + heatmap ~3 + onboarding ~10 = 計 ~30 KB gzip 想定) / 60fps 維持 / mp3 placeholder は LCP 影響ゼロ（dynamic import）.
+  - **既存 vitest 902 PASS / E2E 全 spec PASS リグレッション 0**: UI 変更のみ / data-testid / aria-label 既存セレクタ維持 / E2E 全件継続. 必要なら新規 unit test (sound-effects respect audio_enabled / onboarding storage flag / heatmap aggregation) 追加.
+  - **typecheck pass / lint warning 0**: react-hooks/exhaustive-deps 厳守 / Howler 型定義の type assertion 最小化.
+  - **`next build` 25 routes 完遂**: バンドル増分が許容範囲内 / 新規 route 追加なし.
+- **後続 atomic 候補**:
+  1. **DEC-089 Plan C (商品化フェーズ / 1-2 週間)**: 冒険マップ UI + 進化 SVG リッチイラスト化 + ボス戦演出 (模試 = ボス戦) + 音声 (kotodama-tori が OpenAI TTS で動的会話) + 3D look transitions / 商品化判断後着手 / 本 DEC-088 完遂直後にオーナー Plan A→B→C 順次 GO directive で即時起票予定.
+  2. **DEC-088 §後続 (β 後 / 0.1 人日)**: 実 mp3 投入（CC0 royalty-free）+ Lottie JSON 投入判断（Plan C での真リッチ化検討時）.
+  3. **DEC-083 §後続 (β 後 / 0.3 人日)**: drizzle workflow 本体修復（継続 pending）.
+  4. **DEC-082 (β 後並走 3 項目 / 0.4 人日)**: TTS 自動投入 / 招待コード自動配布 / Sentry alert dashboard pinning（継続 pending）.
+- **CEO 委任先 / 報告経路**: dev 部門委任（規模感 2.5 人日 / sub-agent 1 名 / Plan B 全 5 大項目を 1 atomic 一括実装）→ 完遂後 CEO trust-but-verify（typecheck / lint / vitest / build / 罰則ゼロ目視 / DEC-006 不変条件確認）→ review 部門は規模に応じて判断（5 大項目で UI 変更広めなため optional 呼出）→ §実装完遂デルタ → CEO 1 commit/push → Vercel auto redeploy → Plan C (DEC-089) 即時起票.
+- **教訓 / 設計方針 (Plan B 設計の心)**:
+  1. **依存追加最小化**: Lottie は先送り / Howler のみ +1 / 表情差分は SVG props 拡張で吸収.
+  2. **罰則ゼロを表情・音・文言全方位で徹底**: 表情 3 種から `sad/crying/angry` 全削除 / サウンド全件柔らか / Onboarding は「楽しく」中立.
+  3. **DB 副作用ゼロ**: Onboarding flag は localStorage / 履歴ヒートマップは既存集計 / mutation +0.
+  4. **既存 setting (audio_enabled) との統合**: 新規 setting を作らない / DEC-024 既存 toggle を再利用.
+  5. **E2E selector 完全保持**: data-testid / aria-label 1 件も触らない（W11 確立した「演出は外側 wrap で実装」原則を継承）.
+
+### §実装完遂デルタ
+- **2026-05-06 / Plan B atomic 完遂着地 / dev 完遂報告 + CEO trust-but-verify GREEN**:
+  - **手順 1** ✅: 本 DEC-088 起票（decisions.md 冒頭 / 本 entry / ~140 行）.
+  - **手順 2** ✅: dev sub-agent 委任（agentId `a9066c4a7b8fc42ea` / Plan B 全 5 大項目 / 既存セレクタ data-testid 完全保護 / 罰則ゼロ厳守 / WCAG fallback 必須 / vitest 902 baseline 維持）.
+  - **手順 3** ✅: dev 実装完遂（`projects/PRJ-016/reports/dev-w12-uiux-planb-done.md` / 23 ファイル変更 = 新規 10 + 改修 13 / howler@^2.2.4 + @types/howler@^2.2.12 追加 / バンドル増分 +37 KB gzip ≤ 60 KB target）.
+  - **手順 4** ✅: CEO trust-but-verify GREEN（typecheck PASS / lint 0 warning（`react-hooks/set-state-in-effect` を `useSyncExternalStore` で解消）/ vitest **930 PASS** / 63 files / 0 fail / `next build` 25 page + 5 cron SUCCESS / E2E study-smoke 1/1 + family-streak 3/3 PASS（並列単独実行で 100%）/ chromium 全 63 spec で 57 PASS + 4 skip + 2 並列 DB 競合フレーク（本 atomic 由来でない / Plan A 以前から既知）/ 罰則ゼロ目視 = 赤色 0・叱責語 0・絵文字 0・新規キャラ表情 `idle/happy/thinking` のみ（`sad`/`crying`/`angry` 不採用）/ heatmap mint green tier のみ / Onboarding 「楽しもう」中立トーン / DEC-006 不変条件 page 25 + mutation 9 + GET 12 + cron 5 完全保持）.
+  - **手順 5** ✅: §実装完遂デルタ更新（本 entry）+ HANEI repo commit + push（Vercel auto redeploy）.
+  - **手順 6** (予定): DEC-089 Plan C 即時起票 → 商品化フェーズ atomic 着手 → オーナー Plan A→B→C 順次 GO directive 完結.
+- **影響行 (実績)**:
+  - **新規 (10)**: `app/src/lib/audio/sound-effects.ts` + `app/src/lib/onboarding/storage.ts` + `app/src/components/onboarding/onboarding-story-modal.tsx` + `onboarding-trigger.tsx`（`useSyncExternalStore` SSR 安全）+ `app/src/components/home/study-heatmap.tsx`（84 日 grid + role=gridcell + summary + legend）+ `app/public/sounds/{correct,wrong,levelup,combo,coin,streak,complete,tap}.mp3` 8 種 placeholder + 3 unit test（`audio.sound-effects.test.ts` 8 cases + `onboarding.storage.test.ts` 8 cases + `home.heatmap-aggregation.test.ts` 12 cases）.
+  - **改修 (13)**: `app/package.json` (+2 deps: howler ^2.2.4 + @types/howler ^2.2.12) + `app/playwright.config.ts` (`NEXT_PUBLIC_E2E_DISABLE_ONBOARDING=true` env / 23 spec 全件 onboarding 抑止) + `app/src/components/character/kotodama-stages/colors.ts` (`KotodamaExpression` 型 + `expression?` prop 共通化) + 同 ディレクトリ `{hina,wakatori,seityo,kenzya,syugosin}.tsx` 5 SVG 全件に `expression` 三項条件描画追加（idle 後方互換）+ `evolution-celebration.tsx` (`expression="happy"` + `playSoundEffect("levelup")`) + `answer-feedback-effects.tsx` (stage prop 受領 + STAGE_COMPONENTS dispatch + 正解=happy / 不正解=thinking) + `lesson-complete-modal.tsx` (`playSoundEffect("complete")` + `AnimatedFillBar` XP gain) + `hero-kotodama-tori.tsx` (`expression="idle"` 明示) + `sakura-streak-display.tsx` (次段階 `AnimatedFillBar`) + `sound-toggle.tsx` (既存 `setAudioEnabled` 同期で `setSoundEffectsEnabled` 統合) + `app/src/lib/study/aggregations.ts` (`getRecentDailyStudyMinutes` + `buildHeatmapDateGrid` 新規 export / 既存関数 0 改修) + `app/src/app/(app)/study/[levelCode]/[skillCode]/page.tsx` (`kotodamaStage` SSR 解決 + StudyClient props 渡し) + 同 `StudyClient.tsx` (`kotodamaStage` 受領 + `setSoundEffectsEnabled` 同期 + sound 統合 + `<AnswerFeedbackEffects stage>` + lesson-complete に `totalXp` + `totalXpBeforeLesson` 渡し) + `app/src/app/(app)/home/page.tsx` (Promise.all に `heatmapMinutesByDate` 追加 + `<OnboardingTrigger>` mount + `<StudyHeatmap>` section).
+  - **decisions.md** DEC-088 起票 + §実装完遂デルタ（本 entry / ~150 行）.
+- **commit hash**: HANEI repo 1 commit（本 §デルタ + dev report + 23 ファイル全件）。
+- **DEC-006 invariants 確認**: page 25 / mutation 9 / GET 12 / cron 5 全て **+0**（Plan B はキャラ表情 / sound / heatmap / onboarding / animated bar の追加でありながらサーバー surface area を 1 個も増やさず完了 / heatmap は `/home` SSR 内集計 / Onboarding は localStorage 完結）.
+- **罰則ゼロ目視チェック**: 新規 10 ファイル + 5 SVG expression 拡張全件で `red-*` / `destructive` / `bg-red` / `text-red` 0 hit. キャラ表情 `sad`/`crying`/`angry` 不採用（thinking のみ中立）. heatmap 学習なし日は白/灰（赤・警告未使用）. Onboarding コピー「ようこそ / いっしょに / たのしもう」/ プレッシャー語 0.
+- **WCAG 2.1 AA 確認**: heatmap 全セル `tabIndex=0 / role=gridcell / aria-label`. Onboarding modal `role=dialog / aria-modal=true / aria-labelledby` + Esc + 初回 mount フォーカス. `prefers-reduced-motion: reduce` 時に効果音 silent skip + Onboarding ページ遷移 0ms + AnimatedFillBar 即時 fill.
+- **既知の制約**: (1) 効果音 mp3 8 種は placeholder（無音）/ オーナー手元で royalty-free 短尺 0.3〜1.5s 差替 (CC0 freesound.org 等) は別作業（DEC-088 §後続）. (2) Onboarding flag は localStorage 完結 / 端末/ブラウザ毎に再表示（mutation +0 維持のための意図設計 / 必要なら `learner_preferences.onboarding_shown_at` 列追加で DB 同期可能だが本 atomic 範囲外）. (3) bun.lock が新規生成されたが本 repo は package-lock.json が canonical / bun.lock は commit しない（npm/bun 並走時の lockfile 二重保守回避）.
+
+---
+
 ## DEC-087: UI/UX 楽しさ強化 Plan A atomic（framer-motion 導入 + kotodama-tori 主役化 + 11 項目 polish / 0.75 人日 / page +0 / mutation +0 / GET +0 / 既存コンポーネント 8 ファイル拡張 + 新規 5 ファイル）GO 判定（2026-05-06 / β signup ログイン疎通直後 / オーナー Plan A→B→C 順次 GO 受領）
 
 - **状況**: 2026-05-06 オーナー手元 Vercel 本番 deploy + 本番 Turso schema 全体同期 (DEC-086 / `npm run db:push`) + signup → login 疎通完了直後、オーナーは **「アプリのデザインが非常にシンプルすぎてあまり楽しくない / 子供が楽しく学べるデザインやアニメーションを取り入れてください / 最高のアプリ環境を用意したい / Plan A→B→C 順次 GO」** directive 受領。CEO 提示 3 案 (Plan A: 0.75 人日 / Plan B: 2.5 人日 / Plan C: 1-2 週間) のうち全採用 + 順次着手判定。本 DEC-087 = Plan A スコープのみ確定起票。Plan B / C は後続 DEC-088 / DEC-089 で別個起票予定。
