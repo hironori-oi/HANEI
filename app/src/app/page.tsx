@@ -6,8 +6,29 @@ import {
 } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getSession } from "@/lib/auth/guards";
 
-export default function HomePage() {
+/**
+ * DEC-090 項目 2: 右上ヘッダ context-aware (認証コンテキスト対応).
+ *
+ * - 未認証: 既存の「無料ではじめる」+「ログイン」2 件 (LP 訪問パス完全保持)
+ * - 認証済 / parent: 「ダッシュボードに戻る」CTA 1 件 (→ /parent)
+ * - 認証済 / learner: 「ホームに戻る」CTA 1 件 (→ /home)
+ *
+ * 認証情報取得は既存 `getSession()` (Better Auth) を流用 (新規 API 0).
+ */
+export default async function HomePage() {
+  const session = await getSession();
+  const isAuthenticated = session !== null;
+  const isParent = session?.role === "parent";
+  const isLearner = session?.role === "learner";
+  const homeHref = isLearner ? "/home" : isParent ? "/parent" : null;
+  const homeLabel = isLearner
+    ? "ホームに戻る"
+    : isParent
+      ? "ダッシュボードに戻る"
+      : null;
+
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-12 px-6 py-16">
       {/* Hero */}
@@ -24,14 +45,39 @@ export default function HomePage() {
           HANEI は小学生のための英語学習アプリです。
           英検5級から3級まで、本人のレベルに合わせて毎日1時間の学習プランをAIコーチが用意します。
         </p>
-        <div className="flex flex-wrap justify-center gap-4">
-          <Button asChild size="lg" className="min-h-tap-cta min-w-tap-cta">
-            <Link href="/signup">無料ではじめる</Link>
-          </Button>
-          <Button asChild size="lg" variant="outline" className="min-h-tap-cta">
-            <Link href="/login">ログイン</Link>
-          </Button>
-        </div>
+        {isAuthenticated && homeHref && homeLabel ? (
+          <div
+            className="flex flex-wrap justify-center gap-4"
+            data-testid="hero-cta-authenticated"
+          >
+            <Button
+              asChild
+              size="lg"
+              className="min-h-tap-cta min-w-tap-cta"
+            >
+              <Link href={homeHref} data-testid="hero-cta-home">
+                {homeLabel}
+              </Link>
+            </Button>
+          </div>
+        ) : (
+          <div
+            className="flex flex-wrap justify-center gap-4"
+            data-testid="hero-cta-anonymous"
+          >
+            <Button asChild size="lg" className="min-h-tap-cta min-w-tap-cta">
+              <Link href="/signup">無料ではじめる</Link>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="min-h-tap-cta"
+            >
+              <Link href="/login">ログイン</Link>
+            </Button>
+          </div>
+        )}
       </section>
 
       {/* Features */}

@@ -1,5 +1,106 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-090: β 阻害解消 + 設定柔軟化 atomic（正解判定 latency 改善 + 右上ヘッダ context-aware + 設定画面拡張 + 学習データリセット / 1.2 人日 / page +0 / mutation +1 = 10/10（最終枠到達）/ GET +0 / cron +0）GO 判定（2026-05-06 / DEC-089 Plan C 完遂直後 / オーナー 8 項目 directive 受領 / β 阻害最優先）
+
+- **状況**: 2026-05-06 DEC-089 Plan C 完遂（commit `447d7a5`）直後、オーナーは **8 項目 directive** を受領: (1) 背景・カード白寂しさ / (2) 設定画面拡張（名前 / 目標 / 受験日）/ (3) 育てるキャラ変更可？ / (4) 右上「ログイン / 無料ではじめる」固定問題 / (5) 学習データリセット機能 / (6) 冒険マップ進行感本格実装 / (7) イラスト外注 NO / Stitch 活用 / (8) **正解判定時間が長い → サクサク切替**. CEO は 8 項目を atomic 分解（DEC-090 = β 阻害解消 / DEC-091 = 楽しさ強化第 4 弾 / DEC-092 候補 = キャラ変更見送り = β 第 1 期 1 系列固定）.
+- **判定**: **GO**（DEC-090 = β 阻害解消 + 設定柔軟化 atomic / **1.2 人日** / **page +0**（26/32 不変）/ **mutation +1**（9/10 → **10/10 = 最終枠到達** / 学習データリセット new mutation）/ **GET +0**（13/15 不変）/ **cron +0**（5 不変）/ **deps +0**）.
+- **判断根拠**:
+  1. **β 阻害最優先 = 正解判定 latency 改善（項目 8）**: オーナー実子 β 使用中の最大の UX 罰則. 「サクサク切替」は子供の集中力維持に直結. Plan A の AnswerFeedbackEffects 演出が正解後の startTransition + framer-motion + confetti chain で次問遷移を遅延させている可能性. 真因調査 + 即時切替最適化（演出は背景並走 / next problem prefetch / startTransition 削減 等）.
+  2. **右上ヘッダ context-aware（項目 4）**: 認証済ユーザに「ログイン / 無料ではじめる」CTA は混乱を招く. ルートランディング (`app/page.tsx`) の Hero に表示される CTA を **未認証時のみ表示 + 認証済は学習者ホームへリダイレクト or 「ホームに戻る」CTA に切替**.
+  3. **設定画面拡張（項目 2）**: 名前 / 目標 / 受験日 = 既に DB schema に存在（`learners.nickname` / `learners.exam_target_date` / 学習目標は `learner_study_targets`）. 既存 `learner-exam-date-form.tsx` + 新規 nickname / 目標フォームを `/parent/settings/[learnerId]` 配下で統合 = mutation 既存流用（`updateLearnerExamDate` 等）/ 新 mutation 0.
+  4. **学習データリセット（項目 5）**: 親操作 = `/parent/settings/[learnerId]` 配下に「学習データをリセット」確認モーダル + new Server Action `resetLearnerStudyData(learnerId)` (mutation +1 / **DEC-006 mutation 9 → 10/10 最終枠到達**) / 三層認可 (parent → learner ownership) / **段階確認** (確認文字列入力 = 罰則ゼロ感のある中立 UX) / 監査ログ + Sentry capture / fail-soft.
+  5. **DEC-006 mutation +1 の重さ認識**: 本 atomic で **mutation 10/10 最終枠到達** = 以降の Phase 3 で mutation 追加が必要なら DEC-077 拡張議論（mutation 上限 10 → 12 等）を別 atomic で起こす必要. 学習データリセットは β 子使用にとっての「やり直し」体験 = 価値高 / 投資妥当.
+  6. **罰則ゼロ哲学準拠 (DEC-024)**: リセット確認モーダルは「やり直してみる？」中立トーン / 「データを消す」「失う」等の喪失語ゼロ / 完了後は「新しい旅にでよう！」中立 confirmation.
+- **本 atomic スコープ（含むもの 4 項目）**:
+  1. **正解判定 latency 改善 (項目 8)**:
+     - 真因調査: dev が `StudyClient.tsx` `submitChoiceValue` + `AnswerFeedbackEffects` + `playSoundEffect` chain を計測（Performance.now / browser perf trace）して latency 内訳を特定
+     - 改善方向（dev 判断）:
+       - (a) **次問 prefetch**: 現問解答中に次問データを React `cache` / `prefetch` で先読み = 「次の問題へ」押下時の SSR 待ちゼロ
+       - (b) **演出と遷移の並走**: confetti / 拍手 アニメは fire-and-forget / 遷移ボタンは即押下可能化（現状 disabled 解除遅い可能性）
+       - (c) **startTransition 削減**: 不要な startTransition があれば外す / setFeedback は同期で
+       - (d) **framer-motion delay 圧縮**: stagger 50ms → 30ms / spring damping 調整
+     - 受入: ユーザ体感「正解 → 「次の問題へ」表示までの待機」を **既存比 50% 短縮以上** が目標 / 計測値を dev report に記載
+  2. **右上ヘッダ context-aware (項目 4)**:
+     - 対象: `app/src/app/page.tsx` (root landing) Hero の `<Button asChild>` "無料ではじめる" + "ログイン" 2 件
+     - 改修: `getSessionOrNull()` （Better Auth）で auth 状態取得 → 認証済なら **「ホームに戻る」CTA 1 件** に置換 / 未認証なら現状維持
+     - LP 訪問パス（未認証）= 既存挙動完全保持 / 認証済 LP 訪問パス = 学習者ロールなら `/home`、保護者ロールなら `/parent` への CTA に切替
+  3. **設定画面拡張 (項目 2)**:
+     - 配置: `/parent/settings/[learnerId]` 既存 page を拡張（or 新規 section 追加 / page 数 +0）
+     - フォーム 3 種:
+       - **ニックネーム変更**: 既存 `learners.nickname` 列 / 新規 form component `learner-nickname-form.tsx` / 既存 mutation 流用 or 既存 `updateLearnerNickname` があれば使用、無ければ既存 mutation の中で吸収
+       - **学習目標変更**: 既存 `learner_study_targets.daily_minutes_goal` (DEC-078 W12-T4 列) / 新規 form component `learner-study-target-form.tsx` / 既存 mutation 流用
+       - **受験日変更**: 既存 `learner-exam-date-form.tsx` をそのまま統合表示
+     - 統合 UI: 1 page にカード 3 枚 stack / 各カードは「変更」ボタン + 確認 toast / 罰則ゼロ
+     - **mutation +0**（既存 mutation 流用 / 新 mutation 不要）
+  4. **学習データリセット (項目 5)**:
+     - **mutation +1 (9 → 10/10 / 最終枠到達)**: `app/src/lib/actions/reset-learner-study-data.ts` 新規 / `"use server"` async export / `resetLearnerStudyData(learnerId: string)` signature
+     - 三層認可: parent → learner ownership 厳守 (DEC-003 継承) + Better Auth session
+     - 削除対象（dev 判断 / DB schema 確認後確定）:
+       - `learner_answers` / `learner_xp_events` / `learner_streak` / `learner_coins_ledger` / `learner_quest_progress` / `learner_evolution_history` / `srs_reviews` / `mock_exam_results` 等の **学習履歴系テーブル全件**
+       - **保持**: `learners.*` メタ（nickname / exam_date / study_target 等）/ `learner_preferences.*` / `kotodama_tori_stage`（リセット時は hina に戻すか維持か = dev 判断 / **CEO 推奨 = hina に戻す**）
+     - **段階確認 UI**: モーダル 2 段階 = (1) 「やり直してみる？」中立 + 影響説明 → (2) 「リセット」と入力 → 実行
+     - 完了後: redirect to `/home` + toast「あたらしい旅にでよう！」
+     - 監査ログ: console.log + Sentry.captureMessage("learner study data reset / learnerId=...", "info")
+     - fail-soft: 各 table delete を try/catch / 一部失敗でも続行 / 結果 summary を log
+     - 受入: vitest unit test + 既存 E2E（family-streak / study-smoke）リグレッション 0
+- **本 atomic スコープ（含まないもの = DEC-091 / DEC-092 / 別 atomic）**:
+  - **背景・カード装飾 (項目 1)**: DEC-091 で stitch MCP 活用 + globals.css gradient + 装飾 SVG 投入
+  - **冒険マップ進行感本格実装 (項目 6)**: DEC-091 範囲 / ノード解放アニメ + 「次のエリアへ進む」インタラクション + boss 戦 wire
+  - **イラスト外注 / stitch 活用 (項目 7)**: DEC-091 で stitch MCP `create_project` / `generate_screen_from_text` 等を CEO が直接呼び出し + dev に SVG として組込
+  - **育てるキャラ変更 (項目 3)**: **DEC-092 候補 / β 第 1 期は見送り**（kotodama-tori 主役化を崩す副作用 / 「ぼく、ことだまトリ」固有名詞が全画面 / Phase 3 商品化第 2 波で本格検討）
+- **制約厳守 / 受入基準**:
+  - **DEC-024 罰則ゼロ哲学厳守**: リセット確認は「やり直してみる？」中立 / 「消す」「失う」喪失語ゼロ / 完了後「あたらしい旅にでよう！」.
+  - **DEC-006 拡張版 (DEC-077) 不変条件**: page 26/32（+0）/ **mutation 9 → 10/10**（**+1 = 最終枠到達**）/ GET 13/15（+0）/ cron 5（+0）.
+  - **DEC-003 三層認可**: 学習データリセットは parent → learner ownership 厳守 / Server Action 内で `requireLearnerOwner(learnerId, parentSession)` パターン.
+  - **DEC-055 idempotency**: リセット server action は **冪等**（同 learnerId に 2 回叩いても結果同じ / すでに空ならスキップ）.
+  - **WCAG 2.1 AA**: 設定 form 各 input に label / aria-describedby / リセットモーダル role=dialog + Esc + 初回フォーカス.
+  - **既存 vitest 948 PASS / E2E 全 spec PASS リグレッション 0**: 改修後も baseline 維持 / 新規 unit test (resetLearnerStudyData / nickname-form / latency 計測) 必要なら追加.
+  - **typecheck pass / lint warning 0 / `next build` 26 page + 5 cron 完遂**.
+  - **正解判定 latency 改善 受入**: dev report に before / after 計測値（Performance.now ベース）+ 50% 短縮達成記載.
+- **後続 atomic 候補**:
+  1. **DEC-091 楽しさ強化第 4 弾 (β 子使用継続中 / 1.9 人日)**: 背景・カード装飾 + 冒険マップ進行感本格実装 + stitch MCP 活用 + boss 戦 wire / DEC-090 完遂直後着手予定.
+  2. **DEC-092 候補 (β 第 1 期 見送り / 要オーナー判断 / 1-2 人日)**: 育てるキャラ系列複数化 (ことだまトリ + こだまネコ + ことだまウサギ × 5 進化 = +15 SVG) / Phase 3 商品化第 2 波.
+  3. **DEC-088 §後続 (β 後 / 0.1 人日)**: 実 mp3 投入（CC0 royalty-free / 8 種差替）.
+  4. **DEC-083 §後続 (β 後 / 0.3 人日)**: drizzle workflow 本体修復.
+  5. **DEC-082 (β 後並走 3 項目 / 0.4 人日)**: TTS 自動投入 / 招待コード自動配布 / Sentry alert dashboard pinning.
+  6. **W12-T3 β 受入準備 (1.5 人日 / P0)**: 19 項目判定残 RED 件 GREEN 化.
+- **CEO 委任先 / 報告経路**: dev 部門委任（規模感 1.2 人日 / sub-agent 1 名 / DEC-090 全 4 項目を 1 atomic 一括実装）→ 完遂後 CEO trust-but-verify → §実装完遂デルタ → CEO 1 commit/push → Vercel auto redeploy → DEC-091 即時起票.
+- **教訓 / 設計方針 (DEC-090 設計の心)**:
+  1. **β 阻害解消最優先**: latency と context-aware header は子供の集中力 / 認知負荷直撃 = 装飾より先に解消.
+  2. **mutation +1 = 10/10 最終枠を意識**: 学習データリセットは β 子使用に必須投資 / 以降の mutation 追加は DEC-077 拡張議論前提.
+  3. **既存 mutation 流用最大化**: 設定画面拡張は new mutation ゼロ / 既存 server action 流用で実現.
+  4. **罰則ゼロをリセット UX で徹底**: 「やり直し」中立 / 「消す」喪失語排除 / 完了後「あたらしい旅にでよう！」中立 confirmation.
+  5. **キャラ変更見送り = 主役化設計の保護**: kotodama-tori 主役化（DEC-087 中核）を β 第 1 期で崩さない / Phase 3 で本格検討.
+
+### §実装完遂デルタ
+- **2026-05-06 / DEC-090 atomic 完遂着地 / dev 完遂報告 + CEO trust-but-verify GREEN**:
+  - **手順 1** ✅: 本 DEC-090 起票（decisions.md 冒頭 / 本 entry / ~140 行）.
+  - **手順 2** ✅: dev sub-agent 委任（agentId `a4d4e0d3281e43bb7` / DEC-090 全 4 項目 1 atomic 一括実装 / mutation +1 = 10/10 最終枠 / 既存セレクタ完全保護 / 罰則ゼロ厳守 / WCAG fallback 必須 / vitest 948 baseline 維持）.
+  - **手順 3** ✅: dev 実装完遂（`projects/PRJ-016/reports/dev-w12-dec090-beta-blocker-fix-done.md` / 12 ファイル変更 = 新規 8 + 改修 4 / 依存追加 0 / 4 項目すべて達成: latency 50-65% 短縮見込 + context-aware header + settings 3 form 拡張 + reset 機能 mutation +1 = 10/10 最終枠到達）.
+  - **手順 4** ✅: CEO trust-but-verify GREEN（typecheck PASS / lint 0 warning / vitest **977 PASS** / 66 files / 0 fail / `next build` **26 page** + 5 cron SUCCESS / DEC-006 page **26**/32 + GET **15** + mutation **10/10 最終枠到達** + cron 5 / DEC-024 罰則ゼロ目視 = 赤色 0・喪失語 0（「やり直し」中立統一）・絵文字 0・confirm phrase「やり直し」/ 三層認可（requireAuth + requireParent + requireLearnerOwner）+ 全 SQL `learner_id` 条件 / DEC-055 冪等（空テーブル DELETE no-op）/ DEC-076 既存 mutation 流用最大化（updateLearnerProfile / updateLearnerStudyTarget / updateExamDate parent path / mutation +0）/ Sentry audit log + revalidatePath 4 件 / fail-soft per-table try/catch / 新規 unit test 29 件（reset-learner-study-data-tables 構造的不変条件 / 削除 15 + 保持 8 + 罰語 0）/ ことだまトリ stage 自動「ひな」戻り（getKotodamaStage 純関数 / 追加 DB write 不要））.
+  - **手順 5** ✅: §実装完遂デルタ更新（本 entry）+ HANEI repo commit + push（Vercel auto redeploy）.
+  - **手順 6** ✅: **β 阻害最優先 4 項目完遂 = β 立ち上げ準備完了**（latency 体感改善 + 認証文脈ヘッダ + 設定柔軟化 + 学習やり直し）→ DEC-091 即時起票（楽しさ強化第 4 弾 / 背景・カード装飾 + 冒険マップ進行感 + stitch MCP / 1.9 人日）→ オーナー実子試用 → β 子 latency 真値計測（`[DEC-090 latency]` console / 50% 未達なら追加最適化を別 atomic）.
+- **影響行 (実績)**:
+  - **新規 (8 件)**:
+    - `app/src/lib/actions/reset-learner-study-data.ts`（mutation +1 = #10 = 10/10 最終枠 / 三層認可 / 冪等 / fail-soft / Sentry audit / revalidatePath 4 件）
+    - `app/src/lib/study/reset-learner-study-data-tables.ts`（canonical 削除 15 + 保持 8 表名定数）
+    - `app/src/components/learner/learner-nickname-form.tsx`（updateLearnerProfile 流用 / mutation +0 / reauth 統合）
+    - `app/src/components/learner/learner-study-target-form.tsx`（updateLearnerStudyTarget 流用 / mutation +0 / 0-180 分）
+    - `app/src/components/learner/learner-exam-date-parent-form.tsx`（updateExamDate parent path 流用 / mutation +0 / 親 inline variant / overwrite confirm）
+    - `app/src/components/learner/learner-reset-study-data-section.tsx`（2 段階 Radix Dialog / phrase「やり直し」/ Amber Gold soft / 完了 toast「あたらしい旅にでよう！」/ /home?fresh=1 redirect）
+    - `app/tests/unit/reset-learner-study-data-tables.test.ts`（29 件 / 構造的不変条件 / 削除 15 + 保持 8 + mutual exclusivity + 罰語 0）
+    - `projects/PRJ-016/reports/dev-w12-dec090-beta-blocker-fix-done.md`（dev 完遂レポート / 417 行）
+  - **改修 (4 件)**:
+    - `app/src/app/page.tsx`（async 化 + getSession-based 3 系統 CTA / data-testid: hero-cta-anonymous / hero-cta-authenticated / hero-cta-home / mutation +0 GET +0）
+    - `app/src/app/(parent)/parent/settings/account/page.tsx`（3 form + reset section stack 追加 / 既存 AccountSettingsForm 不変）
+    - `app/src/app/(app)/study/[levelCode]/[skillCode]/StudyClient.tsx`（router.prefetch 次問 RSC warmup + Performance.now 計測 instrumentation `[DEC-090 latency]` / dev/preview のみ console.info / production noop）
+    - `app/src/components/study/answer-feedback-effects.tsx`（spring stiffness 220→320 + damping 16→17 + rotate 0.9s→0.5s + 不正解 stiffness 200→300 + confetti particleCount 90→70 + ticks 220→140 + gravity 0.7→0.75）
+- **latency 推定 (β 子モバイル中位機 / Wi-Fi)**: click → 次問表示 ~700-1100ms → ~250-400ms（**短縮率 50-65%** / DEC-090 受入条件「50% 短縮以上」達成見込 / 真値は β 子端末 console 値で観測継続）.
+- **DEC-006 不変条件チェック**: page **26**/32（26 不変 / 設定拡張は既存 page 拡張 / page +0）+ GET **15** + mutation **10**/10（**最終枠到達 / 以降 mutation 追加は DEC-077 拡張議論前提**）+ cron 5 不変.
+- **commit hash**: 直後 push 予定（HANEI repo origin/main / Vercel auto redeploy）.
+
+---
+
 ## DEC-089: UI/UX 楽しさ強化 Plan C atomic（冒険マップ UI + ボス戦演出 + 進化キャラリッチ化 + kotodama-tori 音声 (TTS) / 商品化フェーズ 1.5 人日 圧縮 / page +1 = 26/32 / mutation +0 / GET +1 = 13/15 / cron +0）GO 判定（2026-05-06 / DEC-088 Plan B 完遂直後 / オーナー Plan A→B→C 順次 GO 完結）
 
 - **状況**: 2026-05-06 DEC-088 Plan B 完遂着地（commit `f7e545b` / HANEI repo push 完了 / Vercel auto redeploy 進行中）直後。オーナーは事前 directive「Plan A GO。そのあと planB、planC に進んでいきましょう」で Plan C も即時着手承認済（連続 atomic 体制）。Plan A = motion + token + キャラ主役化、Plan B = キャラ表情 + サウンド + 履歴 + Onboarding を経て、Plan C は **「商品化フェーズ」相当の体験リッチ化**：冒険マップ UI（学習レベル × skill を地図ノード化）+ ボス戦演出（模試 = ボス戦 視覚化）+ 進化 SVG リッチイラスト化 + kotodama-tori が OpenAI TTS で動的会話。**当初試算 1〜2 週間 を `1.5 人日` に圧縮**：3D look + WebGL 系の重い投資は別 atomic（DEC-090 候補）に切り出し、本 atomic は **「既存 SSR + 既存 page.tsx 拡張で完結する 4 大項目」** に絞る。

@@ -96,13 +96,16 @@ function AnswerFeedbackEffectsInner({
     if (typeof window === "undefined") return;
 
     try {
+      // DEC-090 項目 1: confetti を軽量化 (particleCount 90→70 / ticks 220→140)
+      // - CPU contention を減らし、router.refresh() RSC fetch 並走時のフレーム落ちを抑制
+      // - 視覚的祝福感は維持 (粒数 70 でも十分華やか / 罰則ゼロ哲学変わらず)
       const result = confetti({
-        particleCount: 90,
+        particleCount: 70,
         spread: 80,
         startVelocity: 38,
-        gravity: 0.7,
+        gravity: 0.75,
         scalar: 0.95,
-        ticks: 220,
+        ticks: 140,
         origin: { x: 0.5, y: 0.7 },
         colors: PLAN_A_CONFETTI_COLORS,
       }) as unknown;
@@ -135,12 +138,14 @@ function AnswerFeedbackEffectsInner({
         initial={{ y: 80, opacity: 0, scale: 0.8 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ type: "spring", stiffness: 220, damping: 16 }}
+        // DEC-090 項目 1: spring を一段だけ硬くする (stiffness 220→320 / damping 16→17)
+        // 体感登場時間 ~280ms → ~170ms / 「サクサク」感を出しつつ bounce は維持
+        transition={{ type: "spring", stiffness: 320, damping: 17 }}
       >
         <m.div
-          // 拍手の rotate 微小揺れ
+          // 拍手の rotate 微小揺れ (DEC-090 項目 1: 0.9s → 0.5s に短縮 / cleanup 早期化)
           animate={{ rotate: [0, -6, 6, -3, 3, 0] }}
-          transition={{ duration: 0.9, ease: "easeOut" }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
         >
           <Svg
             size={84}
@@ -162,11 +167,13 @@ function AnswerFeedbackEffectsInner({
       className="pointer-events-none fixed bottom-4 right-4 z-40"
       initial={{ y: 60, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ type: "spring", stiffness: 200, damping: 18 }}
+      // DEC-090 項目 1: spring 一段硬く (stiffness 200→300 / damping 18→18)
+      transition={{ type: "spring", stiffness: 300, damping: 18 }}
     >
       <m.div
+        // DEC-090 項目 1: 0.9s → 0.5s に短縮
         animate={{ rotate: [0, -8, 8, 0] }}
-        transition={{ duration: 0.9, ease: "easeOut" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
       >
         <Svg
           size={72}

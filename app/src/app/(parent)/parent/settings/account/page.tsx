@@ -36,7 +36,13 @@ import {
 } from "@/lib/auth/guards";
 import { getLearnersForParent } from "@/lib/learner/repository";
 import { resolveActiveLearner } from "@/lib/study/learner-switch";
+import { getLearnerStudyTarget } from "@/lib/actions/learner-study-target";
 import { AccountSettingsForm } from "./account-form";
+import { LearnerNicknameForm } from "@/components/learner/learner-nickname-form";
+import { LearnerStudyTargetForm } from "@/components/learner/learner-study-target-form";
+import { LearnerExamDateParentForm } from "@/components/learner/learner-exam-date-parent-form";
+import { LearnerResetStudyDataSection } from "@/components/learner/learner-reset-study-data-section";
+import type { ExamLevel } from "@/lib/actions/exam-date-validation";
 
 export const metadata = {
   title: "アカウント設定",
@@ -74,6 +80,7 @@ export default async function ParentSettingsAccountPage({
 
   await requireLearnerOwner(session.userId, activeId);
   const learner = learners.find((l) => l.id === activeId)!;
+  const studyTarget = await getLearnerStudyTarget(activeId);
 
   return (
     <main
@@ -125,6 +132,39 @@ export default async function ParentSettingsAccountPage({
         initialNickname={learner.nickname}
         initialTargetLevel={learner.targetEikenLevel}
       />
+
+      {/* DEC-090 §3 設定画面拡張: 3 枚カード stack (mutation +0 / 既存 mutation 流用) */}
+      <section
+        className="mt-6 space-y-4"
+        data-testid="parent-settings-learner-extras"
+        aria-label="学習者ごとの設定"
+      >
+        <LearnerNicknameForm
+          learnerId={learner.id}
+          initialNickname={learner.nickname}
+        />
+        <LearnerStudyTargetForm
+          learnerId={learner.id}
+          initialDailyMinutesTarget={studyTarget.dailyMinutesTarget}
+        />
+        <LearnerExamDateParentForm
+          learnerId={learner.id}
+          initialDate={learner.examDate}
+          level={learner.targetEikenLevel as ExamLevel}
+        />
+      </section>
+
+      {/* DEC-090 §4 学習データやり直し (mutation +1 = 10/10 最終枠) */}
+      <section
+        className="mt-8"
+        data-testid="parent-settings-learner-reset"
+        aria-label="学習のやり直し"
+      >
+        <LearnerResetStudyDataSection
+          learnerId={learner.id}
+          learnerNickname={learner.nickname}
+        />
+      </section>
     </main>
   );
 }
