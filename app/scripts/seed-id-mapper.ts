@@ -31,7 +31,10 @@
  *
  *   - W5 listening eiken-3:       L3-001  〜 L3-020   (20 問 / β 開始用 / DEC-079)
  *
- * 累計: 200 (W2) + 401 (W3) + 221 (W4) + 20 (W5) = 842 問
+ *   - W6 grammar eiken-3:         G3-001  〜 G3-030   (30 問 / β 阻害解消 / DEC-094)
+ *   - W6 listening eiken-3:       L3-021  〜 L3-050   (30 問 / W5 L3-001..020 と連番接続 / DEC-094)
+ *
+ * 累計: 200 (W2) + 401 (W3) + 221 (W4) + 20 (W5) + 60 (W6) = 902 問
  *
  * 重要:
  *   - 既存 seed-problems-w2/w3/w4.ts のデータ本体（問題文 / 選択肢 / 正解 / 解説）
@@ -488,7 +491,41 @@ export function assignW5Ids(w5: W5BundleShape): W5IdResult {
 }
 
 // ---------------------------------------------------------------------------
-// 統合: 全 842 問の自然 ID 採番
+// W6 採番 (β 阻害解消最終ピース 3 級 grammar 30 + listening 30 = 60 問 / DEC-094)
+// ---------------------------------------------------------------------------
+
+interface W6BundleShape {
+  grammar: ReadonlyArray<Parameters<typeof toSeedChoice>[0]>;
+  listening: ReadonlyArray<Parameters<typeof toSeedChoice>[0]>;
+}
+
+export interface W6IdResult {
+  /**
+   * 4 択型 60 問:
+   *   - 3 級 grammar 30 問:   G3-001 〜 G3-030
+   *   - 3 級 listening 30 問: L3-021 〜 L3-050 (W5 L3-001..020 と連番接続)
+   */
+  choiceProblems: SeedChoice[];
+}
+
+export function assignW6Ids(w6: W6BundleShape): W6IdResult {
+  const choiceProblems: SeedChoice[] = [];
+
+  // 3 級 grammar 30 問: G3-001 〜 G3-030
+  w6.grammar.forEach((p, i) => {
+    choiceProblems.push(toSeedChoice(p, pad("G3", i + 1, 3)));
+  });
+
+  // 3 級 listening 30 問: L3-021 〜 L3-050 (W5 L3-001..020 と連番接続)
+  w6.listening.forEach((p, i) => {
+    choiceProblems.push(toSeedChoice(p, pad("L3", i + 21, 3)));
+  });
+
+  return { choiceProblems };
+}
+
+// ---------------------------------------------------------------------------
+// 統合: 全 902 問の自然 ID 採番
 // ---------------------------------------------------------------------------
 
 export interface AllSeedIds {
@@ -498,7 +535,8 @@ export interface AllSeedIds {
    *   + 271 (W3 listening+grammar+reading+repl)
    *   + 181 (W4 vocab+listening+repl)
    *   +  20 (W5 listening eiken-3)
-   *   = 672
+   *   +  60 (W6 grammar+listening eiken-3)
+   *   = 732
    */
   choiceProblems: SeedChoice[];
   /** writing: 100 (W3) */
@@ -507,7 +545,7 @@ export interface AllSeedIds {
   reorderProblems: SeedReorder[];
   /** reading passage: 40 (W4 / 1 passage = 1 problem) */
   readingPassageProblems: SeedReadingPassage[];
-  /** 合計件数 = 200 + 401 + 221 + 20 = 842 */
+  /** 合計件数 = 200 + 401 + 221 + 20 + 60 = 902 */
   total: number;
 }
 
@@ -536,11 +574,18 @@ export async function loadAllSeedIds(): Promise<AllSeedIds> {
   };
   const w5 = assignW5Ids(w5Module.default);
 
+  // ---- W6 (β 阻害解消最終ピース / 3 級 grammar 30 + listening 30 = 60 問 / DEC-094) ----
+  const w6Module = (await import("./seed-problems-w6")) as {
+    default: W6BundleShape;
+  };
+  const w6 = assignW6Ids(w6Module.default);
+
   const choiceProblems = [
     ...w2,
     ...w3.choiceProblems,
     ...w4.choiceProblems,
     ...w5.choiceProblems,
+    ...w6.choiceProblems,
   ];
 
   // 重複検知（早期失敗）

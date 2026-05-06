@@ -1,5 +1,107 @@
 # PRJ-016 意思決定記録（Decisions）
 
+## DEC-094: β 阻害解消最終ピース atomic（W6 シード 60 問追加 / 3 級 grammar 30 + 3 級 listening 30 / cron 起動原因 §F 記録 / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-093 直後 / オーナー β 試用 真の阻害 = production grammar-3 / listening-3 問題 0 件）
+
+- **背景**: DEC-093 §β で「β 阻害解消は UI 救済 (preparing) で即時 / seed pipeline 修復は別 atomic」と分離した宣言の **後者**. CEO の `scripts/check-missing-skills.ts` で production Turso DB を直接調査した結果、12 area combo のうち以下 2 combo に問題が **0 件**:
+  - `3 / grammar-3:   0 problems` ⚠️ MISSING
+  - `3 / listening-3: 0 problems` ⚠️ MISSING (※ W5 で 20 問 seed 生成したはずが production 未投入)
+  - 他 9 combo は seed 済 (20-160 問). DEC-093 で UI 救済 (preparing) は済んでいるが、**実問題が無いと β 試用継続不可** = 子供がノードを見つけても解けない.
+- **判定**: **GO**（DEC-094 = 1 atomic / **page +0**（26/32 不変）/ **mutation +0**（10/10 最終枠維持）/ **GET +0**（15 不変）/ **cron +0**（5 不変）/ **deps +0** / **seed +60 問 (W6 / G3-001..030 + L3-021..050)**）.
+- **判断根拠**:
+  1. **β 阻害最終ピース**: DEC-093 で UI を「じゅんびちゅう」に救済済. 残るは「実問題 0」を seed 投入で即解消 = β 試用継続可.
+  2. **W5 (DEC-079) の precedent コピー**: 新規アーキテクチャ導入なし. seed-problems-w6.ts + assignW6Ids + loadAllSeedIds merge のみ. 規模最小.
+  3. **cron 即時修復は scope out**: §F の root cause 調査で「cron は eiken-5 vocab 固定 / queue 動的 skill 未実装 / TTS pipeline 未統合」と確定. cron 修復は Phase 2 後半で別案件として計画 (本 atomic では seed 投入で先送り解消 = β 体験を即解放).
+  4. **DEC-006 不変条件 全部位 +0**: スクリプトデータ追加のみ. mutation 10/10 最終枠維持.
+  5. **罰則ゼロ哲学 (DEC-024)**: 60 問全件で「失敗 / サボ / ダメ / 悪い」grep ゼロ自動検証 (W6 unit test).
+  6. **DEC-038 / W6 B-6**: skill_id は `<base>-<level>` 形式 ("grammar-3" / "listening-3"). mapSkillId 経由で確定.
+  7. **DEC-055 idempotency**: seed-runner は `onConflictDoNothing()` 冪等 / TTS / R2 PUT も objectExists skip / DB UPDATE も同一値冪等.
+- **本 atomic スコープ（A-G）**:
+  - **A. seed 60 問追加 (`scripts/seed-problems-w6.ts` 新規)**:
+    - **A-1. grammar-3 30 問 (G3-001..030)** — 英検 3 級 mcq / `(   )` 空欄補充
+      - 範囲: 現在完了 / 受動態 / 関係詞 (who/which/that) / 比較 / 動名詞 vs 不定詞 / 過去進行形 / 助動詞 (must/should/may/could) / 間接疑問 / there is/are / 付加疑問 / it is ... to do / want O to do / make O C
+      - correct_index 分散: 0:8 / 1:7 / 2:8 / 3:7
+      - difficulty 分散: 0 5 / 1 18 / 2 7
+    - **A-2. listening-3 30 問 (L3-021..050 / W5 L3-001..020 と連番接続)** — listening_mcq + audio_transcript
+      - 場面 14: 学校 / 家族 / 季節 / 食事 / 趣味 / 数字 / 時間 / スポーツ / 動物 / 色 / 天気 / 旅行 / 病気 / 道案内
+      - audio_transcript 30-100 chars / kid-safe / 過去・進行・比較・関係詞・現在完了 混合
+      - correct_index 分散: 0:8 / 1:7 / 2:8 / 3:7 / difficulty 分散: 0 4 / 1 18 / 2 8
+  - **B. mapper 拡張 (`scripts/seed-id-mapper.ts`)**:
+    - 採番ルール表に W6 行追加 / 累計 902 問 更新
+    - `assignW6Ids(w6: W6BundleShape): W6IdResult` 実装 (G3-001..030 + L3-021..050)
+    - `loadAllSeedIds()` 内に W6 import + merge 追加 / `AllSeedIds` interface コメント更新 (732 choice / 902 total)
+  - **C. seed-runner expected count 更新 (`scripts/seed-problems-runner.ts`)**:
+    - 警告閾値 `if (summary.total !== 842)` → `!== 902`
+    - L7 ヘッダコメント `計 842 問` → `+ W6 (60 問 / DEC-094) = 計 902 問`
+  - **D. テスト更新**:
+    - **D-1. `tests/unit/seed-id-mapper.w5.test.ts`** baseline 更新 (842 → 902 / 672 → 732 / 822 → 882 / W5 のみ除外する filter 厳密化)
+    - **D-2. `tests/unit/seed-id-mapper.w6.test.ts`** 新規 12 ケース (W5 と同型 + correct_index 分散検査 + 罰語ゼロ grep)
+    - **D-3. `tests/unit/scripts.seed-runner.test.ts`** 842 → 902 baseline 更新
+    - **D-4. `tests/unit/scripts.seed-id-mapper.test.ts`** 842 → 902 / 672 → 732 baseline 更新
+  - **E. TTS / R2 / DB apply 対応 (実 OpenAI / R2 / Turso 課金は実行しない / 実装のみ)**:
+    - `scripts/generate-tts-listening-3.ts` の `loadEiken3Listening()` は `loadAllSeedIds` から filter するため自動的に 50 件対象 (W5 20 + W6 30) → スクリプト本体変更不要 / **ヘッダコメントのみ更新** (20 問 → 50 問 / DEC-079 + DEC-094)
+    - `scripts/apply-audio-urls-eiken3-listening.ts` も同上 (自動的に 50 件対象 / **ヘッダコメントのみ更新**)
+  - **F. cron 起動原因調査 (root cause 3 行サマリ)**:
+    - `src/app/api/cron/generate-problems/route.ts` L73 で `generateEiken5VocabProblem()` をハードコード呼び出し → eiken-5 vocab 以外は queue 投入しても auto-generate されない (Phase 1 設計 / Phase 2 で skill/level 動的化予定だが未実装).
+    - さらに `generated_problems_queue` 行が grammar-3 / listening-3 用に投入されていない可能性高 (queue 投入機構と cron 動的化が両方 Phase 2 後半).
+    - listening は cron で TTS pipeline 統合も未実装 = audio_url を auto attach する仕組みなし.
+    - → **DEC-094 では cron 修復 scope out / 本 atomic で seed 投入で β 阻害先送り解消** / Phase 2 後半で cron skill/level 動的化を別 PRJ で計画.
+  - **G. decisions.md DEC-094 起票 (本 entry)**.
+- **本 atomic スコープ（含まないもの = 別 atomic）**:
+  - **cron skill/level 動的化 + queue 投入機構 + TTS pipeline 統合**: Phase 2 後半で別案件 (Vercel cron + LLM-as-Judge skill/level 動的化 / DEC-077 後継).
+  - **TTS voice 多様化**: nova 1 本のまま (DEC-079 / β + 1 ヶ月評価で多 voice 拡張判断).
+  - **読解 (eiken-3 reading) 追加問題**: 既に R3-001..050 で 50 問 seed 済 / 不足判明時に別 atomic.
+- **制約厳守 / 受入基準**:
+  - **DEC-024 罰則ゼロ哲学**: 60 問全件で「失敗 / サボ / ダメ / 悪い」grep ゼロ. W6 unit test の `BAN_WORDS grep` で自動検証.
+  - **DEC-006 拡張版 (DEC-077) 不変条件**: page **26**/32（+0）/ mutation **10**/10（+0 最終枠維持）/ GET **15**（+0）/ cron **5**（+0）.
+  - **DEC-003 三層認可**: seed 投入は admin スクリプト / 既存認可継承 / 新規 GET / mutation 0.
+  - **DEC-055 idempotency**: seed-runner `onConflictDoNothing()` / TTS objectExists skip / DB UPDATE 冪等.
+  - **既存 vitest 978+ PASS / E2E 全 spec PASS リグレッション 0**: 既存テストの total/length baseline は W6 +60 を反映する形で更新.
+  - **typecheck pass / lint warning 0 / `next build` 35 routes 完遂**.
+  - **kid-safe 固有名詞のみ**: Lily / Tom / Ben / Mary / Mike / Anna / Ken / Yuki / Sara / Coco / Mimi / Hanei Town / Sakura Elementary.
+- **CEO 委任先 / 報告経路**: dev sub-agent 委任（規模感 0.6 人日 / 1 atomic 一括）→ 完遂後 CEO trust-but-verify → §実装完遂デルタ → CEO 1 commit/push → オーナーローカルで `npm run db:seed` + `npm run ai:generate-tts-listening-3` + `npm run db:apply-audio-urls-eiken3-listening` 実行 → β 試用再開.
+- **教訓 / 設計方針 (DEC-094 設計の心)**:
+  1. **UI 救済と seed 修復は分離 + 順序立てて実行**: DEC-093 で UI を罰則ゼロで安全化 → DEC-094 で seed 投入 → β 体験完全解放. 並行ではなく直列でリスクを最小化.
+  2. **precedent コピー (W5 / DEC-079) で新規アーキテクチャ導入なし**: 60 問追加でも mapper の関数 1 個追加 + import 1 行のみ. 既存 vitest baseline の数字更新が主作業.
+  3. **cron 即時修復より seed 投入で β 阻害先送り解消が合理**: cron 動的化は Phase 2 後半の本格課題. 本 atomic は β 試用継続のための最短経路.
+
+### §実装完遂デルタ
+
+- **完遂日時**: 2026-05-06（DEC-093 完遂直後 / 同日内）
+- **担当**: dev sub-agent (PRJ-016)
+- **commit**: 未実施（CEO trust-but-verify 後に CEO が 1 commit / 1 push 予定）
+- **検証 5 ゲート**:
+  - typecheck PASS（warning 0）
+  - lint warning 0
+  - **vitest 990 passed / 67 files PASS**（DEC-093 baseline 978 → DEC-094 990 / +12（W6 新規テストファイル 12 ケース追加）/ 失敗 0 / regression 0 / Duration 6.42s）
+  - **next build SUCCESS**（Compiled in 10.5s / **35 routes 全 PASS**）
+  - **DRY_RUN seed-runner total=902** 確認（inserted=902 / skipped=0）
+- **DEC-006 拡張版（DEC-077）不変条件 全部位 +0 達成**:
+  - page **26**/32（+0）/ mutation **10**/10（+0 最終枠維持）/ GET **15**（+0）/ cron **5**（+0）/ deps **0**（+0）
+- **新規ファイル (2 件)**:
+  - `app/scripts/seed-problems-w6.ts`（60 問 / grammar 30 + listening 30）
+  - `app/tests/unit/seed-id-mapper.w6.test.ts`（12 ケース / W5 同型 + 罰語ゼロ grep）
+- **更新ファイル (5 件)**:
+  - `app/scripts/seed-id-mapper.ts`（assignW6Ids 関数 + loadAllSeedIds W6 merge + 累計 902 / interface コメント）
+  - `app/scripts/seed-problems-runner.ts`（842 → 902 baseline / ヘッダコメント）
+  - `app/scripts/generate-tts-listening-3.ts`（ヘッダコメントのみ / 20 問 → 50 問）
+  - `app/scripts/apply-audio-urls-eiken3-listening.ts`（ヘッダコメントのみ / 20 問 → 50 問）
+  - `app/tests/unit/seed-id-mapper.w5.test.ts`（842 → 902 / 672 → 732 / 822 → 882 / W5 filter 厳密化）
+  - `app/tests/unit/scripts.seed-id-mapper.test.ts`（842 → 902 / 672 → 732）
+  - `app/tests/unit/scripts.seed-runner.test.ts`（842 → 902）
+- **β 阻害最終ピース 完全解消**:
+  1. ✅ **production seed 投入準備完了**: G3-001..030 (30 問) + L3-021..050 (30 問) 計 60 問 / オーナーが `npm run db:seed` で投入 (冪等 / 既存 842 件は skip / 新規 60 件 inserted)
+  2. ✅ **cron 起動原因 root cause 確定 (§F)**: route.ts L73 ハードコード + queue 投入未実装 + TTS pipeline 未統合 / Phase 2 後半で別案件
+- **オーナー次アクション (本 PR merge + Vercel deploy 後 / ローカル実行)**:
+  1. `npm run db:seed` (Turso production / 60 件 inserted / 既存 W5 listening-3 が production 未投入なら +20 件 inserted)
+  2. `npm run ai:generate-tts-listening-3` (OpenAI tts-1 / 50 件 / 推定 ¥10 程度 / R2 既存 skip)
+  3. `npm run db:apply-audio-urls-eiken3-listening` (audioUrl mapping / 50 件 / 冪等)
+  4. アプリで eiken-3 grammar / listening を解いて確認
+- **後続 (継続)**:
+  - cron skill/level 動的化 + queue 投入機構 + TTS pipeline 統合 (Phase 2 後半 / 別 PRJ 候補)
+  - TTS voice 多様化判断 (β + 1 ヶ月評価 / DEC-079)
+
+---
+
 ## DEC-093: β 試用フィードバック対応 第 3 波 atomic（背景白リバート + 冒険マップ「じゅんびちゅう」状態追加 + 空問題セット遷移時の子供向け UX 改善 / 1.1 人日 / page +0 / mutation +0 / GET +0 / cron +0 / deps +0）GO 判定（2026-05-06 / DEC-092 完遂直後 / オーナー β 試用 第 3 波フィードバック 2 件 = β 阻害級）
 
 - **状況**: 2026-05-06 DEC-092 完遂直後. オーナー実子 β 試用 第 3 波で 2 件のフィードバック受領: (1)「背景は白に戻してよい」(DEC-092 §B で oklch lightness 0.93-0.94 / chroma 0.06-0.07 (Lavender → Sky → Mint pastel pop) gradient を導入したが、オーナー判断で部分リバート許可) / (2)「読解やリスニングが選択できない」(= β 阻害級).

@@ -1,11 +1,13 @@
 /**
- * scripts/apply-audio-urls-eiken3-listening.ts (W12-T5 / DEC-079)
+ * scripts/apply-audio-urls-eiken3-listening.ts (W12-T5 / DEC-079 + DEC-094)
  *
- * 用途: TTS 生成完了後 / `problems` テーブルの 3 級 listening 行に対し
- *       `audio_url = ${R2_PUBLIC_URL}/tts/v1/L3-XXX-nova.mp3` を batch UPDATE。
+ * 用途: TTS 生成完了後 / `problems` テーブルの 3 級 listening 行 (50 問 / W5 20 + W6 30)
+ *       に対し `audio_url = ${R2_PUBLIC_URL}/tts/v1/L3-XXX-nova.mp3` を batch UPDATE。
+ *       `loadAllSeedIds()` から (level=eiken-3 / skill=listening) を全件 filter するため、
+ *       W6 追加で自動的に対象 50 件 (W5 L3-001..020 + W6 L3-021..050) になる。
  *
- * 仕様 (DEC-079 / DEC-055 冪等):
- *   - `loadAllSeedIds()` で対象 ID (L3-001..L3-020) を取得
+ * 仕様 (DEC-079 + DEC-094 / DEC-055 冪等):
+ *   - `loadAllSeedIds()` で対象 ID (L3-001..L3-050 / 50 問) を取得
  *   - `publicUrlFor(cacheKey)` で URL を構築
  *   - drizzle update where `id = L3-XXX`
  *   - 同一値再 UPDATE は安全 (冪等)

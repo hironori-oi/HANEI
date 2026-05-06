@@ -1,11 +1,11 @@
 /**
- * seed-id-mapper.w5.test.ts (W12-T5 / DEC-079)
+ * seed-id-mapper.w5.test.ts (W12-T5 / DEC-079 + DEC-094 baseline 更新)
  *
  * 検証ポイント:
  *  1. assignW5Ids: L3-001 〜 L3-020 で 20 件
- *  2. loadAllSeedIds: total が 842 になる
- *  3. L3-001 〜 L3-020 が他 ID (L4-001..L4-100 / L5-001..L5-100 等) と衝突しない
- *  4. 既存 200 + 401 + 221 = 822 件が破壊されない
+ *  2. loadAllSeedIds: total が 902 (DEC-094 で W6 60 問追加)
+ *  3. L3-001 〜 L3-020 が他 ID (L4-001..L4-100 / L5-001..L5-100 / L3-021..050 等) と衝突しない
+ *  4. 既存 200 + 401 + 221 + 60 = 882 件が破壊されない (W5 を除いた件数)
  *  5. 罰語 grep (失敗 / サボ / ダメ / 悪い) = 0 件
  *     (W5 audio_transcript / choices / explanation_jp 全件)
  */
@@ -41,15 +41,15 @@ describe("assignW5Ids() (W5 / DEC-079)", () => {
   });
 });
 
-describe("loadAllSeedIds() / W5 統合 (DEC-079)", () => {
-  it("total = 842 (200 + 401 + 221 + 20)", async () => {
+describe("loadAllSeedIds() / W5 統合 (DEC-079 + DEC-094 baseline)", () => {
+  it("total = 902 (200 + 401 + 221 + 20 + 60 / DEC-094 で W6 +60)", async () => {
     const all = await loadAllSeedIds();
-    expect(all.total).toBe(842);
+    expect(all.total).toBe(902);
   });
 
-  it("choiceProblems 内訳 = 200 (W2) + 271 (W3) + 181 (W4) + 20 (W5) = 672", async () => {
+  it("choiceProblems 内訳 = 200 (W2) + 271 (W3) + 181 (W4) + 20 (W5) + 60 (W6) = 732", async () => {
     const all = await loadAllSeedIds();
-    expect(all.choiceProblems.length).toBe(672);
+    expect(all.choiceProblems.length).toBe(732);
     expect(all.writingProblems.length).toBe(100);
     expect(all.reorderProblems.length).toBe(30);
     expect(all.readingPassageProblems.length).toBe(40);
@@ -77,19 +77,23 @@ describe("loadAllSeedIds() / W5 統合 (DEC-079)", () => {
     expect(idSet.has("V5W4-100")).toBe(true);
   });
 
-  it("既存 822 件 (W2 200 + W3 401 + W4 221) が破壊されない", async () => {
+  it("既存 882 件 (W2 200 + W3 401 + W4 221 + W6 60) が破壊されない (W5 のみ除外)", async () => {
     const all = await loadAllSeedIds();
-    // W5 を除いた件数
-    const nonW5Choice = all.choiceProblems.filter(
-      (p) => !p.id.startsWith("L3-"),
-    );
-    expect(nonW5Choice.length).toBe(672 - 20);
+    // W5 のみ除外: L3-001..L3-020 のみ (W6 listening L3-021..L3-050 は維持)
+    const nonW5Choice = all.choiceProblems.filter((p) => {
+      if (!p.id.startsWith("L3-")) return true;
+      const num = Number(p.id.slice(3));
+      // W5 = L3-001..020 のみ除外
+      return !(num >= 1 && num <= 20);
+    });
+    // W2+W3+W4+W6 choice = 200 + 271 + 181 + 60 = 712
+    expect(nonW5Choice.length).toBe(712);
     expect(
       nonW5Choice.length +
         all.writingProblems.length +
         all.reorderProblems.length +
         all.readingPassageProblems.length,
-    ).toBe(822);
+    ).toBe(882);
   });
 });
 

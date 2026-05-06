@@ -260,15 +260,15 @@ describe("buildReadingPassageQuestionJson()", () => {
 // ---------------------------------------------------------------------------
 
 describe("runSeed(dryRun=true)", () => {
-  it("842 件すべて inserted カウント、DB 書込ゼロ (W12-T5 / W5 +20 / DEC-079)", async () => {
+  it("902 件すべて inserted カウント、DB 書込ゼロ (W12 / W6 +60 / DEC-094)", async () => {
     // db.insert は呼ばれない想定だが、呼ばれた場合のために安全 stub
     const mod = (await import("@/lib/db/client")) as unknown as {
       db: { insert: ReturnType<typeof vi.fn> };
     };
 
     const summary = await runSeed(true);
-    expect(summary.total).toBe(842);
-    expect(summary.inserted).toBe(842);
+    expect(summary.total).toBe(902);
+    expect(summary.inserted).toBe(902);
     expect(summary.skipped).toBe(0);
 
     // dry-run なので db.insert は一度も呼ばれない

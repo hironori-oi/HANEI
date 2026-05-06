@@ -5,8 +5,9 @@
  *  1. assignW2Ids: section ごとに連番が振られる (V5/G5/V4/L4/V3/R3)
  *  2. assignW3Ids: L5/G4/W3/O5/R4 連番、replacement の自然 ID は tags から抽出
  *  3. assignW4Ids: V5W4 連番、L4-021..100 / R3-011..050 への shift、G4-080R 抽出
- *  4. loadAllSeedIds: 全 842 問 (W2+W3+W4+W5)、ID 重複なし、4 種類の配列構成が正しい
+ *  4. loadAllSeedIds: 全 902 問 (W2+W3+W4+W5+W6)、ID 重複なし、4 種類の配列構成が正しい
  *     (W5 = 3 級 listening 20 問 / L3-001..020 / DEC-079)
+ *     (W6 = 3 級 grammar 30 問 G3-001..030 + 3 級 listening 30 問 L3-021..050 / DEC-094)
  */
 
 import { describe, it, expect } from "vitest";
@@ -152,19 +153,20 @@ describe("assignW4Ids()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// loadAllSeedIds: 842 問 / 重複なし (W2+W3+W4+W5 / DEC-079)
+// loadAllSeedIds: 902 問 / 重複なし (W2+W3+W4+W5+W6 / DEC-079 + DEC-094)
 // ---------------------------------------------------------------------------
 
 describe("loadAllSeedIds()", () => {
-  it("総数 842 問、ID 重複なし", async () => {
+  it("総数 902 問、ID 重複なし", async () => {
     const all = await loadAllSeedIds();
-    expect(all.total).toBe(842);
+    expect(all.total).toBe(902);
 
     // 内訳:
     //   choiceProblems = 200 (W2) + 271 (W3 listening100 + grammar150 + reading20 + repl1)
-    //                  + 181 (W4 vocab100 + listening80 + repl1) +  20 (W5 listening 3 級) = 672
+    //                  + 181 (W4 vocab100 + listening80 + repl1) +  20 (W5 listening 3 級)
+    //                  +  60 (W6 grammar30 + listening30 / 3 級 / DEC-094) = 732
     //   writingProblems = 100, reorderProblems = 30, readingPassageProblems = 40
-    expect(all.choiceProblems.length).toBe(672);
+    expect(all.choiceProblems.length).toBe(732);
     expect(all.writingProblems.length).toBe(100);
     expect(all.reorderProblems.length).toBe(30);
     expect(all.readingPassageProblems.length).toBe(40);
@@ -176,8 +178,8 @@ describe("loadAllSeedIds()", () => {
       ...all.reorderProblems.map((p) => p.id),
       ...all.readingPassageProblems.map((p) => p.id),
     ];
-    expect(allIds.length).toBe(842);
-    expect(new Set(allIds).size).toBe(842);
+    expect(allIds.length).toBe(902);
+    expect(new Set(allIds).size).toBe(902);
   });
 
   it("自然 ID 命名規則のサンプル", async () => {

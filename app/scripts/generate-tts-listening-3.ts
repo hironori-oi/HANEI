@@ -1,8 +1,10 @@
 /**
- * scripts/generate-tts-listening-3.ts (W12-T5 / DEC-079)
+ * scripts/generate-tts-listening-3.ts (W12-T5 / DEC-079 + DEC-094)
  *
- * 用途: β 開始用 3 級 listening 20 問 (L3-001 〜 L3-020) の audio_transcript を
- *       OpenAI tts-1 で読み上げ、R2 にアップロードする。
+ * 用途: 3 級 listening 50 問 (W5 L3-001..020 + W6 L3-021..050 / DEC-079 + DEC-094)
+ *       の audio_transcript を OpenAI tts-1 で読み上げ、R2 にアップロードする。
+ *       `loadAllSeedIds()` から (level=eiken-3 / skill=listening) を全件 filter するため、
+ *       W6 追加で自動的に対象 50 件 (W5 20 + W6 30) になる。本ファイルのロジック変更不要。
  *
  * 仕様 (DEC-079):
  *  - voice: nova のみ 1 本 (β 期は voice 1 本化 / β + 1 ヶ月評価で多 voice 拡張判断)
@@ -11,10 +13,10 @@
  *  - DEC-029: R2 smoke check (pingR2) を OpenAI 課金前に実行
  *  - DEC-055: 冪等 (objectExists skip / 同一 key への再 PUT は安全)
  *
- * コスト試算:
- *   20 問 × 1 voice × 平均 ~70 字 = 1,400 字
+ * コスト試算 (DEC-094 反映 / 50 問):
+ *   50 問 × 1 voice × 平均 ~70 字 = 3,500 字
  *   OpenAI tts-1 = $15.00 / 1M chars (2026-04 公開料金)
- *   => 1,400 / 1,000,000 × $15.00 = $0.021 ≒ ¥3.15 (USD/JPY=150)
+ *   => 3,500 / 1,000,000 × $15.00 = $0.0525 ≒ ¥7.9 (USD/JPY=150)
  *
  * 重要:
  *   ※ 実 OpenAI API 課金 + R2 PutObject が発生するため Agent 環境では絶対に実行しない。
